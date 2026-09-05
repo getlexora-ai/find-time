@@ -1,5 +1,4 @@
 import * as React from "react";
-import { Slot } from "@radix-ui/react-slot";
 import { cn } from "@/lib/utils/cn";
 import { Icon } from "@/components/ui/Icon";
 
@@ -46,22 +45,17 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     },
     ref,
   ) => {
-    const Comp = asChild ? Slot : "button";
     const resolvedIcon = loading ? "solar:refresh-circle-linear" : icon;
-    return (
-      <Comp
-        ref={ref}
-        disabled={disabled || loading}
-        className={cn(
-          "inline-flex items-center justify-center rounded-control font-mono font-medium uppercase tracking-wider transition-all duration-150",
-          "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime/60 focus-visible:ring-offset-0",
-          variantClasses[variant],
-          sizeClasses[size],
-          className,
-        )}
-        {...rest}
-      >
+    const classes = cn(
+      "inline-flex items-center justify-center rounded-control font-mono font-medium uppercase tracking-wider transition-all duration-150",
+      "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0",
+      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime/60 focus-visible:ring-offset-0",
+      variantClasses[variant],
+      sizeClasses[size],
+      className,
+    );
+    const content = (
+      <>
         {resolvedIcon && iconPosition === "left" && (
           <Icon name={resolvedIcon} className={loading ? "animate-spin-once" : undefined} />
         )}
@@ -69,7 +63,35 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         {resolvedIcon && iconPosition === "right" && (
           <Icon name={resolvedIcon} className={loading ? "animate-spin-once" : undefined} />
         )}
-      </Comp>
+      </>
+    );
+
+    if (asChild) {
+      const child = React.Children.only(children) as React.ReactElement<{
+        className?: string;
+        children?: React.ReactNode;
+      }>;
+      return React.cloneElement(child, {
+        ...rest,
+        className: cn(classes, child.props.className),
+        children: (
+          <>
+            {resolvedIcon && iconPosition === "left" && (
+              <Icon name={resolvedIcon} className={loading ? "animate-spin-once" : undefined} />
+            )}
+            {child.props.children}
+            {resolvedIcon && iconPosition === "right" && (
+              <Icon name={resolvedIcon} className={loading ? "animate-spin-once" : undefined} />
+            )}
+          </>
+        ),
+      } as React.Attributes);
+    }
+
+    return (
+      <button ref={ref} disabled={disabled || loading} className={classes} {...rest}>
+        {content}
+      </button>
     );
   },
 );
