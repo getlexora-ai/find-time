@@ -1,8 +1,26 @@
-export default function Page() {
+"use client";
+
+import { OnboardingLayout } from "@/components/onboarding/OnboardingLayout";
+import { ScheduleEditor } from "@/components/settings/ScheduleEditor";
+import { useSettingsSchedule, useUpdateScheduleSettings } from "@/lib/hooks/useSettings";
+import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
+
+export default function OnboardingSchedulePage() {
+  const { data: profile, isLoading } = useSettingsSchedule();
+  const update = useUpdateScheduleSettings();
+
   return (
-    <div className="p-8 text-sm text-white/60">
-      <p className="uppercase tracking-widest text-xs text-lime">Onboarding — Working Hours (Step 03/05)</p>
-      <p className="mt-2">Placeholder — built in a later phase.</p>
-    </div>
+    <OnboardingLayout
+      step="schedule"
+      title="When do you work?"
+      subtitle="Find Time only schedules inside your working hours, and never on a day you've turned off."
+      wide
+    >
+      {isLoading || !profile ? (
+        <SkeletonBlock className="h-96 w-full" />
+      ) : (
+        <ScheduleEditor profile={profile} onPatch={(patch) => update.mutate(patch)} />
+      )}
+    </OnboardingLayout>
   );
 }

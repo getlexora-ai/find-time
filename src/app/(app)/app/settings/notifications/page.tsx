@@ -1,8 +1,10 @@
-export default function Page() {
+import { SettingsLayout } from "@/components/settings/SettingsLayout";
+import { NotificationsSettingsTab } from "@/components/settings/NotificationsSettingsTab";
+
+export default function SettingsNotificationsPage() {
   return (
-    <div className="p-8 text-sm text-white/60">
-      <p className="uppercase tracking-widest text-xs text-lime">Settings — Notifications</p>
-      <p className="mt-2">Placeholder — built in a later phase.</p>
-    </div>
+    <SettingsLayout title="Notifications" description="Choose which channel each type of alert reaches you on.">
+      <NotificationsSettingsTab />
+    </SettingsLayout>
   );
 }

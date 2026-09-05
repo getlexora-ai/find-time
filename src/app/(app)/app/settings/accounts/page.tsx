@@ -1,8 +1,10 @@
-export default function Page() {
+import { SettingsLayout } from "@/components/settings/SettingsLayout";
+import { AccountsSettingsTab } from "@/components/settings/AccountsSettingsTab";
+
+export default function SettingsAccountsPage() {
   return (
-    <div className="p-8 text-sm text-white/60">
-      <p className="uppercase tracking-widest text-xs text-lime">Settings — Accounts</p>
-      <p className="mt-2">Placeholder — built in a later phase.</p>
-    </div>
+    <SettingsLayout title="Accounts" description="Connected Gmail, IMAP, and task-source accounts.">
+      <AccountsSettingsTab />
+    </SettingsLayout>
   );
 }

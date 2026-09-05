@@ -1,8 +1,10 @@
-export default function Page() {
+import { SettingsLayout } from "@/components/settings/SettingsLayout";
+import { ProfileSettingsTab } from "@/components/settings/ProfileSettingsTab";
+
+export default function SettingsProfilePage() {
   return (
-    <div className="p-8 text-sm text-white/60">
-      <p className="uppercase tracking-widest text-xs text-lime">Settings — Profile</p>
-      <p className="mt-2">Placeholder — built in a later phase.</p>
-    </div>
+    <SettingsLayout title="Profile" description="Your name, timezone, and account data.">
+      <ProfileSettingsTab />
+    </SettingsLayout>
   );
 }
