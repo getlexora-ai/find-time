@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/Toast";
 import { ConnectedAccountRow } from "@/components/accounts/ConnectedAccountRow";
 import { AccountConnectCard } from "@/components/accounts/AccountConnectCard";
 import { ImapConnectForm } from "@/components/accounts/ImapConnectForm";
+import { OAuthConsentDialog } from "@/components/accounts/OAuthConsentDialog";
 import { PROVIDER_META, pickMockEmail } from "@/components/accounts/providerMeta";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
@@ -20,6 +21,7 @@ export function AccountsManager() {
   const { connect, syncNow, reconnect, disconnect } = useConnectionActions();
   const { push } = useToast();
   const [connecting, setConnecting] = React.useState<AccountProvider | null>(null);
+  const [consentProvider, setConsentProvider] = React.useState<AccountProvider | null>(null);
   const [showGrid, setShowGrid] = React.useState(false);
   const [showImapForm, setShowImapForm] = React.useState(false);
 
@@ -29,13 +31,19 @@ export function AccountsManager() {
     if (!isLoading && accounts.length === 0) setShowGrid(true);
   }, [isLoading, accounts.length]);
 
-  async function handleConnect(provider: AccountProvider) {
+  function handleConnect(provider: AccountProvider) {
     const meta = PROVIDER_META[provider];
     if (meta.soon) return;
     if (provider === "imap") {
       setShowImapForm(true);
       return;
     }
+    setConsentProvider(provider);
+  }
+
+  async function confirmConnect(provider: AccountProvider) {
+    const meta = PROVIDER_META[provider];
+    setConsentProvider(null);
     setConnecting(provider);
     await new Promise((resolve) => window.setTimeout(resolve, 1100));
     const email = pickMockEmail(provider, accounts.length);
@@ -85,7 +93,8 @@ export function AccountsManager() {
         <div className="flex items-start gap-2.5 rounded-control border border-lime/30 bg-lime/10 px-4 py-3 font-mono text-xs text-lime">
           <Icon name="solar:magic-stick-3-linear" size={15} className="mt-0.5 shrink-0" />
           <span>
-            Two sources linked. Find Time will merge context across both and keep them visually separated.
+            {accounts.length} sources linked. Find Time will merge context across all of them and keep them
+            visually separated.
           </span>
         </div>
       )}
@@ -132,6 +141,17 @@ export function AccountsManager() {
             </Button>
           )}
         </div>
+      )}
+
+      {consentProvider && (
+        <OAuthConsentDialog
+          open={!!consentProvider}
+          onOpenChange={(open) => {
+            if (!open) setConsentProvider(null);
+          }}
+          meta={PROVIDER_META[consentProvider]}
+          onConfirm={() => confirmConnect(consentProvider)}
+        />
       )}
     </div>
   );

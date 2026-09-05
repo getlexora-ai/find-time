@@ -8,13 +8,17 @@ import { TelemetryRow } from "@/components/motif/AxisMarkers";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Field";
 import { Icon } from "@/components/ui/Icon";
+import { cn } from "@/lib/utils/cn";
 import { useLogin } from "@/lib/hooks/useSession";
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function AuthCard({ mode }: { mode: "login" | "signup" }) {
   const router = useRouter();
   const params = useSearchParams();
   const login = useLogin();
   const [email, setEmail] = React.useState("");
+  const [emailError, setEmailError] = React.useState<string | null>(null);
   const [linkSent, setLinkSent] = React.useState(false);
 
   const complete = async () => {
@@ -53,20 +57,37 @@ export function AuthCard({ mode }: { mode: "login" | "signup" }) {
             <p className="font-mono text-xs text-lime">Check your inbox for a sign-in link.</p>
           ) : (
             <form
-              className="flex w-full flex-col gap-3"
+              className="flex w-full flex-col gap-1.5"
+              noValidate
               onSubmit={(e) => {
                 e.preventDefault();
+                if (!email.trim()) {
+                  setEmailError("Enter your email address.");
+                  return;
+                }
+                if (!EMAIL_PATTERN.test(email.trim())) {
+                  setEmailError("Enter a valid email address.");
+                  return;
+                }
+                setEmailError(null);
                 setLinkSent(true);
               }}
             >
               <Input
                 type="email"
-                required
                 placeholder="you@company.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                aria-invalid={!!emailError}
+                className={cn(emailError && "border-ember/60 focus:border-ember/60")}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (emailError) setEmailError(null);
+                }}
               />
-              <Button type="submit" variant="ghost" className="w-full">
+              {emailError && (
+                <p className="font-mono text-xs text-ember-200">{emailError}</p>
+              )}
+              <Button type="submit" variant="ghost" className="mt-1.5 w-full">
                 Send magic link
               </Button>
             </form>

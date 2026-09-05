@@ -6,6 +6,7 @@ import { OnboardingLayout } from "@/components/onboarding/OnboardingLayout";
 import { Icon } from "@/components/ui/Icon";
 import { useConnections } from "@/lib/hooks/useConnections";
 import { useSignals } from "@/lib/hooks/useSignals";
+import { useGeneratePlan } from "@/lib/hooks/useAIPlan";
 
 const STAGES = [
   "Scanning connected accounts…",
@@ -18,23 +19,47 @@ export default function OnboardingFirstPlanPage() {
   const router = useRouter();
   const { data: connections } = useConnections();
   const { data: signals } = useSignals();
+  const generatePlan = useGeneratePlan();
+  const { mutate } = generatePlan;
   const [stageIndex, setStageIndex] = React.useState(0);
+  const [planFailed, setPlanFailed] = React.useState(false);
+  const planRequested = React.useRef(false);
 
   React.useEffect(() => {
-    if (stageIndex >= STAGES.length - 1) return;
-    const id = window.setTimeout(() => setStageIndex((i) => i + 1), 900);
-    return () => window.clearTimeout(id);
-  }, [stageIndex]);
+    // Stages 0-1 are a paced reveal of data we already have; stage 2 gates on the real
+    // plan-generation request instead of a fixed delay so "Done" only fires once a
+    // PlanDraft actually exists to review.
+    if (stageIndex < STAGES.length - 2) {
+      const id = window.setTimeout(() => setStageIndex((i) => i + 1), 700);
+      return () => window.clearTimeout(id);
+    }
+    if (stageIndex === STAGES.length - 2 && !planRequested.current) {
+      planRequested.current = true;
+      mutate(undefined, {
+        onSuccess: () => setStageIndex((i) => i + 1),
+        onError: () => {
+          setPlanFailed(true);
+          setStageIndex((i) => i + 1);
+        },
+      });
+    }
+  }, [stageIndex, mutate]);
 
   const done = stageIndex === STAGES.length - 1;
   const accountCount = connections?.accounts.length ?? 0;
   const signalCount = signals?.length ?? 0;
 
+  const subtitle = done
+    ? planFailed
+      ? "We couldn't build a draft — you can try again any time from AI Sessions."
+      : "Applied nothing yet — review it any time from Today or AI Sessions."
+    : undefined;
+
   return (
     <OnboardingLayout
       step="first-plan"
-      title={done ? "Your plan is ready." : "Building your first plan."}
-      subtitle={done ? "Applied nothing yet — review it any time from Today or AI Sessions." : undefined}
+      title={done ? (planFailed ? "Setup complete." : "Your plan is ready.") : "Building your first plan."}
+      subtitle={subtitle}
       onContinue={() => router.push("/app/today")}
       continueLabel="Go to Today"
       continueDisabled={!done}
