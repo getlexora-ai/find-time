@@ -1,8 +1,10 @@
-export default function Page() {
+import { Suspense } from "react";
+import { AuthCard } from "@/components/auth/AuthCard";
+
+export default function LoginPage() {
   return (
-    <div className="p-8 text-sm text-white/60">
-      <p className="uppercase tracking-widest text-xs text-lime">Sign In</p>
-      <p className="mt-2">Placeholder — built in a later phase.</p>
-    </div>
+    <Suspense>
+      <AuthCard mode="login" />
+    </Suspense>
   );
 }
