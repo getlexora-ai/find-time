@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Icon } from "@/components/ui/Icon";
 import { IconButton } from "@/components/ui/IconButton";
@@ -9,23 +10,34 @@ import { Chip } from "@/components/ui/Chip";
 import { CornerRings } from "@/components/motif/CornerRings";
 import { HoloBadge } from "@/components/motif/HoloBadge";
 import { useToast } from "@/components/ui/Toast";
+import { useGeneratePlan } from "@/lib/hooks/useAIPlan";
 
 const promptSuggestions = ["Plan my week", "What's free this afternoon?", "Prioritize backlog"];
 
 export function AIAskPanel() {
   const { push } = useToast();
+  const router = useRouter();
+  const generatePlan = useGeneratePlan();
   const [prompt, setPrompt] = React.useState("");
-  const [submitting, setSubmitting] = React.useState(false);
 
   const handleGenerate = () => {
-    if (!prompt.trim() || submitting) return;
-    setSubmitting(true);
-    // Full parse → schedule pipeline is a later phase (P9); demo response for now.
-    window.setTimeout(() => {
-      setSubmitting(false);
-      push({ message: "AI planning is coming soon — this will draft a full plan for you.", variant: "success" });
-      setPrompt("");
-    }, 500);
+    if (!prompt.trim() || generatePlan.isPending) return;
+    generatePlan.mutate(undefined, {
+      onSuccess: (result) => {
+        setPrompt("");
+        if (result.events.length === 0) {
+          push({ message: "Nothing to plan — your backlog is empty.", variant: "success" });
+          return;
+        }
+        push({
+          message: `Draft plan ready — ${result.draft.changeCount} changes, ${result.draft.conflictCount} conflicts`,
+          variant: "undo",
+          actionLabel: "Review",
+          onAction: () => router.push("/app/calendar/week"),
+        });
+      },
+      onError: () => push({ message: "Couldn't build a plan — try again.", variant: "alert" }),
+    });
   };
 
   return (
@@ -66,12 +78,12 @@ export function AIAskPanel() {
           <button
             className="flex h-9 items-center gap-2 rounded-control bg-lime px-4 font-mono text-xs font-medium text-ink transition-all duration-150 hover:-translate-y-0.5 hover:bg-lime-hi disabled:cursor-not-allowed disabled:opacity-40"
             onClick={handleGenerate}
-            disabled={!prompt.trim() || submitting}
+            disabled={!prompt.trim() || generatePlan.isPending}
           >
-            {submitting ? "Thinking…" : "Generate plan"}
+            {generatePlan.isPending ? "Thinking…" : "Generate plan"}
             <Icon
-              name={submitting ? "solar:refresh-circle-linear" : "solar:arrow-right-up-linear"}
-              className={submitting ? "animate-spin-once" : undefined}
+              name={generatePlan.isPending ? "solar:refresh-circle-linear" : "solar:arrow-right-up-linear"}
+              className={generatePlan.isPending ? "animate-spin-once" : undefined}
             />
           </button>
         </div>

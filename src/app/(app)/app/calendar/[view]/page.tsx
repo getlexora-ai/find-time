@@ -10,9 +10,11 @@ import { MonthView } from "@/components/calendar/MonthView";
 import { EventDetailPopover } from "@/components/calendar/EventDetailPopover";
 import { EventEditModal } from "@/components/calendar/EventEditModal";
 import { QuickCreatePopover } from "@/components/calendar/QuickCreatePopover";
+import { DraftModeBanner } from "@/components/calendar/DraftModeBanner";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
 import { useToast } from "@/components/ui/Toast";
 import { useEvents, useCreateEvent, useUpdateEvent, useDeleteEvent } from "@/lib/hooks/useEvents";
+import { useDraft, useApplyDraft, useDiscardDraft, useUndoDraft } from "@/lib/hooks/useAIPlan";
 import { useDragToReschedule } from "@/lib/hooks/useDragToReschedule";
 import { useResizeEvent } from "@/lib/hooks/useResizeEvent";
 import { useDragToCreate } from "@/lib/hooks/useDragToCreate";
@@ -42,6 +44,45 @@ export default function CalendarPage() {
   const [editing, setEditing] = React.useState<CalendarEvent | null>(null);
 
   const view: CalendarView = isCalendarView(params.view) ? params.view : "week";
+
+  const activeDraftBatchId = React.useMemo(
+    () => events?.find((e) => e.isDraft)?.draftBatchId ?? null,
+    [events],
+  );
+  const { data: draftData } = useDraft(activeDraftBatchId);
+  const applyDraft = useApplyDraft();
+  const discardDraft = useDiscardDraft();
+  const undoDraft = useUndoDraft();
+
+  const draftIndexById = React.useMemo(() => {
+    const map = new Map<string, number>();
+    draftData?.suggestions.forEach((s) => {
+      if (s.eventId) map.set(s.eventId, s.index);
+    });
+    return map;
+  }, [draftData]);
+
+  const onApplyDraft = () => {
+    if (!activeDraftBatchId) return;
+    const id = activeDraftBatchId;
+    applyDraft.mutate(id, {
+      onSuccess: () => {
+        push({
+          message: "Plan applied to your calendar",
+          variant: "undo",
+          actionLabel: "Undo",
+          onAction: () => undoDraft.mutate(id),
+        });
+      },
+    });
+  };
+
+  const onDiscardDraft = () => {
+    if (!activeDraftBatchId) return;
+    discardDraft.mutate(activeDraftBatchId, {
+      onSuccess: () => push({ message: "Draft discarded", variant: "alert" }),
+    });
+  };
 
   React.useEffect(() => {
     if (!isCalendarView(params.view)) {
@@ -114,6 +155,16 @@ export default function CalendarPage() {
         onAddEvent={onAddEventButton}
       />
 
+      {activeDraftBatchId && draftData && (
+        <DraftModeBanner
+          changeCount={draftData.draft.changeCount}
+          conflictCount={draftData.draft.conflictCount}
+          applying={applyDraft.isPending}
+          onApply={onApplyDraft}
+          onDiscard={onDiscardDraft}
+        />
+      )}
+
       {view === "day" && (
         <DayView
           date={date}
@@ -125,6 +176,7 @@ export default function CalendarPage() {
           reschedule={reschedule}
           resize={resize}
           create={create}
+          draftIndexById={draftIndexById}
         />
       )}
       {view === "week" && (
@@ -142,6 +194,7 @@ export default function CalendarPage() {
           reschedule={reschedule}
           resize={resize}
           create={create}
+          draftIndexById={draftIndexById}
         />
       )}
       {view === "month" && (

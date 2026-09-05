@@ -25,6 +25,8 @@ export interface EventBlockProps {
   conflict?: boolean;
   isDragging?: boolean;
   isPast?: boolean;
+  isDraft?: boolean;
+  draftIndex?: number;
   onSelect?: (event: CalendarEvent, anchorRect: DOMRect) => void;
   onDragPointerDown?: (e: React.PointerEvent) => void;
   onDragPointerMove?: (e: React.PointerEvent) => void;
@@ -44,6 +46,8 @@ export function EventBlock({
   conflict = false,
   isDragging = false,
   isPast = false,
+  isDraft = false,
+  draftIndex,
   onSelect,
   onDragPointerDown,
   onDragPointerMove,
@@ -67,6 +71,7 @@ export function EventBlock({
         selected && "ring-2 ring-lime z-20",
         isDragging && "z-30 scale-[1.01] opacity-70 shadow-panel cursor-grabbing",
         isPast && !isDragging && "opacity-55",
+        isDraft && "border border-dashed border-lime bg-lime/10 opacity-90",
       )}
       style={{
         top,
@@ -85,6 +90,11 @@ export function EventBlock({
       tabIndex={0}
       aria-label={`${event.title}, ${formatTimeRange(new Date(event.start), new Date(event.end))}`}
     >
+      {isDraft && draftIndex != null && (
+        <span className="absolute right-1 top-1 z-10 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-lime font-mono text-[8px] font-bold text-ink">
+          {draftIndex}
+        </span>
+      )}
       <div className={cn("flex h-full flex-col gap-0.5 px-1.5", tiny ? "py-0.5" : "py-1")}>
         <div className="flex min-w-0 items-center gap-1">
           {!tiny && (

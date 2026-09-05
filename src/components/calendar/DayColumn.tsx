@@ -29,6 +29,7 @@ export function DayColumn({
   reschedule,
   resize,
   create,
+  draftIndexById,
 }: {
   date: Date;
   events: CalendarEvent[];
@@ -39,6 +40,7 @@ export function DayColumn({
   reschedule: ReturnType<typeof useDragToReschedule>;
   resize: ReturnType<typeof useResizeEvent>;
   create: ReturnType<typeof useDragToCreate>;
+  draftIndexById?: Map<string, number>;
 }) {
   const dayStart = startOfDay(date);
   const positioned = layoutDayEvents(events, date);
@@ -89,6 +91,8 @@ export function DayColumn({
             conflict={conflict}
             isDragging={isDraggingThis}
             isPast={!!now && end < now}
+            isDraft={event.isDraft}
+            draftIndex={draftIndexById?.get(event.id)}
             onSelect={onSelectEvent}
             onDragPointerDown={(e) => {
               e.stopPropagation();

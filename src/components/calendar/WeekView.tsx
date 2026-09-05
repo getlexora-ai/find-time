@@ -21,6 +21,7 @@ export function WeekView({
   reschedule,
   resize,
   create,
+  draftIndexById,
 }: {
   days: Date[];
   events: CalendarEvent[];
@@ -32,6 +33,7 @@ export function WeekView({
   reschedule: ReturnType<typeof useDragToReschedule>;
   resize: ReturnType<typeof useResizeEvent>;
   create: ReturnType<typeof useDragToCreate>;
+  draftIndexById?: Map<string, number>;
 }) {
   return (
     <div className="flex flex-col">
@@ -57,6 +59,7 @@ export function WeekView({
               reschedule={reschedule}
               resize={resize}
               create={create}
+              draftIndexById={draftIndexById}
             />
           ))}
         </div>

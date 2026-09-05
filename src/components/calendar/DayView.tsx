@@ -19,6 +19,7 @@ export function DayView({
   reschedule,
   resize,
   create,
+  draftIndexById,
 }: {
   date: Date;
   events: CalendarEvent[];
@@ -29,6 +30,7 @@ export function DayView({
   reschedule: ReturnType<typeof useDragToReschedule>;
   resize: ReturnType<typeof useResizeEvent>;
   create: ReturnType<typeof useDragToCreate>;
+  draftIndexById?: Map<string, number>;
 }) {
   return (
     <div className="flex flex-col">
@@ -46,6 +48,7 @@ export function DayView({
             reschedule={reschedule}
             resize={resize}
             create={create}
+            draftIndexById={draftIndexById}
           />
         </div>
       </div>
