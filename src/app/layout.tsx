@@ -4,6 +4,7 @@ import "./globals.css";
 import { FieldBackground } from "@/components/motif/FieldBackground";
 import { GrainOverlay } from "@/components/motif/GrainOverlay";
 import { ToastProvider } from "@/components/ui/Toast";
+import { QueryProvider } from "@/components/providers/QueryProvider";
 
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains-mono",
@@ -23,9 +24,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="relative flex min-h-full flex-col">
         <FieldBackground />
         <GrainOverlay />
-        <ToastProvider>
-          <div className="relative z-10 flex min-h-full flex-1 flex-col">{children}</div>
-        </ToastProvider>
+        <QueryProvider>
+          <ToastProvider>
+            <div className="relative z-10 flex min-h-full flex-1 flex-col">{children}</div>
+          </ToastProvider>
+        </QueryProvider>
       </body>
     </html>
   );
