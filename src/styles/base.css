@@ -1,0 +1,39 @@
+/* Decorative field/surface layers shared by every screen. Plain CSS rather than
+   Tailwind theme utilities — these are one-off compositions, not a reusable scale. */
+
+.bg-dotgrid {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.14) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.bg-field-gradient {
+  background-image: linear-gradient(
+    135deg,
+    rgba(9, 26, 102, 0.12),
+    rgba(32, 71, 230, 0.96)
+  );
+}
+
+.bg-grain {
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.025) 0,
+    rgba(255, 255, 255, 0.025) 1px,
+    transparent 1px,
+    transparent 9px
+  );
+}
+
+/* blur tiers, named to match PLAN.md §2.5 */
+.blur-bar {
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+.blur-surface {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.blur-scrim {
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
