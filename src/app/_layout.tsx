@@ -1,4 +1,4 @@
-import { DarkTheme, DefaultTheme, ThemeProvider, Tabs } from 'expo-router';
+import { DarkTheme, DefaultTheme, Tabs, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Text, type ColorValue } from 'react-native';
 
@@ -22,17 +22,20 @@ export default function RootLayout() {
           headerTitleStyle: { color: colors.text },
           headerShadowVisible: false,
           sceneStyle: { backgroundColor: colors.background },
-          tabBarActiveTintColor: colors.text,
-          tabBarInactiveTintColor: colors.textSecondary,
+          // Bottom nav styled to the Find time chrome (calendar-design-spec.md §1.1).
+          tabBarActiveTintColor: '#ccff00',
+          tabBarInactiveTintColor: 'rgba(255,255,255,0.45)',
           tabBarStyle: {
-            backgroundColor: colors.background,
-            borderTopColor: colors.backgroundElement,
+            backgroundColor: '#142d99',
+            borderTopColor: 'rgba(255,255,255,0.10)',
           },
         }}>
         <Tabs.Screen
           name="index"
           options={{
             title: 'Calendar',
+            // the calendar screen renders its own sticky header + chrome
+            headerShown: false,
             tabBarIcon: ({ color }) => <TabIcon emoji="📅" color={color} />,
           }}
         />
@@ -44,7 +47,7 @@ export default function RootLayout() {
           }}
         />
       </Tabs>
-      <StatusBar style={isDark ? 'light' : 'dark'} />
+      <StatusBar style="light" />
     </ThemeProvider>
   );
 }
