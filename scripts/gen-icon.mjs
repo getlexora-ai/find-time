@@ -157,10 +157,15 @@ const svg = (fill) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><path fill-rule="evenodd" fill="${fill}" d="${straightD}"/></svg>`;
 const LIME = '#ccff00';
 const masters = {
-  'mark.svg': svg('currentColor'),
-  'mark-white.svg': svg(WHITE),
-  'mark-ink.svg': svg(INK),
-  'mark-lime.svg': svg(LIME),
+  'mark.svg': svg('currentColor'), // in-app primitive: SvgXml resolves currentColor from the `color` prop
+  'mark-white.svg': svg(WHITE), //   every dark theme ground (electric/ink/navy/slate/eclipse/carbon/graphite)
+  'mark-ink.svg': svg(INK), //       light agenda surface (#f4f4f4 / #fff)
+  'mark-lime.svg': svg(LIME), //     accent use only — not as the mark on navy/eclipse (low contrast)
+  // standalone light/dark auto-switch (web favicon, <img>, anywhere without a color prop)
+  'mark-adaptive.svg':
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">` +
+    `<style>path{fill:${INK}}@media(prefers-color-scheme:dark){path{fill:${WHITE}}}</style>` +
+    `<path fill-rule="evenodd" d="${straightD}"/></svg>`,
 };
 for (const [name, body] of Object.entries(masters)) writeFileSync(p('assets/logo', name), body + '\n');
 
