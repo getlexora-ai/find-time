@@ -1,20 +1,25 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
+import '../global.css';
+
 /**
- * `calendar.html` is a single page: the only chrome is the calendar's own sticky
- * header (desktop) and its own fixed 5-item bottom nav (below lg, rendered by
- * `CalendarScreen`). So there is no router-level tab bar here — an Expo Router
- * `<Tabs>` renders its bar on web and desktop too, which the mockup never shows.
+ * Root layout. Two routes hang off it:
  *
- * "Plan with AI" is not a route either: it is the `AiPanel` slide-over, opened
- * from the header button on desktop and the "Ask AI" nav item on mobile.
+ *   `index` → the marketing landing page on web (`index.web.tsx`), and a bare
+ *             redirect to `/app` on native (`index.tsx`).
+ *   `app`   → the calendar, which owns its own providers in `app/_layout.tsx`.
+ *
+ * The calendar's `CalendarThemeProvider` / `ToastProvider` deliberately do *not*
+ * live here: the landing pins its own `electric` ground and must not read or write
+ * the background theme the user picked in the calendar.
  */
 export default function RootLayout() {
   return (
     <>
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#2047e6' } }}>
         <Stack.Screen name="index" />
+        <Stack.Screen name="app" />
       </Stack>
       <StatusBar style="light" />
     </>

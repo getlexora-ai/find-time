@@ -13,11 +13,23 @@ const ThemeCtx = createContext<Ctx>({
 
 /** Background-theme provider. Persists the choice to AsyncStorage under the same
  *  key the web prototype uses (`ft-theme`), so a build sharing storage stays in
- *  sync (HANDOFF.md C1 "persists (AsyncStorage, mirroring ft-theme)"). */
-export function CalendarThemeProvider({ children }: { children: React.ReactNode }) {
-  const [themeKey, setKey] = useState<ThemeKey>(DEFAULT_THEME);
+ *  sync (HANDOFF.md C1 "persists (AsyncStorage, mirroring ft-theme)").
+ *
+ *  `forceTheme` pins the ground and opts out of persistence entirely — no read,
+ *  no write. The landing page is always the `electric` blue of landing.html and
+ *  must never inherit (or clobber) the ground the user picked in the calendar. */
+export function CalendarThemeProvider({
+  children,
+  forceTheme,
+}: {
+  children: React.ReactNode;
+  forceTheme?: ThemeKey;
+}) {
+  const [storedKey, setKey] = useState<ThemeKey>(DEFAULT_THEME);
+  const themeKey = forceTheme ?? storedKey;
 
   useEffect(() => {
+    if (forceTheme) return;
     let alive = true;
     AsyncStorage.getItem(STORAGE_KEY)
       .then((v) => {
@@ -27,12 +39,16 @@ export function CalendarThemeProvider({ children }: { children: React.ReactNode 
     return () => {
       alive = false;
     };
-  }, []);
+  }, [forceTheme]);
 
-  const setTheme = useCallback((k: ThemeKey) => {
-    setKey(k);
-    AsyncStorage.setItem(STORAGE_KEY, k).catch(() => {});
-  }, []);
+  const setTheme = useCallback(
+    (k: ThemeKey) => {
+      if (forceTheme) return;
+      setKey(k);
+      AsyncStorage.setItem(STORAGE_KEY, k).catch(() => {});
+    },
+    [forceTheme],
+  );
 
   const value = useMemo<Ctx>(
     () => ({ theme: THEME_BY_KEY[themeKey], themeKey, setTheme }),

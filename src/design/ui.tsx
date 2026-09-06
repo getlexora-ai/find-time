@@ -41,13 +41,22 @@ export function Txt({ style, ...rest }: TextProps) {
 type PressProps = Omit<PressableProps, 'style'> & {
   /** background when hovered (web) / pressed */
   hoverBg?: string;
+  /** border colour when hovered (web) / pressed — landing.html `hover:border-…` */
+  hoverBorder?: string;
+  /**
+   * Transform applied while hovered. landing.html leans on `hover:-translate-y-0.5`
+   * (lift), `hover:translate-x-1` (nudge) and `hover:scale-105`; pass
+   * `{ translateY: -2 }` etc. Hover is web-only, so on native this is inert and the
+   * `pressed` opacity is the only feedback (recorded in HANDOFF-landing.md).
+   */
+  hoverTransform?: { translateX?: number; translateY?: number; scale?: number };
   style?: StyleProp<ViewStyle>;
 };
 
 /** Pressable with the reference's hover-fill behaviour on web and press feedback
  *  on native. The global focus ring comes from global.css on web. */
 export const Press = forwardRef<View, PressProps>(function Press(
-  { hoverBg, style, children, ...rest },
+  { hoverBg, hoverBorder, hoverTransform, style, children, ...rest },
   ref,
 ) {
   return (
@@ -57,7 +66,17 @@ export const Press = forwardRef<View, PressProps>(function Press(
       style={({ hovered, pressed }: { hovered?: boolean; pressed?: boolean }) => [
         style,
         (hovered || pressed) && hoverBg ? { backgroundColor: hoverBg } : null,
-        pressed && !hoverBg ? { opacity: 0.85 } : null,
+        (hovered || pressed) && hoverBorder ? { borderColor: hoverBorder } : null,
+        hovered && hoverTransform
+          ? {
+              transform: [
+                { translateX: hoverTransform.translateX ?? 0 },
+                { translateY: hoverTransform.translateY ?? 0 },
+                { scale: hoverTransform.scale ?? 1 },
+              ],
+            }
+          : null,
+        pressed && !hoverBg && !hoverBorder ? { opacity: 0.85 } : null,
       ]}>
       {children as React.ReactNode}
     </Pressable>

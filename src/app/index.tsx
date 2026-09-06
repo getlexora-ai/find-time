@@ -1,18 +1,13 @@
-import { CalendarScreen } from '@/calendar/CalendarScreen';
-import { ToastProvider } from '@/calendar/components/Toast';
-import { CalendarThemeProvider } from '@/calendar/theme-context';
+import { Redirect } from 'expo-router';
 
 /**
- * Calendar tab — the full Find time calendar (Month / Week / Day, 7 switchable
- * backgrounds, event CRUD) ported from design/from_user/calendar.html.
- * Providers wrap the screen: background theme first (Toast reads it), then Toast.
+ * `/` on **native only** — `index.web.tsx` takes this route on web.
+ *
+ * The landing page is a web marketing surface; there is nothing to show a user who
+ * already has the app installed, so iOS/Android send `/` (and the `findtime:///`
+ * deep link) straight to the calendar. Splitting by filename rather than branching
+ * on `Platform.OS` keeps the whole landing tree out of the native bundle.
  */
-export default function CalendarRoute() {
-  return (
-    <CalendarThemeProvider>
-      <ToastProvider>
-        <CalendarScreen />
-      </ToastProvider>
-    </CalendarThemeProvider>
-  );
+export default function Index() {
+  return <Redirect href="/app" />;
 }

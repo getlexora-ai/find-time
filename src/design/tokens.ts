@@ -41,6 +41,22 @@ export const C = {
   scrim: 'rgba(7,18,63,0.70)',
 } as const;
 
+/**
+ * Landing-only fills, lifted verbatim from design/from_user/landing.html. They are
+ * not part of the calendar's palette, so they sit apart from `C` rather than
+ * widening it.
+ */
+export const LANDING = {
+  /** `bg-[#1739bc]/95` — the three feature cards. */
+  featureCard: 'rgba(23,57,188,0.95)',
+  /** `bg-[#c8c8ff]` — the AI response block on the phone card. */
+  aiResponse: '#c8c8ff',
+  /** `bg-[#121212]/70` — the task-modal scrim. */
+  modalScrim: 'rgba(18,18,18,0.70)',
+  /** `bg-white/70` — the capacity panel on the light phone card. */
+  phonePanel: 'rgba(255,255,255,0.70)',
+} as const;
+
 /** Category palette — five, deliberately; #ff4400 is held back for conflicts (spec §1.2). */
 export type CatKey = 'deep' | 'design' | 'research' | 'sync' | 'admin';
 export const CATS: Record<CatKey, { label: string; color: string }> = {
