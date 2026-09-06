@@ -59,7 +59,7 @@ export function DayView({
               />
             </View>
           )}
-          <Agenda date={d} actions={actions} events={events} />
+          {!isWide && <Agenda date={d} actions={actions} events={events} />}
         </View>
 
         {isWide && (
@@ -124,6 +124,8 @@ export function DayView({
                 )}
               </View>
             </View>
+
+            <Agenda date={d} actions={actions} events={events} compact />
           </View>
         )}
       </View>

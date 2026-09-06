@@ -11,25 +11,40 @@ import type { CalEvent } from '../types';
 import { Press, Txt } from '../ui';
 import { useResponsive } from '../useResponsive';
 
-/** The one light reading surface — the day agenda (spec §2.11, §7.3). */
+/**
+ * The day agenda (spec §2.11, §7.3). Two forms:
+ *
+ *  - default  — the full-width light reading surface. Long titles, notes and the
+ *               full metadata row go on `#f4f4f4`, the one light card in the app.
+ *  - compact  — a dark, stripped variant that lives in the Day-view right rail
+ *               next to "AI insight" / "Protected this day". Time · title ·
+ *               category spine and the clickable "free — 45m" gap rows only;
+ *               notes and the meta row are left to the event-detail popover.
+ *               Its body lifts with the theme (`recessed`) so it reads as one of
+ *               the rail cards, not a white slab under the black time grid.
+ */
 export function Agenda({
   date,
   actions,
   events,
+  compact = false,
 }: {
   date: Date;
   actions: CalActions;
   events: CalEvent[];
+  compact?: boolean;
 }) {
   const { theme } = useCalTheme();
   const { isPhone } = useResponsive();
-  const gutter = isPhone ? 52 : 72;
+  const gutter = compact ? 52 : isPhone ? 52 : 72;
   const list = byDate(events, iso(date));
   const isToday = sameDay(date, TODAY);
   const planned = list
     .filter((e) => e.kind !== 'break' && e.kind !== 'ai')
     .reduce((s, e) => s + toMin(e.end) - toMin(e.start), 0);
   const free = (DAY_END - DAY_START) * 60 - list.reduce((s, e) => s + toMin(e.end) - toMin(e.start), 0);
+  const plannedTxt = list.length ? durLabel(planned) : '—';
+  const freeTxt = list.length ? durLabel(free) : '—';
 
   const head = (
     <View style={[styles.head, { backgroundColor: theme.panel, borderColor: theme.panelBorder }]}>
@@ -45,12 +60,14 @@ export function Agenda({
           )}
         </View>
         <Txt style={styles.headSub}>
-          Planned {list.length ? durLabel(planned) : '—'} · free {list.length ? durLabel(free) : '—'} · built around your energy.
+          {compact
+            ? `Planned ${plannedTxt} · free ${freeTxt}`
+            : `Planned ${plannedTxt} · free ${freeTxt} · built around your energy.`}
         </Txt>
       </View>
       <Press onPress={() => actions.openCompose(null, iso(date))} hoverBg={w(0.1)} style={styles.addBtn}>
         <Icon name="add" size={16} color={w(0.7)} />
-        <Txt style={styles.addTxt}>Add</Txt>
+        {!compact && <Txt style={styles.addTxt}>Add</Txt>}
       </Press>
     </View>
   );
@@ -87,16 +104,16 @@ export function Agenda({
     if (prevEnd !== null && s - prevEnd >= 25) {
       const gapStart = prevEnd;
       rows.push(
-        <Row key={`gap-${idx}`} left={fromMin(gapStart)} gutter={gutter}>
+        <Row key={`gap-${idx}`} left={fromMin(gapStart)} gutter={gutter} compact={compact}>
           <Press
             onPress={() => actions.openCompose(null, iso(date), fromMin(gapStart))}
-            hoverBg="#e4e4e4"
-            style={styles.freeRow}>
-            <View style={styles.freeIcon}>
-              <Icon name="add" size={16} color={ink(0.6)} />
+            hoverBg={compact ? w(0.06) : '#e4e4e4'}
+            style={compact ? styles.freeRowDark : styles.freeRow}>
+            <View style={compact ? styles.freeIconDark : styles.freeIcon}>
+              <Icon name="add" size={16} color={compact ? w(0.55) : ink(0.6)} />
             </View>
-            <Txt style={styles.freeTxt}>free — {durLabel(s - gapStart)}</Txt>
-            <Txt style={styles.freeRange}>
+            <Txt style={compact ? styles.freeTxtDark : styles.freeTxt}>free — {durLabel(s - gapStart)}</Txt>
+            <Txt style={compact ? styles.freeRangeDark : styles.freeRange}>
               {fromMin(gapStart)}–{ev.start}
             </Txt>
           </Press>
@@ -105,8 +122,8 @@ export function Agenda({
     }
     prevEnd = Math.max(prevEnd ?? 0, toMin(ev.end));
     rows.push(
-      <Row key={ev.id} left={ev.start} gutter={gutter}>
-        <AgendaCard ev={ev} onPress={() => actions.openEvent(ev.id)} />
+      <Row key={ev.id} left={ev.start} gutter={gutter} compact={compact}>
+        <AgendaCard ev={ev} compact={compact} onPress={() => actions.openEvent(ev.id)} />
       </Row>,
     );
   });
@@ -114,24 +131,48 @@ export function Agenda({
   return (
     <View style={[styles.card, { borderColor: theme.panelBorder }]}>
       {head}
-      <View style={styles.lightBody}>{rows}</View>
-    </View>
-  );
-}
-
-function Row({ left, gutter, children }: { left: string; gutter: number; children: React.ReactNode }) {
-  return (
-    <View style={styles.row}>
-      <View style={[styles.rowLeft, { width: gutter }]}>
-        <Txt style={styles.rowLeftTxt}>{left}</Txt>
+      <View style={compact ? [styles.compactBody, { backgroundColor: theme.recessed }] : styles.lightBody}>
+        {rows}
       </View>
-      <View style={styles.rowBody}>{children}</View>
     </View>
   );
 }
 
-function AgendaCard({ ev, onPress }: { ev: CalEvent; onPress: () => void }) {
+function Row({
+  left,
+  gutter,
+  compact,
+  children,
+}: {
+  left: string;
+  gutter: number;
+  compact?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={[styles.row, compact && styles.rowDark]}>
+      <View style={[styles.rowLeft, compact && styles.rowLeftDark, { width: gutter }]}>
+        <Txt style={compact ? styles.rowLeftTxtDark : styles.rowLeftTxt}>{left}</Txt>
+      </View>
+      <View style={[styles.rowBody, compact && styles.rowBodyDark]}>{children}</View>
+    </View>
+  );
+}
+
+function AgendaCard({ ev, compact, onPress }: { ev: CalEvent; compact?: boolean; onPress: () => void }) {
   if (ev.kind === 'break') {
+    if (compact) {
+      return (
+        <View style={styles.breakCardDark}>
+          <View style={styles.breakIconDark}>
+            <Icon name="cup" size={16} color={w(0.5)} />
+          </View>
+          <Txt numberOfLines={1} style={styles.breakTitleDark}>
+            {ev.title}
+          </Txt>
+        </View>
+      );
+    }
     return (
       <View style={styles.breakCard}>
         <View style={styles.breakIcon}>
@@ -145,6 +186,26 @@ function AgendaCard({ ev, onPress }: { ev: CalEvent; onPress: () => void }) {
     );
   }
   if (ev.kind === 'ai') {
+    if (compact) {
+      return (
+        <Press onPress={onPress} style={styles.aiCardDark}>
+          <View style={styles.aiIconDark}>
+            <Icon name="magic" size={16} color={C.lime} />
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Txt numberOfLines={1} style={styles.aiTitleDark}>
+              {ev.title}
+            </Txt>
+            <Txt style={styles.aiSubDark}>
+              {ev.start}–{ev.end}
+            </Txt>
+          </View>
+          <View style={styles.acceptPillDark}>
+            <Txt style={styles.acceptTxtDark}>Accept</Txt>
+          </View>
+        </Press>
+      );
+    }
     return (
       <Press onPress={onPress} style={styles.aiCard}>
         <View style={styles.aiIcon}>
@@ -163,6 +224,26 @@ function AgendaCard({ ev, onPress }: { ev: CalEvent; onPress: () => void }) {
     );
   }
   const c = CATS[ev.cat];
+  if (compact) {
+    return (
+      <Press onPress={onPress} style={[styles.card2Dark, ev.conflict && styles.card2Clash]}>
+        <View style={[styles.spine, { backgroundColor: c.color }]} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <View style={styles.card2DarkTop}>
+            {ev.kind === 'focus' && <Icon name="shield" size={12} color={C.lime} />}
+            {ev.conflict && <Icon name="triangle" size={12} color={C.orange} />}
+            <Txt numberOfLines={1} style={styles.card2TitleDark}>
+              {ev.title}
+            </Txt>
+          </View>
+          <Txt style={styles.card2MetaDark}>
+            {ev.start}–{ev.end} · {durLabel(toMin(ev.end) - toMin(ev.start))}
+          </Txt>
+        </View>
+        <View style={[styles.catDot, { backgroundColor: c.color }]} />
+      </Press>
+    );
+  }
   return (
     <Press onPress={onPress} style={[styles.card2, ev.conflict && styles.card2Clash]}>
       <View style={[styles.spine, { backgroundColor: c.color }]} />
@@ -242,6 +323,7 @@ const styles = StyleSheet.create({
   },
   addTxt: { color: w(0.7), fontSize: 12 },
 
+  /* ── default: the light reading surface ── */
   lightBody: { backgroundColor: C.light },
   row: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: ink(0.1) },
   rowLeft: { borderRightWidth: 1, borderRightColor: ink(0.1), paddingHorizontal: 12, paddingVertical: 20, alignItems: 'flex-end' },
@@ -319,6 +401,74 @@ const styles = StyleSheet.create({
   aiSub: { marginTop: 4, color: ink(0.6), fontSize: 12 },
   acceptPill: { borderRadius: R.full, backgroundColor: C.surface, paddingHorizontal: 8, paddingVertical: 4 },
   acceptTxt: { color: '#fff', fontSize: 12 },
+
+  /* ── compact: the dark rail variant ── */
+  compactBody: {},
+  rowDark: { borderTopColor: w(0.08) },
+  rowLeftDark: { borderRightColor: w(0.08), paddingHorizontal: 8, paddingVertical: 12 },
+  rowLeftTxtDark: { color: w(0.4), fontSize: 12 },
+  rowBodyDark: { padding: 10 },
+
+  freeRowDark: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: R.lg,
+    borderWidth: 1,
+    borderColor: w(0.16),
+    borderStyle: 'dashed',
+    backgroundColor: w(0.03),
+    padding: 10,
+  },
+  freeIconDark: { height: 26, width: 26, borderRadius: R.full, backgroundColor: w(0.08), alignItems: 'center', justifyContent: 'center' },
+  freeTxtDark: { color: w(0.55), fontSize: 12 },
+  freeRangeDark: { marginLeft: 'auto', color: w(0.4), fontSize: 12 },
+
+  card2Dark: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: R.lg,
+    borderWidth: 1,
+    borderColor: w(0.1),
+    backgroundColor: w(0.04),
+    padding: 10,
+  },
+  card2DarkTop: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  card2TitleDark: { flex: 1, color: '#fff', fontSize: 13, lineHeight: 18, fontWeight: '500' },
+  card2MetaDark: { marginTop: 3, color: w(0.45), fontSize: 11 },
+  catDot: { height: 7, width: 7, borderRadius: 4 },
+
+  breakCardDark: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: R.lg,
+    borderWidth: 1,
+    borderColor: w(0.12),
+    borderStyle: 'dashed',
+    backgroundColor: w(0.03),
+    padding: 10,
+  },
+  breakIconDark: { height: 28, width: 28, borderRadius: R.full, backgroundColor: w(0.06), alignItems: 'center', justifyContent: 'center' },
+  breakTitleDark: { flex: 1, color: w(0.7), fontSize: 12 },
+
+  aiCardDark: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: R.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(32,71,230,0.5)',
+    borderStyle: 'dashed',
+    backgroundColor: w(0.05),
+    padding: 10,
+  },
+  aiIconDark: { height: 28, width: 28, borderRadius: R.full, backgroundColor: C.surface, alignItems: 'center', justifyContent: 'center' },
+  aiTitleDark: { color: '#fff', fontSize: 13, fontWeight: '500' },
+  aiSubDark: { marginTop: 3, color: w(0.5), fontSize: 11 },
+  acceptPillDark: { borderRadius: R.full, backgroundColor: C.lime, paddingHorizontal: 8, paddingVertical: 4 },
+  acceptTxtDark: { color: C.surface, fontSize: 11, fontWeight: '500' },
 
   emptyBody: { alignItems: 'center', paddingHorizontal: 24, paddingVertical: 48, backgroundColor: C.surface },
   emptyIcon: {
