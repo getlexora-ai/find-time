@@ -1,36 +1,73 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Find Time
 
-## Getting Started
+A cross-platform time-planning app built with **Expo + React Native**. One codebase
+runs on **iOS, Android, and web**.
 
-First, run the development server:
+This is the ground-up rewrite of the earlier Next.js web prototype (preserved on the
+[`v1`](https://github.com/getlexora-ai/find-time/tree/v1) branch). The rewrite exists so
+every screen is a real React Native component that ships to native and web alike.
+
+## What's in this MVP
+
+Two functions, both working end to end with no configuration:
+
+1. **Calendar** (`src/app/index.tsx`) — a 2-week day strip and an agenda list. Shows your
+   events per day, colour-coded by type, including blocks proposed by the planner.
+2. **Plan with AI** (`src/app/plan.tsx`) — describe what you need time for in plain
+   English ("Find 2 hours for deep work tomorrow morning"). The planner reads your
+   existing events, finds open slots, and proposes blocks you can drop onto the calendar
+   and confirm.
+
+Data lives in memory for the session (`src/lib/store.ts`) and is seeded on launch
+(`src/lib/sample-data.ts`), so the app is fully functional the moment it starts.
+
+## Run it
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/getlexora-ai/find-time.git
+cd find-time
+npm install
+
+npm run web        # open http://localhost:8081 in a browser
+npm run ios        # iOS simulator (macOS + Xcode)
+npm run android    # Android emulator (Android Studio)
+npm start          # dev menu — scan the QR code with Expo Go on a real device
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Requires Node 20+.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Checks
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run typecheck  # tsc --noEmit
+npm run lint       # eslint (eslint-config-expo)
+```
 
-## Learn More
+## Project layout
 
-To learn more about Next.js, take a look at the following resources:
+```
+src/
+  app/
+    _layout.tsx        tab navigator (Calendar · Plan with AI)
+    index.tsx          Calendar screen
+    plan.tsx           Plan with AI screen
+  lib/
+    store.ts           in-memory event store + React hooks
+    planner.ts         deterministic planner (natural language -> time blocks)
+    sample-data.ts     seed events
+    date.ts / types.ts helpers and shared types
+  components/           themed primitives
+  constants/theme.ts   colours, spacing, fonts
+  hooks/               colour-scheme + theme hooks
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Roadmap (next milestones)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The MVP deliberately stops short of these; the code has plug points marked:
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Auth** — Clerk, replacing the session-only store with a real user identity.
+- **Database** — Postgres, persisting events per user behind an API layer that the
+  `useEvents` / `addEvents` hooks already abstract.
+- **Real AI planning** — swap `parseRequest` in `src/lib/planner.ts` for an LLM call
+  (with an API key) that returns the same `PlanIntent`; keep `placeBlocks` as the
+  deterministic scheduler.
