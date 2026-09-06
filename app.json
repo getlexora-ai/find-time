@@ -8,12 +8,11 @@
     "scheme": "findtime",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true,
-      "icon": "./assets/expo.icon"
+      "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#2047e6",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -29,7 +28,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#2047e6",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
