@@ -36,7 +36,7 @@ export function Agenda({
 }) {
   const { theme } = useCalTheme();
   const { isPhone } = useResponsive();
-  const gutter = compact ? 52 : isPhone ? 52 : 72;
+  const gutter = isPhone ? 52 : 72;
   const list = byDate(events, iso(date));
   const isToday = sameDay(date, TODAY);
   const planned = list
@@ -149,12 +149,18 @@ function Row({
   compact?: boolean;
   children: React.ReactNode;
 }) {
+  // Compact drops the time-gutter column entirely — every card and free row
+  // already carries its own time, so the gutter was just a dead strip down the
+  // left of a narrow rail. The rows then stack like the cards above them.
+  if (compact) {
+    return <View style={[styles.row, styles.rowDark, styles.rowBodyDark]}>{children}</View>;
+  }
   return (
-    <View style={[styles.row, compact && styles.rowDark]}>
-      <View style={[styles.rowLeft, compact && styles.rowLeftDark, { width: gutter }]}>
-        <Txt style={compact ? styles.rowLeftTxtDark : styles.rowLeftTxt}>{left}</Txt>
+    <View style={styles.row}>
+      <View style={[styles.rowLeft, { width: gutter }]}>
+        <Txt style={styles.rowLeftTxt}>{left}</Txt>
       </View>
-      <View style={[styles.rowBody, compact && styles.rowBodyDark]}>{children}</View>
+      <View style={styles.rowBody}>{children}</View>
     </View>
   );
 }
@@ -405,8 +411,6 @@ const styles = StyleSheet.create({
   /* ── compact: the dark rail variant ── */
   compactBody: {},
   rowDark: { borderTopColor: w(0.08) },
-  rowLeftDark: { borderRightColor: w(0.08), paddingHorizontal: 8, paddingVertical: 12 },
-  rowLeftTxtDark: { color: w(0.4), fontSize: 12 },
   rowBodyDark: { padding: 10 },
 
   freeRowDark: {
