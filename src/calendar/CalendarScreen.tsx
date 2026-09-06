@@ -12,6 +12,7 @@ import { EventDetail } from './components/EventDetail';
 import { Frame } from './components/Frame';
 import { Header } from './components/Header';
 import { Marquee } from './components/Marquee';
+import { MobileNav } from './components/MobileNav';
 import { MonthView } from './components/MonthView';
 import { PickerSheet } from './components/PickerSheet';
 import { Sidebar } from './components/Sidebar';
@@ -21,11 +22,9 @@ import { ThemeMenu } from './components/ThemeMenu';
 import { useToast } from './components/Toast';
 import { Toolbar } from './components/Toolbar';
 import { WeekView } from './components/WeekView';
-import { Icon } from './Icon';
 import { TODAY } from './seed';
 import type { CalActions, CalState, PointAnchor, ViewKind } from './state';
-import { C, DESKTOP_BP, R } from './tokens';
-import { Press } from './ui';
+import { DESKTOP_BP } from './tokens';
 import { useResponsive } from './useResponsive';
 
 export function CalendarScreen() {
@@ -222,15 +221,9 @@ export function CalendarScreen() {
         </View>
       </View>
 
-      {isPhone && (
-        <Press
-          onPress={() => actions.openCompose(null)}
-          hoverBg={C.limeHover}
-          style={styles.fab}
-          accessibilityRole="button"
-          aria-label="New event">
-          <Icon name="add" size={22} color={C.surface} />
-        </Press>
+      {/* calendar.html shows this fixed 5-item nav at every width below lg */}
+      {!isDesktop && (
+        <MobileNav onCompose={() => actions.openCompose(null)} onOpenAI={() => actions.openAI()} />
       )}
 
       <ThemeMenu visible={themeMenu} onClose={() => setThemeMenu(false)} />
@@ -299,19 +292,4 @@ const styles = StyleSheet.create({
   rowWrap: { flex: 1, alignItems: 'center' },
   row: { flex: 1, flexDirection: 'row', width: '100%', maxWidth: 1720 },
   main: { flex: 1, minWidth: 0 },
-  fab: {
-    position: 'absolute',
-    right: 16,
-    bottom: 88,
-    height: 52,
-    width: 52,
-    borderRadius: R.full,
-    backgroundColor: C.lime,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: C.lime,
-    shadowOpacity: 0.25,
-    shadowRadius: 24,
-    elevation: 8,
-  },
 });

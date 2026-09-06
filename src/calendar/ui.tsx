@@ -22,6 +22,17 @@ export const MONO = Platform.select({
   default: 'monospace',
 }) as string;
 
+/**
+ * The reference puts `backdrop-blur-xl` on all three chrome surfaces (marquee,
+ * header, mobile nav) — it is what stops content reading through the ~90%-opaque
+ * bar. `backdrop-filter` is CSS-only, so this applies on web and is a no-op on
+ * native, where the chrome colour just renders unblurred.
+ */
+export const CHROME_BLUR = Platform.select({
+  web: { backdropFilter: 'blur(24px)' } as unknown as ViewStyle,
+  default: undefined,
+});
+
 /** Every line of text in the app is monospace and, by default, white. */
 export function Txt({ style, ...rest }: TextProps) {
   return <Text {...rest} style={[styles.txt, style]} />;

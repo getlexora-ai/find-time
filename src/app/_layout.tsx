@@ -1,53 +1,22 @@
-import { DarkTheme, DefaultTheme, Tabs, ThemeProvider } from 'expo-router';
+import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Text, type ColorValue } from 'react-native';
 
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-
-function TabIcon({ emoji, color }: { emoji: string; color: ColorValue }) {
-  return <Text style={{ fontSize: 20, color }}>{emoji}</Text>;
-}
-
+/**
+ * `calendar.html` is a single page: the only chrome is the calendar's own sticky
+ * header (desktop) and its own fixed 5-item bottom nav (below lg, rendered by
+ * `CalendarScreen`). So there is no router-level tab bar here — an Expo Router
+ * `<Tabs>` renders its bar on web and desktop too, which the mockup never shows.
+ *
+ * "Plan with AI" is not a route either: it is the `AiPanel` slide-over, opened
+ * from the header button on desktop and the "Ask AI" nav item on mobile.
+ */
 export default function RootLayout() {
-  const scheme = useColorScheme();
-  const isDark = scheme === 'dark';
-  const colors = Colors[isDark ? 'dark' : 'light'];
-
   return (
-    <ThemeProvider value={isDark ? DarkTheme : DefaultTheme}>
-      <Tabs
-        screenOptions={{
-          headerStyle: { backgroundColor: colors.background },
-          headerTitleStyle: { color: colors.text },
-          headerShadowVisible: false,
-          sceneStyle: { backgroundColor: colors.background },
-          // Bottom nav styled to the Find time chrome (calendar-design-spec.md §1.1).
-          tabBarActiveTintColor: '#ccff00',
-          tabBarInactiveTintColor: 'rgba(255,255,255,0.45)',
-          tabBarStyle: {
-            backgroundColor: '#142d99',
-            borderTopColor: 'rgba(255,255,255,0.10)',
-          },
-        }}>
-        <Tabs.Screen
-          name="index"
-          options={{
-            title: 'Calendar',
-            // the calendar screen renders its own sticky header + chrome
-            headerShown: false,
-            tabBarIcon: ({ color }) => <TabIcon emoji="📅" color={color} />,
-          }}
-        />
-        <Tabs.Screen
-          name="plan"
-          options={{
-            title: 'Plan with AI',
-            tabBarIcon: ({ color }) => <TabIcon emoji="✨" color={color} />,
-          }}
-        />
-      </Tabs>
+    <>
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#2047e6' } }}>
+        <Stack.Screen name="index" />
+      </Stack>
       <StatusBar style="light" />
-    </ThemeProvider>
+    </>
   );
 }

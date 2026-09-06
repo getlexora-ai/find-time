@@ -4,7 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { Icon } from '../Icon';
 import { useCalTheme } from '../theme-context';
 import { C, R, w } from '../tokens';
-import { Press, Txt } from '../ui';
+import { CHROME_BLUR, Press, Txt } from '../ui';
 import { useResponsive } from '../useResponsive';
 import { useToast } from './Toast';
 
@@ -17,12 +17,12 @@ export function Header({
   onOpenAI: () => void;
 }) {
   const { theme } = useCalTheme();
-  const { isDesktop, isPhone } = useResponsive();
+  const { width, isDesktop, isPhone } = useResponsive();
   const toast = useToast();
   const themeBtn = useRef<View>(null);
 
   return (
-    <View style={[styles.bar, { backgroundColor: theme.chrome }]}>
+    <View style={[styles.bar, CHROME_BLUR, { backgroundColor: theme.chrome }]}>
       {isDesktop ? (
         <View style={styles.left}>
           <Txt style={styles.crumbMuted}>Workspace</Txt>
@@ -50,7 +50,8 @@ export function Header({
           aria-label="Search">
           <Icon name="search" size={16} color={w(0.5)} />
           {!isPhone && <Txt style={styles.searchTxt}>Search</Txt>}
-          {isDesktop && (
+          {/* calendar.html shows the shortcut badge from md (768), not lg */}
+          {width >= 768 && (
             <View style={styles.kbd}>
               <Txt style={styles.kbdTxt}>⌘ K</Txt>
             </View>

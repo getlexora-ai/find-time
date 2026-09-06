@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
 
 import { useCalTheme } from '../theme-context';
-import { MONO } from '../ui';
+import { CHROME_BLUR, MONO } from '../ui';
 
 const COPY =
   'Calendar synced  //  03 focus blocks protected this week  //  06h 40m free on thursday  //  AI scheduler online  //';
@@ -32,7 +32,7 @@ export function Marquee() {
   }, [spanW, x]);
 
   return (
-    <View style={[styles.bar, { backgroundColor: theme.chrome }]}>
+    <View style={[styles.bar, CHROME_BLUR, { backgroundColor: theme.chrome }]}>
       <Animated.View style={[styles.track, { transform: [{ translateX: x }] }]}>
         <View onLayout={(e) => setSpanW(e.nativeEvent.layout.width)}>
           <Span />

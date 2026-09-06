@@ -53,7 +53,8 @@ export function ThemeMenu({ visible, onClose }: { visible: boolean; onClose: () 
                     </Txt>
                   </View>
                   <View style={{ opacity: on ? 1 : 0 }}>
-                    <Icon name="check" size={18} color={C.lime} />
+                    {/* calendar.html themeList uses the -bold check here, not -linear */}
+                    <Icon name="check-bold" size={18} color={C.lime} />
                   </View>
                 </Pressable>
               );

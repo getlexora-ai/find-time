@@ -66,6 +66,13 @@ export function AiPanel({
             { backgroundColor: theme.panel, borderColor: theme.panelBorder },
             isDesktop ? styles.panelDrawer : styles.panelSheet,
           ]}>
+          {/* the two concentric lime rings bleeding off the top-right corner */}
+          <View
+            pointerEvents="none"
+            style={[styles.rings, isDesktop ? styles.ringsDrawer : styles.ringsSheet]}>
+            <View style={[styles.ring, styles.ringOuter]} />
+            <View style={[styles.ring, styles.ringInner]} />
+          </View>
           <ScrollView contentContainerStyle={{ padding: isDesktop ? 24 : 20 }}>
             {!isDesktop && <View style={styles.grab} />}
             <View style={styles.head}>
@@ -106,9 +113,23 @@ export function AiPanel({
                   aria-label="Voice input">
                   <Icon name="mic" size={18} color={listening ? '#fff' : w(0.45)} />
                 </Press>
-                <Press onPress={run} hoverBg={C.limeHover} style={styles.run}>
-                  <Txt style={styles.runTxt}>Find time</Txt>
-                  <Icon name="arrow-right-up" size={16} color={C.surface} />
+                {/* calendar.html swaps the button's own label while it "reads" */}
+                <Press
+                  onPress={run}
+                  disabled={phase === 'analysing'}
+                  hoverBg={C.limeHover}
+                  style={styles.run}>
+                  {phase === 'analysing' ? (
+                    <>
+                      <Icon name="refresh" size={18} color={C.surface} />
+                      <Txt style={styles.runTxt}>Reading calendar…</Txt>
+                    </>
+                  ) : (
+                    <>
+                      <Txt style={styles.runTxt}>Find time</Txt>
+                      <Icon name="arrow-right-up" size={16} color={C.surface} />
+                    </>
+                  )}
                 </Press>
               </View>
             </View>
@@ -201,7 +222,8 @@ function MoveRow({ title, from, to, tone }: { title: string; from: string; to: s
         <Txt style={styles.moveTitle}>{title}</Txt>
         <View style={styles.moveMeta}>
           <Txt style={styles.moveFrom}>{from}</Txt>
-          <Icon name="arrow-right" size={13} color={w(0.4)} />
+          {/* calendar.html moveRow() uses the plain arrow, not the nav chevron */}
+          <Icon name="arrow-forward" size={13} color={w(0.4)} />
           <Txt style={styles.moveTo}>{to}</Txt>
         </View>
       </View>
@@ -223,6 +245,12 @@ const styles = StyleSheet.create({
   },
   panelSheet: { width: '100%', maxHeight: '88%', borderTopLeftRadius: R.xl2, borderTopRightRadius: R.xl2 },
   panelDrawer: { height: '100%', width: 432, borderTopLeftRadius: R.xl2, borderBottomLeftRadius: R.xl2 },
+  rings: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden' },
+  ringsSheet: { borderTopLeftRadius: R.xl2, borderTopRightRadius: R.xl2 },
+  ringsDrawer: { borderTopLeftRadius: R.xl2, borderBottomLeftRadius: R.xl2 },
+  ring: { position: 'absolute', borderWidth: 1, borderRadius: R.full },
+  ringOuter: { right: -48, top: -48, height: 144, width: 144, borderColor: rgba(C.lime, 0.2) },
+  ringInner: { right: -24, top: -24, height: 96, width: 96, borderColor: rgba(C.lime, 0.3) },
   grab: { alignSelf: 'center', marginBottom: 16, height: 4, width: 40, borderRadius: R.full, backgroundColor: w(0.2) },
   head: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },

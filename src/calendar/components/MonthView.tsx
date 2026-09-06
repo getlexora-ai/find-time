@@ -2,6 +2,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { byDate } from '../cal-store';
 import { iso, isoWeek, sameDay, WD } from '../cal-date';
+import { Icon } from '../Icon';
 import { monthCells } from '../layout';
 import { TODAY } from '../seed';
 import type { CalActions, CalState } from '../state';
@@ -90,7 +91,7 @@ function DesktopMonth({ state, actions, events }: { state: CalState; actions: Ca
                       hoverBg={w(0.1)}
                       style={styles.addBtn}
                       aria-label={`Add event on ${iso(d)}`}>
-                      <Txt style={styles.addTxt}>+</Txt>
+                      <Icon name="add" size={14} color={w(0.35)} />
                     </Press>
                   </View>
                   {shown.map((ev) => (
@@ -204,7 +205,6 @@ const styles = StyleSheet.create({
   numOther: { color: w(0.2) },
   numTodayTxt: { color: C.surface, fontWeight: '500' },
   addBtn: { height: 20, width: 20, alignItems: 'center', justifyContent: 'center', borderRadius: R.sm },
-  addTxt: { color: w(0.35), fontSize: 14, lineHeight: 16 },
   more: { marginTop: 'auto', width: '100%', borderRadius: R.sm, paddingHorizontal: 6, paddingVertical: 4 },
   moreTxt: { color: w(0.4), fontSize: 12 },
   // mobile
