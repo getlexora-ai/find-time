@@ -1,0 +1,469 @@
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Torch Genesis Broadcast</title>
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+
+<!-- Tailwind -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- Iconify -->
+<script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+<!-- GSAP & Plugins -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/Draggable.min.js"></script>
+<!-- Three.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script></head>
+<body class="antialiased text-xs min-h-screen relative selection:bg-[#ccff00] selection:text-[#121212] overflow-x-hidden" style="background-color: #2047e6; color: rgba(255, 255, 255, 0.8); font-family: 'JetBrains Mono', monospace; background-image: radial-gradient(rgba(255,255,255,0.15) 1px, transparent 1px), linear-gradient(rgba(32, 71, 230, 0.85), rgba(32, 71, 230, 0.95)), url('https://hoirqrkdgbmvpwutwuwj.supabase.co/storage/v1/object/public/assets/assets/d14dc069-558a-4c51-8aad-5cc237f9b61d_1600w.jpg'); background-size: 20px 20px, cover, cover; background-position: top left, center, center; background-attachment: fixed, fixed, fixed;">
+
+    <!-- Directive: Framed Grid Layout & Diagonal lines -->
+    <div class="fixed inset-0 pointer-events-none z-0" style="background-image: repeating-linear-gradient(45deg, rgba(255,255,255,0.03) 0, rgba(255,255,255,0.03) 1px, transparent 1px, transparent 8px);"></div>
+    <div class="fixed inset-4 sm:inset-6 md:inset-8 border border-white/10 pointer-events-none z-0 flex items-center justify-center">
+        <!-- Center Crosshair -->
+        <div class="absolute w-full h-[1px] bg-white/5"></div>
+        <div class="absolute h-full w-[1px] bg-white/5"></div>
+
+        <!-- Corner Brackets -->
+        <div class="absolute top-0 left-0 w-6 h-6 border-t-[1.5px] border-l-[1.5px] border-[#ccff00]"></div>
+        <div class="absolute top-0 right-0 w-6 h-6 border-t-[1.5px] border-r-[1.5px] border-[#ccff00]"></div>
+        <div class="absolute bottom-0 left-0 w-6 h-6 border-b-[1.5px] border-l-[1.5px] border-[#ccff00]"></div>
+        <div class="absolute bottom-0 right-0 w-6 h-6 border-b-[1.5px] border-r-[1.5px] border-[#ccff00]"></div>
+    </div>
+
+    <!-- Top Marquee -->
+    <div class="absolute top-0 left-0 w-full overflow-hidden border-b border-white/10 py-1.5 z-40 bg-[#2047e6]/80 backdrop-blur-sm">
+        <div class="marquee-inner flex w-[200%] text-xs tracking-widest text-[#ccff00]/80 uppercase whitespace-nowrap">
+            <span>THE BEST WORK HAPPENS WHEN NO ONE IS WATCHING. THIS IS A BROADCAST FROM THE OTHER SIDE OF DONE. WE DON'T SHIP FAST - WE SHIP WARM. NOTHING HERE WAS MADE FOR THE TIMELINE. EVERY PIXEL PLACED AT 3AM KNOWS SOMETHING THE DAYTIME VERSION DOESN'T.&nbsp;&nbsp;&nbsp;&nbsp;</span>
+            <span>THE BEST WORK HAPPENS WHEN NO ONE IS WATCHING. THIS IS A BROADCAST FROM THE OTHER SIDE OF DONE. WE DON'T SHIP FAST - WE SHIP WARM. NOTHING HERE WAS MADE FOR THE TIMELINE. EVERY PIXEL PLACED AT 3AM KNOWS SOMETHING THE DAYTIME VERSION DOESN'T.&nbsp;&nbsp;&nbsp;&nbsp;</span>
+        </div>
+    </div>
+
+    <!-- Main Artboard Container -->
+    <main class="relative w-full max-w-[1440px] mx-auto min-h-[1000px] h-screen mt-8 overflow-hidden lg:overflow-visible">
+
+        <!-- Left Axis Markers -->
+        <div class="absolute left-4 top-20 bottom-12 flex-col justify-between text-xs text-white/50 z-10 hidden sm:flex">
+            <div>NT.001</div>
+            <div>FREQ.027</div>
+            <div>TX.014</div>
+            <div>N.052</div>
+            <div>LOG.054</div>
+            <div>CH.512</div>
+            <div>POS.51.63°N</div>
+            <div>TM.-1 DEEP NOON</div>
+            <div>ORB:04.SUN</div>
+            <div>STATUS.948</div>
+            <div>NT.ZZ.146601.14</div>
+        </div>
+
+        <!-- Top Left Info -->
+        <div class="drag-item absolute top-16 left-8 sm:left-24 flex items-start gap-4 z-20 cursor-grab active:cursor-grabbing">
+            <div class="relative w-12 h-12 rounded-full border border-white/30 flex items-center justify-center">
+                <iconify-icon icon="solar:sun-2-linear" class="text-white text-xl"></iconify-icon>
+                <div class="pulse-ring absolute inset-0 rounded-full border border-[#ccff00]"></div>
+            </div>
+            <div class="text-xs uppercase leading-tight tracking-wider mt-1 pointer-events-none">
+                <div class="text-white font-normal">Torch Genesis</div>
+                <div class="text-white/60">Signal Decay &gt; 0.184925</div>
+                <div class="text-white/60">Forged in Consensus</div>
+                <div class="mt-4 text-[#ccff00]">955.200 &gt;&gt;&gt; NN9SF90X</div>
+            </div>
+        </div>
+
+        <!-- Top Middle Title -->
+        <div class="drag-item absolute top-16 left-[40%] text-xs tracking-widest text-white/40 uppercase hidden md:block cursor-grab active:cursor-grabbing">
+            <div class="text-[#ccff00]/80">Frequenze</div>
+            <div>Frequencies</div>
+        </div>
+
+        <!-- Top Right Freq List -->
+        <div class="drag-item absolute top-16 right-8 sm:right-24 text-xs uppercase leading-relaxed text-white/80 hidden lg:block cursor-grab active:cursor-grabbing">
+            <div>FREQ.003 SLOW BURN</div>
+            <div>FREQ.015 WARM STATIC</div>
+            <div>FREQ.027 SWEET STATIC</div>
+            <div>FREQ.039 BRIGHT WOUND</div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- WIDGET COLLAGE (Remixed Positioning & Draggable) -->
+        <!-- ========================================== -->
+
+        <!-- Yellow Arc Widget -->
+        <div class="drag-item absolute top-[15%] left-[60%] w-24 h-32 bg-transparent z-20 float-slow hidden md:block cursor-grab active:cursor-grabbing">
+            <div class="w-full h-24 rounded-t-full bg-[#f4a261] flex items-center justify-center overflow-hidden border border-white/20 pointer-events-none">
+                 <div class="w-16 h-16 rounded-full bg-[#ff4400] flex items-center justify-center border-2 border-[#121212]">
+                     <iconify-icon icon="solar:slash-circle-linear" class="text-[#121212] text-3xl transform rotate-45"></iconify-icon>
+                 </div>
+            </div>
+            <div class="w-full bg-[#ccff00]/20 backdrop-blur-md border border-white/10 p-2 text-xs text-[#ccff00] leading-none mt-2 rounded-sm pointer-events-none">
+                N-TORCH<br>N-TORCH<br>N-TORCH
+            </div>
+        </div>
+
+        <!-- Orange Graphic Strip -->
+        <div class="drag-item absolute bottom-[20%] right-[15%] w-48 h-12 bg-[#ff4400] rounded-sm flex items-center justify-between px-3 z-30 float-fast shadow-2xl border border-white/20 cursor-grab active:cursor-grabbing">
+            <div class="flex gap-1 pointer-events-none">
+                <div class="w-1 h-3 bg-[#121212]"></div>
+                <div class="w-2 h-3 bg-[#121212]"></div>
+                <div class="w-1 h-3 bg-[#121212]"></div>
+            </div>
+            <div class="text-xs text-[#121212] flex flex-col items-end pointer-events-none">
+                <span>99.0204</span>
+                <span>ZZ.&gt;&gt;KK ZD.24</span>
+            </div>
+            <div class="w-8 h-8 rounded-full bg-[#ffd600] flex items-center justify-center pointer-events-none">
+                <div class="w-1 h-4 bg-[#121212] transform rotate-45"></div>
+            </div>
+        </div>
+
+        <!-- Black Command Window -->
+        <div class="drag-item absolute top-[30%] left-[8%] w-[380px] h-[120px] bg-[#121212] rounded-lg border border-white/20 z-20 p-4 flex-col justify-between shadow-2xl hidden xl:flex cursor-grab active:cursor-grabbing">
+            <div class="flex justify-between items-start pointer-events-none">
+                <div class="w-8 h-1 bg-white/20 rounded-full"></div>
+                <div class="flex gap-1">
+                    <div class="w-1 h-1 rounded-full bg-[#ccff00]"></div>
+                    <div class="w-1 h-1 rounded-full bg-white/40"></div>
+                    <div class="w-1 h-1 rounded-full bg-white/40"></div>
+                </div>
+            </div>
+            <div class="flex justify-between items-end pointer-events-none">
+                <div class="flex items-end gap-3">
+                    <div class="text-[#ffd600] text-4xl font-semibold leading-none tracking-tight">N</div>
+                    <div class="text-xs text-[#ccff00] uppercase leading-tight pb-1">
+                        Aether &gt;&gt;&gt;&gt;&gt; Prism<br>
+                        Soft Machine<br>
+                        Nothing works until it does<br>
+                        N - Torch
+                    </div>
+                </div>
+                <div class="flex flex-col items-end gap-2">
+                    <div class="flex items-center gap-2 text-[#ffd600]">
+                        <iconify-icon icon="solar:infinity-linear" class="text-xl"></iconify-icon>
+                        <iconify-icon icon="solar:star-fall-linear" class="text-xl"></iconify-icon>
+                    </div>
+                    <div class="flex items-center gap-4 text-xs text-white/50">
+                        <span>S204</span>
+                        <span>NN.605</span>
+                        <span>NN.607</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Holographic N Sticker -->
+        <div class="drag-item holo-bg absolute top-[12%] right-[15%] w-64 h-16 rounded border border-white/40 z-30 flex items-center justify-center shadow-[0_0_30px_rgba(255,255,255,0.2)] hidden lg:flex transform rotate-3 hover:rotate-0 transition-transform cursor-grab active:cursor-grabbing" style="background: linear-gradient(135deg, rgba(255,255,255,0.4) 0%, rgba(200,200,255,0.6) 25%, rgba(100,200,255,0.4) 50%, rgba(255,100,200,0.6) 75%, rgba(255,255,255,0.4) 100%); background-size: 200% 200%;">
+            <div class="text-[#121212] text-6xl font-extrabold italic tracking-tight mix-blend-overlay pointer-events-none">N</div>
+        </div>
+
+        <!-- Yellow Control Panel -->
+        <div class="drag-item absolute bottom-[15%] left-[25%] w-64 h-16 bg-[#ffd600] rounded border border-white/20 z-20 flex shadow-xl hidden xl:flex cursor-grab active:cursor-grabbing">
+            <div class="flex-1 border-r border-[#121212]/20 p-2 flex flex-col justify-between pointer-events-none">
+                <div class="flex justify-between items-center text-xs text-[#121212]">
+                    <div class="flex gap-1 items-center"><div class="w-2 h-1 bg-[#2047e6]"></div> ZZ.&gt;&gt;KK ZD.LEF.022.24</div>
+                </div>
+                <div class="flex justify-between items-end">
+                    <iconify-icon icon="solar:slider-minimalistic-horizontal-linear" class="text-[#121212] text-lg"></iconify-icon>
+                    <span class="text-xs text-[#121212] font-semibold">NN.605</span>
+                </div>
+            </div>
+            <div class="w-16 flex items-center justify-center relative overflow-hidden pointer-events-none">
+                <!-- Abstract intersecting circles -->
+                <div class="absolute w-20 h-20 border border-[#121212]/30 rounded-full -left-10"></div>
+                <div class="absolute w-20 h-20 border border-[#121212]/30 rounded-full -right-10"></div>
+                <div class="w-1 h-full bg-[#121212]"></div>
+            </div>
+        </div>
+
+        <!-- Orange Side Panel -->
+        <div class="drag-item absolute top-[45%] left-[3%] w-16 h-48 bg-[#ff4400] rounded-md border border-white/20 z-20 flex-col justify-between p-2 shadow-xl float-slow hidden md:flex cursor-grab active:cursor-grabbing">
+             <div class="flex gap-1 pointer-events-none">
+                 <div class="w-1 h-4 bg-[#121212]"></div>
+                 <div class="w-1 h-2 bg-[#121212]"></div>
+             </div>
+             <div class="w-full flex justify-center pb-2 pointer-events-none">
+                 <div class="w-10 h-10 bg-[#121212] rounded-full flex items-center justify-center">
+                     <div class="w-2 h-2 bg-[#ff4400] rounded-full"></div>
+                 </div>
+             </div>
+        </div>
+
+        <!-- Blue Square Widget -->
+        <div class="drag-item absolute top-[75%] right-[30%] w-20 h-20 bg-[#2047e6] border border-white/30 rounded z-30 p-2 shadow-2xl flex-col justify-between hidden sm:flex cursor-grab active:cursor-grabbing">
+            <iconify-icon icon="solar:widget-3-linear" class="text-white text-xl pointer-events-none"></iconify-icon>
+            <div class="flex justify-end pointer-events-none">
+                <div class="w-10 h-10 bg-[#ffd600] rounded-full flex items-center justify-center border-2 border-[#2047e6] transform -translate-x-2 translate-y-2">
+                     <div class="w-6 h-[1px] bg-[#121212] transform rotate-45"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Black Vertical Pill -->
+        <div class="drag-item absolute top-[60%] right-[8%] w-16 h-40 bg-[#121212] rounded-lg border border-white/10 z-20 p-3 flex-col justify-between items-center shadow-xl float-fast hidden sm:flex cursor-grab active:cursor-grabbing">
+             <div class="w-4 h-1 bg-[#2047e6] rounded-full pointer-events-none"></div>
+             <div class="w-12 h-12 bg-[#ffd600] rounded-full flex items-center justify-center overflow-hidden border border-white/20 pointer-events-none">
+                 <!-- Abstract logo inside -->
+                 <div class="w-full h-full relative">
+                     <div class="absolute inset-0 bg-[#121212] rounded-full scale-75 transform translate-x-1 translate-y-1"></div>
+                     <div class="absolute w-full h-[2px] bg-[#ffd600] top-1/2 -translate-y-1/2 transform -rotate-45"></div>
+                 </div>
+             </div>
+             <iconify-icon icon="solar:cpu-linear" class="text-white/50 text-xl pointer-events-none"></iconify-icon>
+        </div>
+
+
+        <!-- ========================================== -->
+        <!-- PRIMARY FOCUS ELEMENTS (Draggable) -->
+        <!-- ========================================== -->
+
+        <!-- 1. Central WebGL Card -->
+        <div class="drag-item absolute top-[40%] left-1/2 sm:left-[40%] transform -translate-x-1/2 sm:translate-x-0 w-[90vw] sm:w-[320px] md:w-[400px] aspect-square z-40 group cursor-grab active:cursor-grabbing">
+            <!-- Directive: Border Gradients -->
+            <div class="absolute inset-0 bg-gradient-to-br from-white/30 via-white/5 to-transparent rounded-2xl p-[1px] shadow-2xl pointer-events-none">
+                <div class="w-full h-full bg-white/10 backdrop-blur-md rounded-2xl overflow-hidden relative border border-white/10 pointer-events-auto">
+
+                    <!-- WebGL Canvas Container -->
+                    <div id="webgl-container" class="absolute inset-0 flex items-center justify-center pointer-events-none"></div>
+
+                    <!-- Overlay Text -->
+                    <div class="absolute inset-0 p-6 flex flex-col justify-between pointer-events-none mix-blend-screen">
+                        <div class="text-[#ccff00]/80 text-xs leading-tight uppercase font-normal tracking-wide">
+                            N-Torch Broadcast Quiet<br>
+                            Fire VE.001 Incl. 389<br>
+                            Nights Size Still Here<br>
+                            Regular Single Weight.<br>
+                            Half Light Font -&gt; D: Slow<br>
+                            Burn (C) 2026
+                        </div>
+                        <div class="flex justify-between items-end w-full">
+                            <div class="flex items-center gap-2 text-xs text-white/50">
+                                <iconify-icon icon="solar:record-circle-linear" class="text-[#ccff00]"></iconify-icon>
+                                <span>TORCH GENESIS<br>SIGNAL DECAY &gt; 0.184925</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. The Big White Card -->
+        <div class="drag-item absolute top-[50%] right-1/2 sm:right-[35%] transform translate-x-1/2 sm:translate-x-0 w-[90vw] sm:w-[350px] md:w-[420px] h-[480px] bg-[#f4f4f4] rounded-xl shadow-2xl z-10 p-8 flex flex-col justify-between border border-white/50 overflow-hidden cursor-grab active:cursor-grabbing">
+
+            <!-- Graphic Lines -->
+            <div class="absolute inset-0 pointer-events-none opacity-20 flex items-center justify-center">
+                <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <circle cx="50" cy="50" r="30" fill="none" stroke="#ff4400" stroke-width="0.2"></circle>
+                    <circle cx="50" cy="50" r="45" fill="none" stroke="#ff4400" stroke-width="0.1"></circle>
+                    <path d="M 0 50 Q 50 0 100 50 Q 50 100 0 50" fill="none" stroke="#ff4400" stroke-width="0.2"></path>
+                    <path d="M 50 0 Q 100 50 50 100 Q 0 50 50 0" fill="none" stroke="#ff4400" stroke-width="0.2"></path>
+                    <line x1="50" y1="0" x2="50" y2="100" stroke="#ff4400" stroke-width="0.1"></line>
+                    <line x1="0" y1="50" x2="100" y2="50" stroke="#ff4400" stroke-width="0.1"></line>
+                </svg>
+            </div>
+
+            <!-- Header Text -->
+            <div class="text-[#121212]/60 text-xs uppercase leading-tight relative z-10 pointer-events-none">
+                N-Torch Broadcast Quiet<br>
+                Fire VE.001 Incl. 389 Nights<br>
+                Size Still Here Regular Font<br>
+                -&gt; D: Slow Burn (C) 2026
+            </div>
+
+            <!-- Directive: Masked Reveal Text -->
+            <div class="relative z-10 w-full flex justify-end pointer-events-none">
+                <p class="text-[#121212] text-xs leading-relaxed uppercase w-[85%] text-right font-normal tracking-tight" id="reveal-text">
+                    The best work happens when no one is watching. This is a broadcast from the other side of done. We don't ship fast — we ship warm. Nothing here was made for the timeline. Every pixel placed at 3am knows something the daytime version doesn't.
+                </p>
+            </div>
+
+            <!-- Bottom Data -->
+            <div class="relative z-10 flex items-center gap-3 text-xs text-[#121212]/40 mt-8 pointer-events-none">
+                <div class="w-4 h-4 bg-[#121212] rounded-full flex items-center justify-center">
+                    <div class="w-1 h-1 bg-white rounded-full"></div>
+                </div>
+                <div>
+                    TORCH GENESIS<br>
+                    SIGNAL DECAY &gt; 0.184925<br>
+                    FORGED IN CONSENSUS
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- BOTTOM WIDGETS -->
+        <!-- ========================================== -->
+
+        <!-- Bottom Black Slider -->
+        <div class="drag-item absolute top-[25%] right-[45%] transform -translate-x-1/2 sm:translate-x-0 w-64 h-12 bg-[#121212] rounded-full border border-white/20 z-30 flex items-center justify-between px-1 shadow-2xl cursor-grab active:cursor-grabbing">
+            <div class="flex items-center gap-3 pl-4 pointer-events-none">
+                <iconify-icon icon="solar:server-square-linear" class="text-white/60 text-lg"></iconify-icon>
+                <div class="text-xs text-white/50 leading-tight">
+                    99.0204<br>ZZ.&gt;&gt;KK ZD.24
+                </div>
+            </div>
+            <div class="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-inner cursor-ew-resize hover:scale-105 transition-transform pointer-events-auto">
+                <div class="w-2 h-2 bg-[#121212] rounded-full"></div>
+            </div>
+        </div>
+
+        <!-- Bottom Right Graphic -->
+        <div class="drag-item absolute top-24 left-[35%] text-[#ccff00] flex-col items-end z-20 hidden md:flex cursor-grab active:cursor-grabbing">
+             <div class="flex items-center gap-4 text-xs mb-8 pointer-events-none">
+                 <span>NN.097</span>
+                 <span>NN.084</span>
+             </div>
+             <div class="w-32 h-32 relative flex items-center justify-center pointer-events-none">
+                 <!-- Star graphic -->
+                 <div class="absolute w-[2px] h-full bg-[#ffd600]"></div>
+                 <div class="absolute h-[2px] w-full bg-[#ffd600]"></div>
+                 <div class="absolute w-full h-full border border-[#ffd600]/30 rounded-full scale-75"></div>
+             </div>
+             <div class="text-xs text-[#ccff00] uppercase tracking-widest mt-4 transform rotate-90 origin-top-right translate-x-4 pointer-events-none">
+                 Torch Genesis<br>
+                 Signal Decay &gt; 0.184925
+             </div>
+        </div>
+
+    </main>
+
+    <script>
+        // ==========================================
+        // WebGL: Three.js Implementation (The Green Blob)
+        // ==========================================
+        const initWebGL = () => {
+            const container = document.getElementById('webgl-container');
+            if (!container) return;
+
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 1000);
+
+            const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+
+            const geometry = new THREE.IcosahedronGeometry(2, 4);
+
+            const positionAttribute = geometry.getAttribute('position');
+            const vertex = new THREE.Vector3();
+            for (let i = 0; i < positionAttribute.count; i++) {
+                vertex.fromBufferAttribute(positionAttribute, i);
+                const noise = Math.sin(vertex.x * 2) * Math.cos(vertex.y * 2) * Math.sin(vertex.z * 2) * 0.3;
+                vertex.addScalar(noise);
+                positionAttribute.setXYZ(i, vertex.x, vertex.y, vertex.z);
+            }
+            geometry.computeVertexNormals();
+
+            const material = new THREE.MeshStandardMaterial({
+                color: 0xccff00,
+                wireframe: true,
+                transparent: true,
+                opacity: 0.8,
+                emissive: 0x334400,
+                emissiveIntensity: 0.5
+            });
+
+            const blob = new THREE.Mesh(geometry, material);
+            const group = new THREE.Group();
+            group.add(blob);
+
+            scene.add(group);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+            dirLight.position.set(5, 5, 5);
+            scene.add(dirLight);
+
+            camera.position.z = 6;
+
+            let time = 0;
+            const animate = () => {
+                requestAnimationFrame(animate);
+                time += 0.005;
+                group.rotation.x += 0.002;
+                group.rotation.y += 0.003;
+                group.position.y = Math.sin(time * 2) * 0.1;
+                renderer.render(scene, camera);
+            };
+
+            animate();
+
+            window.addEventListener('resize', () => {
+                camera.aspect = container.clientWidth / container.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(container.clientWidth, container.clientHeight);
+            });
+        };
+
+        // ==========================================
+        // GSAP: Animations, Masked Reveal & Draggable
+        // ==========================================
+        const initGSAP = () => {
+            gsap.registerPlugin(ScrollTrigger, Draggable);
+
+            // Initialize Draggable for all widget cards
+            Draggable.create('.drag-item', {
+                type: 'x,y',
+                edgeResistance: 0.65,
+                inertia: true
+            });
+
+            // Replaced CSS Keyframes with GSAP
+            gsap.to('.marquee-inner', { xPercent: -50, repeat: -1, duration: 20, ease: 'none' });
+            gsap.to('.float-slow', { y: -10, rotation: 1, yoyo: true, repeat: -1, duration: 3, ease: 'sine.inOut' });
+            gsap.to('.float-fast', { y: -15, yoyo: true, repeat: -1, duration: 2, ease: 'sine.inOut' });
+            gsap.to('.pulse-ring', { scale: 1.5, opacity: 0, repeat: -1, duration: 2, ease: 'power1.out' });
+            gsap.to('.holo-bg', { backgroundPosition: '100% 50%', repeat: -1, yoyo: true, duration: 2.5, ease: 'sine.inOut' });
+
+            // Masked Reveal Directive Logic
+            const textElement = document.getElementById('reveal-text');
+            if (!textElement) return;
+
+            const text = textElement.innerText;
+            const words = text.split(' ');
+            textElement.innerHTML = '';
+
+            words.forEach(word => {
+                const wrapper = document.createElement('span');
+                wrapper.className = 'inline-block mr-1 mb-1';
+                wrapper.style.overflow = 'hidden';
+                wrapper.style.display = 'block';
+                wrapper.style.verticalAlign = 'top';
+
+                const inner = document.createElement('span');
+                inner.className = 'mask-word inline-block';
+                inner.style.transform = 'translateY(110%)';
+                inner.innerText = word;
+
+                wrapper.appendChild(inner);
+                textElement.appendChild(wrapper);
+            });
+
+            gsap.to('.mask-word', {
+                y: '0%',
+                ease: 'power4.out',
+                duration: 1.2,
+                stagger: 0.02,
+                scrollTrigger: {
+                    trigger: textElement,
+                    start: 'top 80%',
+                }
+            });
+
+            gsap.fromTo('.z-20, .z-30',
+                { y: 50, opacity: 0 },
+                { y: 0, opacity: 1, duration: 1.5, stagger: 0.1, ease: 'power3.out', delay: 0.5 }
+            );
+        };
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initWebGL();
+            initGSAP();
+        });
+
+    </script>
+
+</body></html>

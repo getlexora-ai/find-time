@@ -1,0 +1,1687 @@
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#2047e6">
+<title>Find time — Calendar</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
+
+<style>
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border-radius: 99px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.26); }
+  .light-scroll::-webkit-scrollbar-thumb { background: rgba(18,18,18,.18); }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  [tabindex]:focus-visible, button:focus-visible, a:focus-visible, input:focus-visible,
+  select:focus-visible, textarea:focus-visible, [role="button"]:focus-visible {
+    outline: 2px solid #ccff00; outline-offset: 2px; border-radius: 6px;
+  }
+  @keyframes ftpulse { 0%,100% { opacity: .35 } 50% { opacity: .8 } }
+  .skel { animation: ftpulse 1.4s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+  }
+
+  /* ══ Background themes — only the ground moves; interior palette is unchanged ══ */
+  :root{
+    --ft-ground:#2047e6;
+    --ft-grad:linear-gradient(135deg,rgba(9,26,102,0.12),rgba(32,71,230,0.96));
+    --ft-dot:rgba(255,255,255,0.14);
+    --ft-chrome:rgba(23,58,191,.90);
+    --ft-rail:rgba(23,58,191,.30);
+  }
+  body[data-theme="ink"]     { --ft-ground:#0b0b0d; --ft-grad:radial-gradient(120% 80% at 50% -10%,#16161b,#0b0b0d);       --ft-dot:rgba(255,255,255,.055); --ft-chrome:rgba(20,20,24,.85);  --ft-rail:rgba(16,16,20,.55); }
+  body[data-theme="navy"]    { --ft-ground:#0a1126; --ft-grad:linear-gradient(160deg,#0c1531,#07091c);                     --ft-dot:rgba(255,255,255,.07);  --ft-chrome:rgba(20,36,95,.88);  --ft-rail:rgba(14,24,52,.45); }
+  body[data-theme="slate"]   { --ft-ground:#161a22; --ft-grad:linear-gradient(160deg,#1b202b,#111419);                     --ft-dot:rgba(255,255,255,.07);  --ft-chrome:rgba(32,36,46,.88);  --ft-rail:rgba(26,31,39,.50); }
+  body[data-theme="eclipse"] { --ft-ground:#111a4d; --ft-grad:linear-gradient(160deg,#16215e,#0d1340);                     --ft-dot:rgba(255,255,255,.09);  --ft-chrome:rgba(28,47,143,.90); --ft-rail:rgba(20,29,84,.45); }
+  body[data-theme="carbon"]  { --ft-ground:#141110; --ft-grad:radial-gradient(120% 80% at 50% -10%,#1d1713,#120f0d);       --ft-dot:rgba(255,255,255,.05);  --ft-chrome:rgba(26,22,19,.86);  --ft-rail:rgba(23,19,16,.50); }
+  body[data-theme="graphite"]{ --ft-ground:#141416; --ft-grad:linear-gradient(180deg,rgba(28,47,143,.40),transparent 220px); --ft-dot:rgba(255,255,255,.055); --ft-chrome:rgba(23,58,191,.85); --ft-rail:rgba(23,24,29,.55); }
+
+  body{
+    background-color:var(--ft-ground);
+    background-image:radial-gradient(var(--ft-dot) 1px,transparent 1px),var(--ft-grad);
+    background-size:20px 20px,cover;
+    transition:background-color .4s ease;
+  }
+  .ft-chrome{ background-color:var(--ft-chrome) !important; }
+  .ft-rail  { background-color:var(--ft-rail)   !important; }
+</style>
+</head>
+
+<body data-theme="electric" class="min-h-screen overflow-x-hidden text-xs text-white antialiased selection:bg-[#ccff00] selection:text-[#121212]" style="font-family:'JetBrains Mono',monospace;">
+<script>try{var _t=localStorage.getItem('ft-theme');if(_t)document.body.dataset.theme=_t;}catch(e){}</script>
+
+<!-- 45° hatch overlay -->
+<div class="pointer-events-none fixed inset-0 z-0 opacity-70" style="background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.025) 0,rgba(255,255,255,.025) 1px,transparent 1px,transparent 9px);"></div>
+
+<!-- Fixed inset frame + corner brackets + crosshair -->
+<div class="pointer-events-none fixed inset-3 z-0 border border-white/10 sm:inset-5 lg:inset-7">
+  <div class="absolute left-1/2 top-0 h-full w-px bg-white/5"></div>
+  <div class="absolute left-0 top-1/2 h-px w-full bg-white/5"></div>
+  <div class="absolute left-0 top-0 h-5 w-5 border-l-2 border-t-2 border-[#ccff00]"></div>
+  <div class="absolute right-0 top-0 h-5 w-5 border-r-2 border-t-2 border-[#ccff00]"></div>
+  <div class="absolute bottom-0 left-0 h-5 w-5 border-b-2 border-l-2 border-[#ccff00]"></div>
+  <div class="absolute bottom-0 right-0 h-5 w-5 border-b-2 border-r-2 border-[#ccff00]"></div>
+</div>
+
+<!-- Marquee -->
+<div class="ft-chrome relative z-50 overflow-hidden border-b border-white/10 bg-[#173abf]/90 py-2 backdrop-blur-xl">
+  <div id="marquee" class="flex w-max whitespace-nowrap uppercase tracking-[0.18rem] text-[#ccff00]/80">
+    <span class="pr-16">Calendar synced // 03 focus blocks protected this week // 06h 40m free on thursday // AI scheduler online //</span>
+    <span class="pr-16">Calendar synced // 03 focus blocks protected this week // 06h 40m free on thursday // AI scheduler online //</span>
+  </div>
+</div>
+
+<div class="relative z-10 mx-auto flex min-h-[calc(100vh-2rem)] max-w-[1720px]">
+
+  <!-- ══ SIDEBAR ══ -->
+  <aside class="ft-rail hidden w-64 shrink-0 flex-col border-r border-white/10 bg-[#173abf]/30 px-5 py-6 backdrop-blur-md lg:flex">
+    <div class="mb-8 flex items-center gap-3 px-2">
+      <div class="flex h-10 w-10 items-center justify-center rounded-lg border border-[#ccff00]/60 bg-[#ccff00] text-[#121212] shadow-[0_0_24px_rgba(204,255,0,0.2)]">
+        <span class="text-base font-semibold tracking-tighter">FT</span>
+      </div>
+      <div>
+        <p class="text-sm font-medium tracking-tight text-white">Find time</p>
+        <p class="mt-0.5 text-xs text-white/45">AI product planner</p>
+      </div>
+    </div>
+
+    <nav class="space-y-1" aria-label="Main navigation">
+      <button data-nav="Today" class="nav-item flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-white/55 transition hover:bg-white/10 hover:text-white">
+        <iconify-icon icon="solar:sun-2-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+        <span class="flex-1">Today</span><span>04</span>
+      </button>
+      <button data-nav="Projects" class="nav-item flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-white/55 transition hover:bg-white/10 hover:text-white">
+        <iconify-icon icon="solar:folder-with-files-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+        <span class="flex-1">Projects</span><span>03</span>
+      </button>
+      <button data-nav="Calendar" class="nav-item flex w-full items-center gap-3 rounded-lg bg-white/10 px-3 py-3 text-left text-white ring-1 ring-white/10 transition hover:bg-white/15">
+        <iconify-icon icon="solar:calendar-minimalistic-linear" stroke-width="1.5" class="text-lg text-[#ccff00]"></iconify-icon>
+        <span class="flex-1">Calendar</span>
+        <span id="calCount" class="rounded bg-[#ccff00] px-1.5 py-0.5 text-[#121212]">24</span>
+      </button>
+      <button data-nav="AI sessions" class="nav-item flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-white/55 transition hover:bg-white/10 hover:text-white">
+        <iconify-icon icon="solar:magic-stick-3-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+        <span class="flex-1">AI sessions</span>
+        <span class="h-1.5 w-1.5 rounded-full bg-[#ff4400]"></span>
+      </button>
+    </nav>
+
+    <!-- Mini month -->
+    <div class="mt-7 rounded-xl border border-white/10 bg-[#121212]/70 p-3 shadow-2xl">
+      <div class="mb-3 flex items-center justify-between px-1">
+        <span id="miniTitle" class="uppercase tracking-widest text-white/70">Sep 2026</span>
+        <div class="flex items-center gap-1">
+          <button id="miniPrev" class="flex h-6 w-6 items-center justify-center rounded text-white/45 transition hover:bg-white/10 hover:text-white" aria-label="Previous month">
+            <iconify-icon icon="solar:alt-arrow-left-linear" stroke-width="1.5" class="text-sm"></iconify-icon>
+          </button>
+          <button id="miniNext" class="flex h-6 w-6 items-center justify-center rounded text-white/45 transition hover:bg-white/10 hover:text-white" aria-label="Next month">
+            <iconify-icon icon="solar:alt-arrow-right-linear" stroke-width="1.5" class="text-sm"></iconify-icon>
+          </button>
+        </div>
+      </div>
+      <div class="grid grid-cols-7 gap-y-1 text-center text-[10px] text-white/30">
+        <span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span>
+      </div>
+      <div id="miniGrid" class="mt-1 grid grid-cols-7 gap-y-0.5 text-center"></div>
+    </div>
+
+    <div class="mt-6 border-t border-white/10 pt-5">
+      <div class="mb-3 flex items-center justify-between px-2 text-white/40">
+        <span class="uppercase tracking-widest">Calendars</span>
+        <iconify-icon icon="solar:eye-linear" stroke-width="1.5" class="text-base"></iconify-icon>
+      </div>
+      <div id="calendarList" class="space-y-1"></div>
+    </div>
+
+    <div class="mt-auto rounded-xl border border-white/10 bg-[#121212]/70 p-4 shadow-2xl">
+      <div class="mb-3 flex items-center justify-between">
+        <span class="text-white/45">Focus protected</span>
+        <iconify-icon icon="solar:shield-check-linear" stroke-width="1.5" class="text-lg text-[#ccff00]"></iconify-icon>
+      </div>
+      <div class="mb-2 flex items-end justify-between">
+        <span class="text-2xl font-medium tracking-tight text-white">11h</span>
+        <span class="text-[#ccff00]">+2h 30m</span>
+      </div>
+      <div class="h-1.5 overflow-hidden rounded-full bg-white/10">
+        <div class="h-full w-[72%] rounded-full bg-[#ccff00]"></div>
+      </div>
+      <p class="mt-3 leading-relaxed text-white/40">72% of this week's deep work is booked.</p>
+    </div>
+
+    <button class="mt-4 flex items-center gap-3 rounded-lg px-2 py-2 text-left transition hover:bg-white/10">
+      <div class="flex h-8 w-8 items-center justify-center rounded-full bg-[#c8c8ff] text-xs font-medium text-[#121212]">AM</div>
+      <div class="min-w-0 flex-1">
+        <p class="truncate text-white">Alex Morgan</p>
+        <p class="truncate text-white/40">Pro workspace</p>
+      </div>
+      <iconify-icon icon="solar:menu-dots-linear" stroke-width="1.5" class="text-lg text-white/45"></iconify-icon>
+    </button>
+  </aside>
+
+  <!-- ══ TELEMETRY COLUMN (xl+) ══ -->
+  <aside class="hidden w-20 shrink-0 flex-col justify-between border-r border-white/10 py-8 text-center text-[10px] uppercase tracking-tight text-white/30 xl:flex" aria-hidden="true">
+    <span>DAY.252</span><span>WK.37</span><span>CAP.08H</span><span>FOC.04</span>
+    <span>BRK.03</span><span id="telemetryClock">UTC.14:22</span><span>PRIORITY.A</span>
+    <span>ENERGY.78</span><span>CONF.01</span><span>STATUS.OPEN</span>
+  </aside>
+
+  <!-- ══ MAIN ══ -->
+  <main class="min-w-0 flex-1 pb-28 lg:pb-8">
+
+    <header class="ft-chrome sticky top-0 z-40 flex h-16 items-center justify-between border-b border-white/10 bg-[#2047e6]/80 px-4 backdrop-blur-xl sm:px-6 lg:px-8">
+      <div class="flex items-center gap-3 lg:hidden">
+        <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-[#ccff00] text-[#121212]">
+          <span class="text-sm font-semibold tracking-tighter">FT</span>
+        </div>
+        <span class="text-sm font-medium text-white">Calendar</span>
+      </div>
+      <div class="hidden items-center gap-2 text-white/45 lg:flex">
+        <span>Workspace</span><span>/</span><span class="text-white">Calendar</span>
+        <span class="ml-2 rounded-full border border-white/10 bg-white/5 px-2 py-1 uppercase tracking-widest text-white/40">Sync 2m ago</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="searchButton" class="flex h-9 items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 text-white/50 transition hover:border-white/20 hover:bg-white/10 hover:text-white">
+          <iconify-icon icon="solar:magnifer-linear" stroke-width="1.5" class="text-base"></iconify-icon>
+          <span class="hidden sm:inline">Search</span>
+          <span class="hidden rounded border border-white/10 px-1.5 py-0.5 text-white/30 md:inline">⌘ K</span>
+        </button>
+        <button id="themeButton" class="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white/60 transition hover:bg-white/10 hover:text-white" aria-label="Change background theme" aria-haspopup="menu" aria-expanded="false">
+          <iconify-icon icon="solar:palette-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+        </button>
+        <button id="notificationButton" class="relative flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white/60 transition hover:bg-white/10 hover:text-white" aria-label="Notifications">
+          <iconify-icon icon="solar:bell-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+          <span class="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-[#ff4400]"></span>
+        </button>
+        <button data-open-ai class="hidden h-9 items-center gap-2 rounded-lg bg-[#ccff00] px-4 text-[#121212] shadow-[0_8px_24px_rgba(204,255,0,0.16)] transition hover:-translate-y-0.5 hover:bg-[#d7ff33] sm:flex">
+          <iconify-icon icon="solar:magic-stick-3-linear" stroke-width="1.5" class="text-base"></iconify-icon>
+          <span class="font-medium">Plan with AI</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="p-4 sm:p-6 lg:p-8">
+
+      <!-- ══ TOOLBAR ══ -->
+      <section class="mb-5 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <div class="min-w-0">
+          <div class="mb-2 flex items-center gap-2 text-[#ccff00]">
+            <span class="h-1.5 w-1.5 rounded-full bg-[#ccff00] shadow-[0_0_12px_#ccff00]"></span>
+            <span id="eyebrow" class="uppercase tracking-[0.16rem]">Week 37 · 24 events · 1 conflict</span>
+          </div>
+          <div class="flex flex-wrap items-center gap-3">
+            <button id="titleButton" class="text-left text-2xl font-medium leading-tight tracking-tight text-white transition hover:text-[#ccff00] sm:text-3xl lg:pointer-events-none">
+              <span id="periodTitle">September 2026</span>
+              <iconify-icon icon="solar:alt-arrow-down-linear" stroke-width="1.5" class="align-middle text-lg text-white/40 lg:hidden"></iconify-icon>
+            </button>
+          </div>
+          <p id="periodSub" class="mt-2 max-w-xl text-sm leading-relaxed text-white/55">
+            Sep 7 – Sep 13 is your densest week. Two focus blocks are protected.
+          </p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 p-1 backdrop-blur-md">
+            <button id="navPrev" class="flex h-8 w-8 items-center justify-center rounded-md text-white/60 transition hover:bg-white/10 hover:text-white" aria-label="Previous period">
+              <iconify-icon icon="solar:alt-arrow-left-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+            </button>
+            <button id="navToday" class="h-8 rounded-md px-3 text-white transition hover:bg-white/10">Today</button>
+            <button id="navNext" class="flex h-8 w-8 items-center justify-center rounded-md text-white/60 transition hover:bg-white/10 hover:text-white" aria-label="Next period">
+              <iconify-icon icon="solar:alt-arrow-right-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+            </button>
+          </div>
+
+          <div id="viewSwitch" class="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 p-1 backdrop-blur-md" role="tablist" aria-label="Calendar view">
+            <button data-view="month" role="tab" class="view-tab h-8 rounded-md px-3 transition">Month</button>
+            <button data-view="week"  role="tab" class="view-tab h-8 rounded-md px-3 transition">Week</button>
+            <button data-view="day"   role="tab" class="view-tab h-8 rounded-md px-3 transition">Day</button>
+          </div>
+
+          <button data-open-compose class="hidden h-10 items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 text-white/70 backdrop-blur-md transition hover:bg-white/10 hover:text-white sm:flex">
+            <iconify-icon icon="solar:add-circle-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+            <span>New event</span>
+          </button>
+
+          <button data-open-ai class="flex h-10 items-center gap-2 rounded-lg bg-[#ccff00] px-4 text-[#121212] shadow-[0_8px_24px_rgba(204,255,0,0.16)] transition hover:-translate-y-0.5 hover:bg-[#d7ff33]">
+            <iconify-icon icon="solar:magic-stick-3-linear" stroke-width="1.5" class="text-base"></iconify-icon>
+            <span class="font-medium">Find time</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- ══ CONFLICT BANNER ══ -->
+      <div id="conflictBanner" class="mb-4 hidden items-center gap-3 rounded-xl border border-[#ff4400]/40 bg-[#ff4400]/10 p-3 backdrop-blur-md sm:p-4">
+        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#ff4400] text-[#121212]">
+          <iconify-icon icon="solar:danger-triangle-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+        </span>
+        <div class="min-w-0 flex-1">
+          <p class="text-white">Double-booked Wednesday 11:00</p>
+          <p class="mt-1 text-white/50">Product team sync overlaps Roadmap review with Maya by 30 minutes.</p>
+        </div>
+        <button data-open-ai class="hidden shrink-0 rounded-lg bg-[#ff4400] px-3 py-2 text-[#121212] transition hover:-translate-y-0.5 sm:block">Resolve</button>
+      </div>
+
+      <!-- ══ VIEW SURFACE ══ -->
+      <div id="viewport"></div>
+
+    </div>
+  </main>
+</div>
+
+<!-- ══ MOBILE BOTTOM NAV ══ -->
+<nav class="ft-chrome fixed bottom-0 left-0 right-0 z-50 border-t border-white/10 bg-[#142d99]/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl lg:hidden" aria-label="Mobile navigation">
+  <div class="mx-auto grid max-w-lg grid-cols-5">
+    <button data-nav="Today" class="mobile-nav flex flex-col items-center gap-1 rounded-lg py-2 text-white/45">
+      <iconify-icon icon="solar:sun-2-linear" stroke-width="1.5" class="text-xl"></iconify-icon><span>Today</span>
+    </button>
+    <button data-nav="Projects" class="mobile-nav flex flex-col items-center gap-1 rounded-lg py-2 text-white/45">
+      <iconify-icon icon="solar:folder-with-files-linear" stroke-width="1.5" class="text-xl"></iconify-icon><span>Projects</span>
+    </button>
+    <button data-open-compose class="flex flex-col items-center gap-1 py-1 text-[#121212]" aria-label="New event">
+      <span class="flex h-11 w-11 items-center justify-center rounded-full bg-[#ccff00] shadow-[0_0_24px_rgba(204,255,0,0.25)]">
+        <iconify-icon icon="solar:add-circle-linear" stroke-width="1.5" class="text-xl"></iconify-icon>
+      </span>
+    </button>
+    <button data-nav="Calendar" class="mobile-nav flex flex-col items-center gap-1 rounded-lg py-2 text-[#ccff00]">
+      <iconify-icon icon="solar:calendar-minimalistic-linear" stroke-width="1.5" class="text-xl"></iconify-icon><span>Calendar</span>
+    </button>
+    <button data-open-ai class="mobile-nav flex flex-col items-center gap-1 rounded-lg py-2 text-white/45">
+      <iconify-icon icon="solar:magic-stick-3-linear" stroke-width="1.5" class="text-xl"></iconify-icon><span>Ask AI</span>
+    </button>
+  </div>
+</nav>
+
+<!-- ══ TOAST ══ -->
+<div id="toast" class="pointer-events-none fixed bottom-28 left-1/2 z-[90] flex -translate-x-1/2 translate-y-6 items-center gap-2 rounded-xl border border-white/10 bg-[#121212] px-4 py-3 text-white opacity-0 shadow-2xl transition duration-300 lg:bottom-8" role="status" aria-live="polite">
+  <iconify-icon icon="solar:check-circle-linear" stroke-width="1.5" class="text-lg text-[#ccff00]"></iconify-icon>
+  <span id="toastText" class="whitespace-nowrap">Calendar updated</span>
+</div>
+
+<!-- ══ BACKGROUND THEME MENU ══ -->
+<div id="themeMenu" class="fixed right-3 top-[4.25rem] z-[95] hidden w-72 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-2xl border border-white/10 bg-[#121212] shadow-2xl backdrop-blur-xl sm:right-6 lg:right-8" role="menu" aria-label="Background theme">
+  <div class="flex items-center justify-between border-b border-white/10 px-4 py-3">
+    <span class="uppercase tracking-widest text-white/45">Background</span>
+    <span class="text-[10px] uppercase tracking-widest text-white/30">Interior stays</span>
+  </div>
+  <div id="themeList" class="max-h-[68vh] overflow-y-auto p-2"></div>
+  <div class="border-t border-white/10 px-4 py-2.5 text-white/35">Saved on this device · switch anytime</div>
+</div>
+
+<!-- ══ EVENT POPOVER (desktop) ══ -->
+<div id="eventPopover" class="fixed z-[85] hidden w-[21rem] overflow-hidden rounded-2xl border border-white/10 bg-[#121212] shadow-2xl backdrop-blur-xl" role="dialog" aria-label="Event details"></div>
+
+<!-- ══ EVENT SHEET (mobile) ══ -->
+<div id="eventSheet" class="fixed inset-0 z-[85] hidden items-end justify-center bg-[#07123f]/70 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Event details">
+  <div id="eventSheetBody" class="max-h-[86vh] w-full overflow-y-auto rounded-t-2xl border border-white/10 bg-[#121212] shadow-2xl"></div>
+</div>
+
+<!-- ══ COMPOSE MODAL / SHEET ══ -->
+<div id="composeModal" class="fixed inset-0 z-[86] hidden items-end justify-center bg-[#07123f]/70 backdrop-blur-sm sm:items-center sm:p-5" role="dialog" aria-modal="true" aria-labelledby="composeTitle">
+  <div class="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl border border-white/10 bg-[#121212] p-5 shadow-2xl sm:max-w-lg sm:rounded-2xl">
+    <div class="mx-auto mb-4 h-1 w-10 rounded-full bg-white/20 sm:hidden"></div>
+    <div class="flex items-start justify-between">
+      <div>
+        <p id="composeEyebrow" class="uppercase tracking-widest text-[#ccff00]">New block</p>
+        <h2 id="composeTitle" class="mt-1 text-xl font-medium tracking-tight text-white">Add to your calendar</h2>
+      </div>
+      <button data-close-compose class="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-white/50 transition hover:bg-white/10 hover:text-white" aria-label="Close">
+        <iconify-icon icon="solar:close-circle-linear" stroke-width="1.5" class="text-xl"></iconify-icon>
+      </button>
+    </div>
+
+    <label class="mt-5 block text-white/50">Title
+      <input id="cTitle" type="text" class="mt-2 h-11 w-full rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#ccff00]/60" placeholder="e.g. Deep work · Onboarding spec">
+    </label>
+
+    <div class="mt-4 grid grid-cols-2 gap-3">
+      <label class="block text-white/50">Date
+        <input id="cDate" type="date" class="mt-2 h-11 w-full rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-white outline-none focus:border-[#ccff00]/60">
+      </label>
+      <label class="block text-white/50">Start
+        <input id="cStart" type="time" step="900" class="mt-2 h-11 w-full rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-white outline-none focus:border-[#ccff00]/60">
+      </label>
+    </div>
+
+    <div class="mt-4 grid grid-cols-2 gap-3">
+      <label class="block text-white/50">Duration
+        <select id="cDuration" class="mt-2 h-11 w-full appearance-none rounded-lg border border-white/10 bg-[#1d1d1d] px-3 text-sm text-white outline-none focus:border-[#ccff00]/60">
+          <option value="30">30 min</option><option value="45">45 min</option>
+          <option value="60" selected>60 min</option><option value="90">90 min</option>
+          <option value="120">120 min</option><option value="180">3 hours</option>
+        </select>
+      </label>
+      <label class="block text-white/50">Repeats
+        <select id="cRepeat" class="mt-2 h-11 w-full appearance-none rounded-lg border border-white/10 bg-[#1d1d1d] px-3 text-sm text-white outline-none focus:border-[#ccff00]/60">
+          <option>Does not repeat</option><option>Every weekday</option>
+          <option>Weekly on this day</option><option>Every 2 weeks</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="mt-4">
+      <span class="text-white/50">Category</span>
+      <div id="cCats" class="mt-2 flex flex-wrap gap-2"></div>
+    </div>
+
+    <label class="mt-4 block text-white/50">Project
+      <select id="cProject" class="mt-2 h-11 w-full appearance-none rounded-lg border border-white/10 bg-[#1d1d1d] px-3 text-sm text-white outline-none focus:border-[#ccff00]/60">
+        <option>Mobile launch</option><option>Website v2</option>
+        <option>User research</option><option>No project</option>
+      </select>
+    </label>
+
+    <button id="cAiToggle" role="switch" aria-checked="true" class="mt-4 flex w-full items-center gap-3 rounded-xl border border-[#ccff00]/40 bg-[#ccff00]/10 p-3 text-left transition hover:bg-[#ccff00]/15">
+      <iconify-icon icon="solar:magic-stick-3-linear" stroke-width="1.5" class="text-lg text-[#ccff00]"></iconify-icon>
+      <span class="min-w-0 flex-1">
+        <span class="block text-white">Let AI place it</span>
+        <span id="cAiHint" class="mt-1 block text-white/45">Find the best slot around my energy and deadlines.</span>
+      </span>
+      <span id="cAiTrack" class="relative h-5 w-9 shrink-0 rounded-full bg-[#ccff00] transition">
+        <span id="cAiKnob" class="absolute top-0.5 h-4 w-4 rounded-full bg-[#121212] transition-all" style="left:1.125rem"></span>
+      </span>
+    </button>
+
+    <label class="mt-4 block text-white/50">Notes
+      <textarea id="cNotes" rows="3" class="mt-2 w-full resize-none rounded-lg border border-white/10 bg-white/5 p-3 text-sm leading-relaxed text-white outline-none placeholder:text-white/25 focus:border-[#ccff00]/60" placeholder="Agenda, links, what done looks like…"></textarea>
+    </label>
+
+    <div class="mt-5 flex gap-2">
+      <button id="cSave" class="flex h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-[#ccff00] text-[#121212] transition hover:-translate-y-0.5 hover:bg-[#d7ff33]">
+        <iconify-icon icon="solar:check-circle-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+        <span class="font-medium">Save event</span>
+      </button>
+      <button id="cDelete" class="hidden h-11 items-center justify-center gap-2 rounded-lg border border-[#ff4400]/40 px-4 text-[#ff4400] transition hover:bg-[#ff4400]/10">
+        <iconify-icon icon="solar:trash-bin-trash-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ AI PANEL — drawer on desktop, sheet on mobile ══ -->
+<div id="aiPanel" class="fixed inset-0 z-[87] hidden items-end justify-center bg-[#07123f]/70 backdrop-blur-sm lg:items-stretch lg:justify-end" role="dialog" aria-modal="true" aria-label="Find time with AI">
+  <div class="relative max-h-[88vh] w-full overflow-y-auto rounded-t-2xl border border-white/10 bg-[#121212] p-5 shadow-2xl lg:h-full lg:max-h-none lg:w-[27rem] lg:rounded-none lg:rounded-l-2xl lg:p-6">
+    <div class="pointer-events-none absolute inset-0 overflow-hidden rounded-t-2xl lg:rounded-l-2xl lg:rounded-tr-none">
+      <div class="absolute -right-12 -top-12 h-36 w-36 rounded-full border border-[#ccff00]/20"></div>
+      <div class="absolute -right-6 -top-6 h-24 w-24 rounded-full border border-[#ccff00]/30"></div>
+    </div>
+    <div class="mx-auto mb-4 h-1 w-10 rounded-full bg-white/20 lg:hidden"></div>
+
+    <div class="relative flex items-start justify-between">
+      <div>
+        <div class="mb-2 flex items-center gap-2 text-[#ccff00]">
+          <iconify-icon icon="solar:magic-stick-3-linear" stroke-width="1.5" class="text-xl"></iconify-icon>
+          <span class="uppercase tracking-widest">Find time</span>
+        </div>
+        <h2 class="text-xl font-medium tracking-tight text-white">What needs a slot?</h2>
+      </div>
+      <button data-close-ai class="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-white/50 transition hover:bg-white/10 hover:text-white" aria-label="Close">
+        <iconify-icon icon="solar:close-circle-linear" stroke-width="1.5" class="text-xl"></iconify-icon>
+      </button>
+    </div>
+
+    <p class="relative mt-3 leading-relaxed text-white/45">
+      Describe the outcome. Find time reshuffles only what is flexible and never touches a protected block.
+    </p>
+
+    <div class="relative mt-5 rounded-xl border border-white/10 bg-white/[0.06] p-3 focus-within:border-[#ccff00]/50">
+      <textarea id="aiPrompt" rows="3" class="w-full resize-none bg-transparent text-sm leading-relaxed text-white outline-none placeholder:text-white/25" placeholder="Example: make room for 2h deep work on Thursday"></textarea>
+      <div class="mt-3 flex items-center justify-between">
+        <button id="aiVoice" class="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-white/45 transition hover:bg-white/10 hover:text-white" aria-label="Voice input">
+          <iconify-icon icon="solar:microphone-3-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+        </button>
+        <button id="aiRun" class="flex h-9 items-center gap-2 rounded-lg bg-[#ccff00] px-4 text-[#121212] transition hover:-translate-y-0.5 hover:bg-[#d7ff33]">
+          <span class="font-medium">Find time</span>
+          <iconify-icon icon="solar:arrow-right-up-linear" stroke-width="1.5" class="text-base"></iconify-icon>
+        </button>
+      </div>
+    </div>
+
+    <div class="relative mt-4 flex flex-wrap gap-2">
+      <button class="ai-chip rounded-full border border-white/10 px-3 py-2 text-white/45 transition hover:border-white/25 hover:text-white">2h deep work Thursday</button>
+      <button class="ai-chip rounded-full border border-white/10 px-3 py-2 text-white/45 transition hover:border-white/25 hover:text-white">Protect my mornings</button>
+      <button class="ai-chip rounded-full border border-white/10 px-3 py-2 text-white/45 transition hover:border-white/25 hover:text-white">Fix Wednesday's clash</button>
+    </div>
+
+    <div id="aiResult" class="relative mt-5"></div>
+  </div>
+</div>
+
+<!-- ══ MOBILE MONTH PICKER SHEET ══ -->
+<div id="pickerSheet" class="fixed inset-0 z-[86] hidden items-end justify-center bg-[#07123f]/70 backdrop-blur-sm lg:hidden" role="dialog" aria-modal="true" aria-label="Jump to a date">
+  <div class="w-full rounded-t-2xl border border-white/10 bg-[#121212] p-5 shadow-2xl">
+    <div class="mx-auto mb-4 h-1 w-10 rounded-full bg-white/20"></div>
+    <div class="flex items-center justify-between">
+      <button id="pickPrev" class="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-white/60 transition hover:bg-white/10" aria-label="Previous month">
+        <iconify-icon icon="solar:alt-arrow-left-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+      </button>
+      <span id="pickTitle" class="text-sm font-medium tracking-tight text-white">September 2026</span>
+      <button id="pickNext" class="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-white/60 transition hover:bg-white/10" aria-label="Next month">
+        <iconify-icon icon="solar:alt-arrow-right-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+      </button>
+    </div>
+    <div class="mt-5 grid grid-cols-7 text-center text-[10px] uppercase tracking-widest text-white/30">
+      <span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span>
+    </div>
+    <div id="pickGrid" class="mt-2 grid grid-cols-7 gap-1"></div>
+    <div class="mt-5 flex gap-2">
+      <button id="pickToday" class="h-11 flex-1 rounded-lg bg-[#ccff00] font-medium text-[#121212] transition hover:bg-[#d7ff33]">Jump to today</button>
+      <button data-close-picker class="h-11 rounded-lg border border-white/10 px-4 text-white/60 transition hover:bg-white/10 hover:text-white">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════
+   FIND TIME — CALENDAR
+   Data → state → render. Three views, two layouts each.
+   ══════════════════════════════════════════════════════════ */
+
+/* ---------- tokens ---------- */
+const CATS = {
+  deep:     { label: 'Deep work', color: '#ccff00' },
+  design:   { label: 'Design',    color: '#c8c8ff' },
+  research: { label: 'Research',  color: '#ffb39a' },
+  sync:     { label: 'Meetings',  color: '#ffd600' },
+  admin:    { label: 'Admin',     color: '#ff7040' }
+};
+const DAY_START = 7, DAY_END = 21, ROW = 56;      // 07:00 → 21:00, 56px/hour
+const TODAY = new Date(2026, 8, 9);                // Wed 9 Sep 2026
+const NOW_MIN = 14 * 60 + 22;                      // 14:22 — matches UTC.14:22 telemetry
+const WD = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const WD_LONG = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const MO = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+/* ---------- date helpers ---------- */
+const pad = n => String(n).padStart(2, '0');
+const iso = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const fromIso = s => { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); };
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate()+n); return x; };
+const addMonths = (d, n) => { const x = new Date(d.getFullYear(), d.getMonth()+n, 1); return x; };
+const sameDay = (a, b) => iso(a) === iso(b);
+const startOfWeek = d => addDays(d, -((d.getDay()+6) % 7));          // Monday-start
+const toMin = t => { const [h,m] = t.split(':').map(Number); return h*60+m; };
+const fromMin = m => `${pad(Math.floor(m/60))}:${pad(m%60)}`;
+const durLabel = m => m >= 60 ? (m%60 ? `${Math.floor(m/60)}h ${m%60}m` : `${Math.floor(m/60)}h`) : `${m}m`;
+const rgba = (hex, a) => { const n = parseInt(hex.slice(1),16); return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`; };
+function isoWeek(d){
+  const t = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  t.setDate(t.getDate() + 3 - ((t.getDay()+6)%7));
+  const first = new Date(t.getFullYear(), 0, 4);
+  return 1 + Math.round(((t - first)/86400000 - 3 + ((first.getDay()+6)%7)) / 7);
+}
+const esc = s => String(s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+
+/* ---------- seed data ---------- */
+let uid = 100;
+const E = (date, start, end, title, cat, extra = {}) =>
+  Object.assign({ id: ++uid, date, start, end, title, cat, project: '', kind: 'event', notes: '' }, extra);
+
+let EVENTS = [
+  /* ── previous weeks ── */
+  E('2026-08-31','10:00','11:00','Q3 close · quarter kickoff','sync',{project:'Mobile launch'}),
+  E('2026-09-01','09:30','10:30','Sprint planning','sync',{project:'Mobile launch'}),
+  E('2026-09-01','14:00','15:30','Persona workshop','research',{project:'User research'}),
+  E('2026-09-02','11:00','11:30','Product team sync','sync'),
+  E('2026-09-02','13:00','14:30','Wireframe pass · settings','design',{project:'Website v2'}),
+  E('2026-09-03','09:00','11:00','Deep work · pricing model','deep',{kind:'focus',project:'Website v2'}),
+  E('2026-09-03','16:00','16:30','1:1 with Maya','sync'),
+  E('2026-09-04','10:00','11:00','Design review','design',{project:'Website v2'}),
+  E('2026-09-04','14:00','15:00','Weekly review & plan','admin'),
+
+  /* ── current week: Sep 7 – 13 ── */
+  E('2026-09-07','09:00','10:30','Define mobile onboarding flow','deep',{kind:'focus',project:'Mobile launch',notes:'Map the first-session journey and the activation moment.'}),
+  E('2026-09-07','11:00','11:30','Standup','sync'),
+  E('2026-09-07','13:00','14:00','Prototype empty states','design',{project:'Website v2'}),
+  E('2026-09-07','15:00','16:00','Interview · Priya, ops lead','research',{project:'User research'}),
+
+  E('2026-09-08','08:30','09:00','Inbox + triage','admin'),
+  E('2026-09-08','09:30','11:30','Deep work · activation metrics','deep',{kind:'focus',project:'Mobile launch'}),
+  E('2026-09-08','12:00','12:45','Lunch and reset','admin',{kind:'break'}),
+  E('2026-09-08','14:00','15:00','Prototype review','design',{project:'Mobile launch'}),
+  E('2026-09-08','16:00','16:30','Design critique','design',{project:'Website v2'}),
+  E('2026-09-08','17:00','17:30','Write weekly notes','admin'),
+
+  E('2026-09-09','09:00','10:30','Define mobile onboarding flow','deep',{kind:'focus',project:'Mobile launch',notes:'Second pass — turn the map into a clickable flow.'}),
+  E('2026-09-09','11:00','11:30','Product team sync','sync',{conflict:true,notes:'Weekly team alignment. 30 min, agenda in Notion.'}),
+  E('2026-09-09','11:00','12:00','Roadmap review with Maya','sync',{conflict:true,notes:'Q4 scope. Maya can also do Thursday 14:00.'}),
+  E('2026-09-09','12:00','12:45','Lunch and reset','admin',{kind:'break'}),
+  E('2026-09-09','13:00','13:50','Review research patterns','research',{project:'User research'}),
+  E('2026-09-09','15:00','16:00','Prototype review','design',{project:'Mobile launch'}),
+
+  E('2026-09-10','09:30','10:00','Standup','sync'),
+  E('2026-09-10','10:00','11:00','Stakeholder review','sync',{flexible:true}),
+  E('2026-09-10','13:00','14:00','Draft launch checklist','admin',{flexible:true}),
+  E('2026-09-10','15:30','16:30','Usability test · session 2','research',{project:'User research'}),
+
+  E('2026-09-11','09:00','09:30','Standup','sync'),
+  E('2026-09-11','10:00','11:30','Design system audit','design',{project:'Website v2'}),
+  E('2026-09-11','11:45','13:15','Focus window · suggested','deep',{kind:'ai'}),
+  E('2026-09-11','14:00','15:00','Weekly review & plan','admin'),
+
+  E('2026-09-12','10:00','11:30','Write the launch case study','admin'),
+
+  /* ── next weeks ── */
+  E('2026-09-14','09:00','10:30','Onboarding spec review','deep',{kind:'focus',project:'Mobile launch'}),
+  E('2026-09-14','11:00','11:30','Standup','sync'),
+  E('2026-09-15','10:00','11:00','Beta launch go / no-go','sync',{project:'Mobile launch'}),
+  E('2026-09-15','14:00','15:00','Usability test · session 3','research',{project:'User research'}),
+  E('2026-09-16','09:00','11:00','Deep work · activation metrics','deep',{kind:'focus'}),
+  E('2026-09-16','11:00','11:30','Product team sync','sync'),
+  E('2026-09-16','15:00','16:00','Prototype review','design'),
+  E('2026-09-17','13:00','14:00','Press kit copy','admin'),
+  E('2026-09-18','10:00','10:45','Sprint retro','sync'),
+  E('2026-09-18','12:00','13:00','Team lunch','admin',{kind:'break'}),
+  E('2026-09-21','09:00','11:00','Mobile beta ships','deep',{kind:'focus',project:'Mobile launch'}),
+  E('2026-09-23','11:00','11:30','Product team sync','sync'),
+  E('2026-09-24','10:00','10:30','Investor update','admin'),
+  E('2026-09-25','14:00','15:00','Weekly review & plan','admin'),
+  E('2026-09-28','09:30','10:30','Sprint planning','sync'),
+  E('2026-09-29','11:00','12:30','Roadmap workshop','sync',{project:'Mobile launch'}),
+  E('2026-09-30','11:00','11:30','Product team sync','sync'),
+  E('2026-10-01','09:00','10:00','Q4 kickoff','sync')
+];
+
+const byDate = d => EVENTS.filter(e => e.date === (typeof d === 'string' ? d : iso(d)))
+                          .sort((a,b) => toMin(a.start) - toMin(b.start));
+
+/* ---------- state ---------- */
+const state = {
+  view: window.innerWidth < 1024 ? 'week' : 'month',   // mobile defaults to the week strip
+  cursor: new Date(TODAY),
+  selected: new Date(TODAY),
+  loading: false,
+  composeId: null
+};
+
+/* ══════════════════ shared chrome ══════════════════ */
+const marquee = document.getElementById('marquee');
+let marqueeX = 0;
+(function animateMarquee(){
+  marqueeX -= 0.35;
+  if (Math.abs(marqueeX) >= marquee.scrollWidth / 2) marqueeX = 0;
+  marquee.style.transform = `translateX(${marqueeX}px)`;
+  requestAnimationFrame(animateMarquee);
+})();
+
+const toast = document.getElementById('toast');
+const toastText = document.getElementById('toastText');
+let toastTimer;
+function showToast(msg){
+  toastText.textContent = msg;
+  toast.classList.remove('opacity-0','translate-y-6');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.add('opacity-0','translate-y-6'), 2400);
+}
+
+/* ══════════════════ render: month ══════════════════ */
+function monthCells(cursor){
+  const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+  const last  = new Date(cursor.getFullYear(), cursor.getMonth()+1, 0);
+  const start = startOfWeek(first);
+  const end   = addDays(startOfWeek(last), 6);
+  const out = [];
+  for (let d = new Date(start); d <= end; d = addDays(d, 1)) out.push(new Date(d));
+  return out;
+}
+
+function chipHTML(ev){
+  const c = CATS[ev.cat];
+  if (ev.kind === 'ai')
+    return `<button data-ev="${ev.id}" class="evt flex w-full items-center gap-1.5 rounded-md border border-dashed border-[#ccff00]/50 bg-[#ccff00]/10 px-1.5 py-1 text-left text-[#ccff00] transition hover:bg-[#ccff00]/20">
+      <iconify-icon icon="solar:magic-stick-3-linear" stroke-width="1.5" class="shrink-0 text-[11px]"></iconify-icon>
+      <span class="min-w-0 flex-1 truncate">${esc(ev.title)}</span>
+      <span class="hidden shrink-0 text-[10px] text-[#ccff00]/60 2xl:inline">${ev.start}</span></button>`;
+  if (ev.kind === 'break')
+    return `<button data-ev="${ev.id}" class="evt flex w-full items-center gap-1.5 rounded-md border border-dashed border-white/15 px-1.5 py-1 text-left text-white/35 transition hover:bg-white/5">
+      <iconify-icon icon="solar:cup-hot-linear" stroke-width="1.5" class="shrink-0 text-[11px]"></iconify-icon>
+      <span class="min-w-0 flex-1 truncate">${esc(ev.title)}</span></button>`;
+  const clash = ev.conflict ? ' ring-1 ring-[#ff4400]/70' : '';
+  return `<button data-ev="${ev.id}" class="evt flex w-full items-center gap-1.5 rounded-md bg-white/[0.06] px-1.5 py-1 text-left transition hover:bg-white/[0.12]${clash}">
+    <span class="h-1.5 w-1.5 shrink-0 rounded-full" style="background:${c.color}"></span>
+    <span class="min-w-0 flex-1 truncate text-white/85">${esc(ev.title)}</span>
+    ${ev.kind === 'focus' ? '<iconify-icon icon="solar:shield-check-linear" stroke-width="1.5" class="shrink-0 text-[11px] text-[#ccff00]"></iconify-icon>' : ''}
+    <span class="hidden shrink-0 text-[10px] text-white/35 2xl:inline">${ev.start}</span></button>`;
+}
+
+function renderMonth(){
+  const cells = monthCells(state.cursor);
+  const mo = state.cursor.getMonth();
+  const weeks = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i+7));
+
+  /* ── desktop ── */
+  let head = `<div class="grid gap-px bg-white/10" style="grid-template-columns:2.25rem repeat(7,minmax(0,1fr))">
+      <div class="bg-[#0e0e0e] py-2.5 text-center text-[10px] uppercase tracking-widest text-white/25">Wk</div>
+      ${WD.map(d => `<div class="bg-[#0e0e0e] py-2.5 text-center uppercase tracking-[0.16rem] text-white/40">${d}</div>`).join('')}
+    </div>`;
+
+  const rows = weeks.map(week => {
+    const wk = `<div class="flex items-start justify-center bg-[#0e0e0e] pt-3 text-[10px] tracking-tight text-white/20">${isoWeek(week[0])}</div>`;
+    const days = week.map(d => {
+      const list = byDate(d);
+      const isToday = sameDay(d, TODAY);
+      const other = d.getMonth() !== mo;
+      const shown = list.slice(0, 3), rest = list.length - shown.length;
+      const num = isToday
+        ? `<span class="flex h-6 min-w-[1.5rem] items-center justify-center rounded-md bg-[#ccff00] px-1 font-medium text-[#121212] shadow-[0_0_16px_rgba(204,255,0,.55)]">${d.getDate()}</span>`
+        : `<span class="flex h-6 min-w-[1.5rem] items-center justify-center px-1 ${other ? 'text-white/20' : 'text-white/55'}">${d.getDate()}</span>`;
+      return `<div data-day="${iso(d)}" class="daytile group relative flex min-h-[8.75rem] cursor-pointer flex-col gap-1 p-2 transition ${other ? 'bg-[#0d0d0d]' : 'bg-[#121212]'} hover:-translate-y-px hover:bg-[#1a1a1a]">
+        <div class="mb-0.5 flex items-center justify-between">
+          ${num}
+          <button data-add="${iso(d)}" class="hidden h-5 w-5 items-center justify-center rounded text-white/35 transition hover:bg-white/10 hover:text-[#ccff00] group-hover:flex" aria-label="Add event on ${iso(d)}">
+            <iconify-icon icon="solar:add-circle-linear" stroke-width="1.5" class="text-sm"></iconify-icon>
+          </button>
+        </div>
+        ${shown.map(chipHTML).join('')}
+        ${rest > 0 ? `<button data-more="${iso(d)}" class="mt-auto w-full rounded px-1.5 py-1 text-left text-white/40 transition hover:bg-white/5 hover:text-white">+${rest} more</button>` : ''}
+      </div>`;
+    }).join('');
+    return wk + days;
+  }).join('');
+
+  const desktop = `<div class="hidden overflow-hidden rounded-2xl border border-white/10 shadow-2xl lg:block">
+    ${head}
+    <div class="grid gap-px bg-white/10" style="grid-template-columns:2.25rem repeat(7,minmax(0,1fr))">${rows}</div>
+  </div>`;
+
+  /* ── mobile: dot grid + agenda ── */
+  const mHead = WD.map(d => `<div class="bg-[#0e0e0e] py-2 text-center text-[10px] uppercase tracking-widest text-white/40">${d[0]}</div>`).join('');
+  const mCells = cells.map(d => {
+    const list = byDate(d);
+    const isToday = sameDay(d, TODAY), sel = sameDay(d, state.selected), other = d.getMonth() !== mo;
+    const dots = list.slice(0,3).map(e => `<span class="h-1 w-1 rounded-full" style="background:${CATS[e.cat].color}"></span>`).join('');
+    return `<button data-pick="${iso(d)}" class="flex min-h-[3.5rem] flex-col items-center justify-center gap-1.5 transition ${other ? 'bg-[#0d0d0d]' : 'bg-[#121212]'} ${sel ? 'ring-1 ring-inset ring-[#ccff00]' : ''} active:bg-[#1a1a1a]">
+      <span class="${isToday ? 'flex h-6 w-6 items-center justify-center rounded-md bg-[#ccff00] font-medium text-[#121212] shadow-[0_0_14px_rgba(204,255,0,.5)]' : other ? 'text-white/20' : 'text-white/65'}">${d.getDate()}</span>
+      <span class="flex h-1 items-center gap-0.5">${dots}</span>
+    </button>`;
+  }).join('');
+
+  const mobile = `<div class="lg:hidden">
+    <div class="overflow-hidden rounded-2xl border border-white/10 shadow-2xl">
+      <div class="grid grid-cols-7 gap-px bg-white/10">${mHead}</div>
+      <div class="grid grid-cols-7 gap-px bg-white/10">${mCells}</div>
+    </div>
+    ${agendaHTML(state.selected, 'mt-4')}
+  </div>`;
+
+  return desktop + mobile;
+}
+
+/* ══════════════════ overlap layout ══════════════════ */
+function laidOut(list){
+  const items = list.filter(e => e.kind !== 'ai' || true).map(e => ({ ev: e, s: toMin(e.start), t: toMin(e.end) }))
+                    .sort((a,b) => a.s - b.s || b.t - a.t);
+  let cluster = [], end = -1;
+  const out = [];
+  const flush = () => {
+    if (!cluster.length) return;
+    const cols = [];
+    cluster.forEach(it => {
+      let c = cols.findIndex(col => col <= it.s);
+      if (c === -1) { c = cols.length; cols.push(0); }
+      cols[c] = it.t; it.col = c;
+    });
+    cluster.forEach(it => { it.cols = cols.length; out.push(it); });
+    cluster = [];
+  };
+  items.forEach(it => {
+    if (it.s >= end && cluster.length) flush();
+    cluster.push(it); end = Math.max(end, it.t);
+  });
+  flush();
+  return out;
+}
+
+function blockHTML(it, opts = {}){
+  const ev = it.ev, c = CATS[ev.cat];
+  const top = (it.s - DAY_START*60) / 60 * ROW;
+  const h = Math.max(22, (it.t - it.s) / 60 * ROW - 2);
+  const w = 100 / it.cols, left = it.col * w;
+  const style = `top:${top}px;height:${h}px;left:calc(${left}% + 2px);width:calc(${w}% - 4px);`;
+  const tight = h < 46;
+
+  if (ev.kind === 'ai')
+    return `<button data-ev="${ev.id}" class="evt absolute overflow-hidden rounded-lg border border-dashed border-[#ccff00]/60 bg-[#ccff00]/10 p-2 text-left text-[#ccff00] transition hover:bg-[#ccff00]/20" style="${style}">
+      <span class="flex items-center gap-1.5"><iconify-icon icon="solar:magic-stick-3-linear" stroke-width="1.5" class="text-sm"></iconify-icon><span class="truncate font-medium">${esc(ev.title)}</span></span>
+      ${tight ? '' : `<span class="mt-1 block text-[#ccff00]/70">${ev.start}–${ev.end} · tap to accept</span>`}</button>`;
+
+  if (ev.kind === 'break')
+    return `<button data-ev="${ev.id}" class="evt absolute overflow-hidden rounded-lg border border-dashed border-white/15 bg-white/[0.03] p-2 text-left text-white/40 transition hover:bg-white/[0.07]" style="${style}">
+      <span class="flex items-center gap-1.5"><iconify-icon icon="solar:cup-hot-linear" stroke-width="1.5" class="text-sm"></iconify-icon><span class="truncate">${esc(ev.title)}</span></span></button>`;
+
+  const ring = ev.conflict ? 'ring-1 ring-[#ff4400]' : ev.kind === 'focus' ? 'ring-1 ring-[#ccff00]/40' : '';
+  return `<button data-ev="${ev.id}" class="evt absolute overflow-hidden rounded-lg border border-white/10 p-2 text-left transition hover:-translate-y-px hover:border-white/25 ${ring}"
+    style="${style}background:${rgba(c.color,.16)};border-left:2px solid ${c.color}">
+    <span class="flex items-start gap-1">
+      <span class="min-w-0 flex-1 truncate font-medium text-white">${esc(ev.title)}</span>
+      ${ev.kind === 'focus' ? '<iconify-icon icon="solar:shield-check-linear" stroke-width="1.5" class="shrink-0 text-sm text-[#ccff00]"></iconify-icon>' : ''}
+      ${ev.conflict ? '<iconify-icon icon="solar:danger-triangle-linear" stroke-width="1.5" class="shrink-0 text-sm text-[#ff4400]"></iconify-icon>' : ''}
+    </span>
+    ${tight ? '' : `<span class="mt-1 block truncate text-white/45">${ev.start}–${ev.end}${ev.project ? ' · ' + esc(ev.project) : ''}</span>`}
+  </button>`;
+}
+
+const GRID_BG = `background-image:repeating-linear-gradient(to bottom,rgba(255,255,255,.09) 0 1px,transparent 1px ${ROW}px),repeating-linear-gradient(to bottom,transparent 0 ${ROW/2}px,rgba(255,255,255,.035) ${ROW/2}px ${ROW/2+1}px,transparent ${ROW/2+1}px ${ROW}px)`;
+
+function gutterHTML(){
+  let h = '';
+  for (let hr = DAY_START; hr < DAY_END; hr++)
+    h += `<div class="relative text-right text-white/25" style="height:${ROW}px"><span class="absolute right-2 -top-1.5">${pad(hr)}:00</span></div>`;
+  return h;
+}
+
+/* ══════════════════ render: week ══════════════════ */
+function renderWeek(){
+  const start = startOfWeek(state.cursor);
+  const days = Array.from({length:7}, (_,i) => addDays(start, i));
+  const bodyH = (DAY_END - DAY_START) * ROW;
+
+  const header = days.map(d => {
+    const isToday = sameDay(d, TODAY);
+    return `<button data-pick="${iso(d)}" class="flex flex-col items-center gap-1 bg-[#0e0e0e] py-3 transition hover:bg-[#161616]">
+      <span class="uppercase tracking-[0.16rem] ${isToday ? 'text-[#ccff00]' : 'text-white/40'}">${WD[(d.getDay()+6)%7]}</span>
+      <span class="${isToday ? 'flex h-7 min-w-[1.75rem] items-center justify-center rounded-md bg-[#ccff00] px-1 text-sm font-medium text-[#121212] shadow-[0_0_16px_rgba(204,255,0,.55)]' : 'text-sm text-white/70'}">${d.getDate()}</span>
+    </button>`;
+  }).join('');
+
+  const allDay = days.map(d => {
+    const badge = iso(d) === '2026-09-07'
+      ? `<span class="block truncate rounded bg-[#c8c8ff]/20 px-1.5 py-1 text-[#c8c8ff]">Sprint 14 · week 1 of 2</span>` : '';
+    const ship = iso(d) === '2026-09-11'
+      ? `<span class="block truncate rounded bg-[#ff7040]/20 px-1.5 py-1 text-[#ffb39a]">Beta cut-off</span>` : '';
+    return `<div class="min-h-[2.25rem] space-y-1 bg-[#121212] p-1">${badge}${ship}</div>`;
+  }).join('');
+
+  const cols = days.map(d => {
+    const laid = laidOut(byDate(d));
+    const nowLine = sameDay(d, TODAY)
+      ? `<div class="pointer-events-none absolute left-0 right-0 z-20" style="top:${(NOW_MIN - DAY_START*60)/60*ROW}px">
+           <div class="relative h-px bg-[#ff4400]"><span class="absolute -left-1 -top-[3px] h-[7px] w-[7px] rounded-full bg-[#ff4400] shadow-[0_0_10px_#ff4400]"></span></div>
+         </div>` : '';
+    return `<div class="wk-col relative bg-[#121212]" data-col="${iso(d)}" style="height:${bodyH}px;${GRID_BG}">
+      ${laid.map(it => blockHTML(it)).join('')}${nowLine}
+    </div>`;
+  }).join('');
+
+  const desktop = `<div class="hidden overflow-hidden rounded-2xl border border-white/10 shadow-2xl lg:block">
+    <div class="grid gap-px bg-white/10" style="grid-template-columns:4rem repeat(7,minmax(0,1fr))">
+      <div class="flex items-end justify-end bg-[#0e0e0e] p-2 text-[10px] uppercase tracking-widest text-white/25">W${isoWeek(start)}</div>
+      ${header}
+    </div>
+    <div class="grid gap-px bg-white/10" style="grid-template-columns:4rem repeat(7,minmax(0,1fr))">
+      <div class="flex items-center justify-end bg-[#0e0e0e] px-2 text-[10px] uppercase tracking-widest text-white/25">All day</div>
+      ${allDay}
+    </div>
+    <div class="js-scroll relative max-h-[58vh] overflow-y-auto">
+      <div class="grid gap-px bg-white/10" style="grid-template-columns:4rem repeat(7,minmax(0,1fr))">
+        <div class="bg-[#0e0e0e] pt-2" style="height:${bodyH}px">${gutterHTML()}</div>
+        ${cols}
+      </div>
+    </div>
+    <div class="flex items-center justify-between border-t border-white/10 bg-[#0e0e0e] px-4 py-2.5 text-white/35">
+      <span class="flex items-center gap-2"><iconify-icon icon="solar:cursor-linear" stroke-width="1.5" class="text-sm text-[#ccff00]"></iconify-icon>Drag any empty slot to block time</span>
+      <span class="hidden sm:inline">Snaps to 15 min · release to name it</span>
+    </div>
+  </div>`;
+
+  /* ── mobile: scrollable day-pill strip + agenda ── */
+  const strip = days.map(d => {
+    const isToday = sameDay(d, TODAY), sel = sameDay(d, state.selected);
+    const n = byDate(d).length;
+    return `<button data-pick="${iso(d)}" class="flex min-w-[3.6rem] flex-col items-center gap-1 rounded-xl border px-2 py-2.5 transition ${sel ? 'border-[#ccff00] bg-[#ccff00] text-[#121212] shadow-[0_0_16px_rgba(204,255,0,.35)]' : 'border-white/10 bg-white/5 text-white/60'}">
+      <span class="uppercase tracking-widest ${sel ? 'text-[#121212]/60' : isToday ? 'text-[#ccff00]' : 'text-white/40'}">${WD[(d.getDay()+6)%7]}</span>
+      <span class="text-sm font-medium ${sel ? '' : 'text-white'}">${d.getDate()}</span>
+      <span class="flex h-1 items-center gap-0.5">${byDate(d).slice(0,3).map(e => `<span class="h-1 w-1 rounded-full" style="background:${sel ? '#121212' : CATS[e.cat].color}"></span>`).join('')}</span>
+      <span class="${sel ? 'text-[#121212]/55' : 'text-white/30'} text-[10px]">${n ? n + (n>1?' evts':' evt') : '—'}</span>
+    </button>`;
+  }).join('');
+
+  const mobile = `<div class="lg:hidden">
+    <div class="rounded-2xl border border-white/10 bg-[#121212] p-3 shadow-2xl">
+      <div class="mb-2 flex items-center justify-between px-1 text-white/35">
+        <span class="uppercase tracking-widest">Week ${isoWeek(start)}</span>
+        <span>${MO[start.getMonth()].slice(0,3)} ${start.getDate()} – ${addDays(start,6).getDate()}</span>
+      </div>
+      <div class="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">${strip}</div>
+    </div>
+    ${agendaHTML(state.selected, 'mt-4')}
+  </div>`;
+
+  return desktop + mobile;
+}
+
+/* ══════════════════ agenda (light card) ══════════════════ */
+function energyBand(){
+  return `<div class="mb-4 overflow-hidden rounded-2xl border border-white/10 bg-[#121212] p-4 shadow-2xl sm:p-5">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-2 text-white/45">
+        <iconify-icon icon="solar:bolt-linear" stroke-width="1.5" class="text-lg text-[#ff7040]"></iconify-icon>
+        <span class="uppercase tracking-widest">Energy forecast</span>
+      </div>
+      <span class="text-white/35">Learned from 6 weeks of your completions</span>
+    </div>
+    <div class="relative mt-4 h-9 overflow-hidden rounded-lg border border-white/10"
+         style="background:linear-gradient(90deg,${rgba('#ccff00',.55)} 0%,${rgba('#ccff00',.75)} 18%,${rgba('#ffd600',.5)} 38%,${rgba('#ff7040',.35)} 52%,${rgba('#ffd600',.4)} 70%,${rgba('#c8c8ff',.35)} 88%,${rgba('#c8c8ff',.2)} 100%)">
+      <div class="absolute inset-y-0 z-10 w-px bg-[#ff4400]" style="left:${(NOW_MIN - DAY_START*60)/((DAY_END-DAY_START)*60)*100}%">
+        <span class="absolute -left-[3px] top-0 h-[7px] w-[7px] rounded-full bg-[#ff4400] shadow-[0_0_10px_#ff4400]"></span>
+      </div>
+    </div>
+    <div class="mt-2 flex justify-between text-[10px] uppercase tracking-widest text-white/35">
+      <span>07:00 peak</span><span>12:30 dip</span><span>15:00 second wind</span><span>21:00</span>
+    </div>
+  </div>`;
+}
+
+function agendaRow(left, body){
+  return `<div class="grid grid-cols-[3.25rem_minmax(0,1fr)] sm:grid-cols-[4.5rem_minmax(0,1fr)]">
+    <div class="border-r border-[#121212]/10 px-3 py-5 text-right text-[#121212]/60 sm:px-4">${left}</div>
+    <div class="p-3 sm:p-4">${body}</div></div>`;
+}
+
+function agendaHTML(date, cls = ''){
+  const list = byDate(date);
+  const isToday = sameDay(date, TODAY);
+  const total = list.filter(e => e.kind !== 'break' && e.kind !== 'ai').reduce((s,e) => s + toMin(e.end) - toMin(e.start), 0);
+  const free = (DAY_END - DAY_START) * 60 - list.reduce((s,e) => s + toMin(e.end) - toMin(e.start), 0);
+
+  if (!list.length) return `<div class="${cls} rounded-2xl border border-white/10 bg-[#121212] shadow-2xl">
+    ${agendaHead(date, isToday, '—', '—')}
+    <div class="flex flex-col items-center rounded-b-2xl px-6 py-12 text-center">
+      <span class="flex h-14 w-14 items-center justify-center rounded-2xl border border-[#ccff00]/40 bg-[#ccff00]/10 text-[#ccff00]">
+        <iconify-icon icon="solar:calendar-add-linear" stroke-width="1.5" class="text-2xl"></iconify-icon>
+      </span>
+      <p class="mt-5 text-base font-medium tracking-tight text-white">Nothing booked. That is space, not a gap.</p>
+      <p class="mt-2 max-w-xs leading-relaxed text-white/45">Eight open hours on ${WD_LONG[(date.getDay()+6)%7]}. Block one for the work you keep postponing.</p>
+      <div class="mt-5 flex flex-wrap justify-center gap-2">
+        <button data-add="${iso(date)}" class="h-10 rounded-lg bg-[#ccff00] px-4 font-medium text-[#121212] transition hover:-translate-y-0.5 hover:bg-[#d7ff33]">Add event</button>
+        <button data-open-ai class="h-10 rounded-lg border border-white/10 bg-white/5 px-4 text-white/70 backdrop-blur-md transition hover:bg-white/10 hover:text-white">Ask Find time to fill it</button>
+      </div>
+    </div></div>`;
+
+  /* rows, with free gaps between */
+  let rows = '', prevEnd = null;
+  list.forEach(ev => {
+    const s = toMin(ev.start);
+    if (prevEnd !== null && s - prevEnd >= 25) {
+      rows += agendaRow(`<span class="text-[#121212]/50">${fromMin(prevEnd)}</span>`,
+        `<button data-add="${iso(date)}" data-at="${fromMin(prevEnd)}" class="flex w-full items-center gap-3 rounded-xl border border-dashed border-[#121212]/20 bg-[#ececec] p-3 text-left text-[#121212]/60 transition hover:border-[#2047e6]/50 hover:bg-[#e4e4e4]">
+          <span class="flex h-7 w-7 items-center justify-center rounded-full bg-white"><iconify-icon icon="solar:add-circle-linear" stroke-width="1.5" class="text-base"></iconify-icon></span>
+          <span>free — ${durLabel(s - prevEnd)}</span>
+          <span class="ml-auto text-[#121212]/50">${fromMin(prevEnd)}–${ev.start}</span>
+        </button>`);
+    }
+    prevEnd = Math.max(prevEnd ?? 0, toMin(ev.end));
+
+    const c = CATS[ev.cat];
+    let card;
+    if (ev.kind === 'break') {
+      card = `<div class="flex items-center gap-3 rounded-xl border border-dashed border-[#121212]/15 bg-[#ececec] p-4 text-[#121212]/60">
+        <div class="flex h-8 w-8 items-center justify-center rounded-full bg-white"><iconify-icon icon="solar:cup-hot-linear" stroke-width="1.5" class="text-lg"></iconify-icon></div>
+        <div><p class="text-[#121212]/70">${esc(ev.title)}</p><p class="mt-1">A protected break before your afternoon block.</p></div></div>`;
+    } else if (ev.kind === 'ai') {
+      card = `<button data-ev="${ev.id}" class="evt flex w-full items-center gap-3 rounded-xl border border-dashed border-[#2047e6]/40 bg-[#e8ecff] p-4 text-left transition hover:-translate-y-0.5">
+        <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#121212] text-[#ccff00]"><iconify-icon icon="solar:magic-stick-3-linear" stroke-width="1.5" class="text-lg"></iconify-icon></span>
+        <span class="min-w-0 flex-1"><span class="block text-sm font-medium text-[#121212]">${esc(ev.title)}</span>
+        <span class="mt-1 block text-[#121212]/60">${ev.start}–${ev.end} · your strongest open window</span></span>
+        <span class="shrink-0 rounded-full bg-[#121212] px-2 py-1 text-white">Accept</span></button>`;
+    } else {
+      const clash = ev.conflict ? ' ring-1 ring-[#ff4400]' : '';
+      card = `<button data-ev="${ev.id}" class="evt group flex w-full gap-3 rounded-xl border border-[#121212]/10 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md${clash}">
+        <span class="w-1 shrink-0 self-stretch rounded-full" style="background:${c.color}"></span>
+        <span class="min-w-0 flex-1">
+          <span class="flex flex-wrap items-start justify-between gap-2">
+            <span class="min-w-0">
+              <span class="block text-sm font-medium text-[#121212]">${esc(ev.title)}</span>
+              ${ev.notes ? `<span class="mt-1 block leading-relaxed text-[#121212]/60">${esc(ev.notes)}</span>` : ''}
+            </span>
+            <span class="shrink-0 rounded-full px-2 py-1 text-[#121212]" style="background:${rgba(c.color,.7)}">${c.label}</span>
+          </span>
+          <span class="mt-4 flex flex-wrap items-center gap-3 text-[#121212]/60">
+            <span class="flex items-center gap-1.5"><iconify-icon icon="solar:clock-circle-linear" stroke-width="1.5" class="text-sm"></iconify-icon>${ev.start}–${ev.end} · ${durLabel(toMin(ev.end)-toMin(ev.start))}</span>
+            ${ev.project ? `<span class="flex items-center gap-1.5"><span class="h-1.5 w-1.5 rounded-full" style="background:${c.color}"></span>${esc(ev.project)}</span>` : ''}
+            ${ev.kind === 'focus' ? '<span class="flex items-center gap-1.5 text-[#2047e6]"><iconify-icon icon="solar:shield-check-linear" stroke-width="1.5" class="text-sm"></iconify-icon>Protected</span>' : ''}
+            ${ev.conflict ? '<span class="flex items-center gap-1.5 text-[#cc3600]"><iconify-icon icon="solar:danger-triangle-linear" stroke-width="1.5" class="text-sm"></iconify-icon>Overlaps</span>' : ''}
+          </span>
+        </span></button>`;
+    }
+    rows += agendaRow(ev.start, card);
+  });
+
+  /* NOTE: no overflow-hidden on the card — it would become a scroll container
+     and break the sticky date header. Corners are rounded per-child instead. */
+  return `<div class="${cls} rounded-2xl border border-white/10 shadow-2xl">
+    ${agendaHead(date, isToday, durLabel(total), durLabel(free))}
+    <div class="overflow-hidden rounded-b-2xl bg-[#f4f4f4] text-[#121212]"><div class="divide-y divide-[#121212]/10">${rows}</div></div>
+  </div>`;
+}
+
+function agendaHead(date, isToday, planned, free){
+  return `<div class="sticky top-16 z-20 flex flex-col gap-3 rounded-t-2xl border-b border-white/10 bg-[#121212] p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+    <div class="min-w-0">
+      <div class="flex flex-wrap items-center gap-2">
+        <h2 class="text-lg font-medium tracking-tight text-white">${WD_LONG[(date.getDay()+6)%7]} ${date.getDate()} ${MO[date.getMonth()].slice(0,3)}</h2>
+        ${isToday ? '<span class="rounded-full bg-[#ccff00] px-2 py-1 text-[#121212]">Today</span>' : ''}
+      </div>
+      <p class="mt-1 text-white/45">Planned ${planned} · free ${free} · built around your energy.</p>
+    </div>
+    <button data-add="${iso(date)}" class="flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 text-white/70 transition hover:bg-white/10 hover:text-white">
+      <iconify-icon icon="solar:add-circle-linear" stroke-width="1.5" class="text-base"></iconify-icon><span>Add</span>
+    </button></div>`;
+}
+
+/* ══════════════════ render: day ══════════════════ */
+function renderDay(){
+  const d = state.selected;
+  const list = byDate(d);
+  const booked = list.reduce((s,e) => s + toMin(e.end) - toMin(e.start), 0);
+  const planned = list.filter(e => e.kind !== 'break' && e.kind !== 'ai').reduce((s,e) => s + toMin(e.end) - toMin(e.start), 0);
+  const capacity = (DAY_END - DAY_START) * 60;
+  const pct = Math.round(booked / capacity * 100);
+  const nProtected = list.filter(e => e.kind === 'focus').length;
+  const nClash = list.filter(e => e.conflict).length;
+  const laid = laidOut(list);
+  const bodyH = (DAY_END - DAY_START) * ROW;
+  const nowLine = sameDay(d, TODAY)
+    ? `<div class="pointer-events-none absolute left-0 right-0 z-20" style="top:${(NOW_MIN - DAY_START*60)/60*ROW}px">
+         <div class="relative h-px bg-[#ff4400]">
+           <span class="absolute -left-1 -top-[3px] h-[7px] w-[7px] rounded-full bg-[#ff4400] shadow-[0_0_10px_#ff4400]"></span>
+           <span class="absolute -top-2 right-2 rounded bg-[#ff4400] px-1.5 py-0.5 text-[10px] text-[#121212]">14:22</span>
+         </div></div>` : '';
+
+  const timeGrid = `<div class="overflow-hidden rounded-2xl border border-white/10 shadow-2xl">
+    <div class="flex items-center justify-between border-b border-white/10 bg-[#0e0e0e] px-4 py-3">
+      <span class="uppercase tracking-widest text-white/40">Time grid</span>
+      <span class="text-white/30">Drag to block · 15 min snap</span>
+    </div>
+    <div class="js-scroll max-h-[58vh] overflow-y-auto">
+      <div class="grid gap-px bg-white/10" style="grid-template-columns:4rem minmax(0,1fr)">
+        <div class="bg-[#0e0e0e] pt-2" style="height:${bodyH}px">${gutterHTML()}</div>
+        <div class="wk-col relative bg-[#121212]" data-col="${iso(d)}" style="height:${bodyH}px;${GRID_BG}">
+          ${laid.map(it => blockHTML(it)).join('')}${nowLine}
+        </div>
+      </div>
+    </div></div>`;
+
+  const rail = `<aside class="space-y-4">
+    <div class="rounded-2xl border border-white/10 bg-white/[0.07] p-5 backdrop-blur-md">
+      <div class="flex items-center justify-between text-white/45">
+        <span class="uppercase tracking-widest">Day telemetry</span>
+        <iconify-icon icon="solar:chart-2-linear" stroke-width="1.5" class="text-lg text-[#ccff00]"></iconify-icon>
+      </div>
+      <div class="mt-5 grid grid-cols-2 gap-4">
+        <div><p class="text-2xl font-medium tracking-tight text-white">${durLabel(planned)}</p><p class="mt-1 text-white/40">Planned</p></div>
+        <div><p class="text-2xl font-medium tracking-tight text-[#ccff00]">${durLabel(capacity - booked)}</p><p class="mt-1 text-white/40">Still free</p></div>
+      </div>
+      <div class="mt-4 h-1.5 overflow-hidden rounded-full bg-white/10"><div class="h-full rounded-full bg-[#ccff00]" style="width:${pct}%"></div></div>
+      <p class="mt-3 leading-relaxed text-white/40">${pct}% of capacity · ${nProtected} protected block${nProtected === 1 ? '' : 's'} · ${nClash ? nClash/2 + ' clash to resolve' : 'no clashes'}.</p>
+    </div>
+
+    <div class="rounded-2xl border border-white/15 bg-[#c8c8ff] p-5 text-[#121212] shadow-2xl">
+      <div class="flex items-center justify-between">
+        <span class="uppercase tracking-widest text-[#121212]/50">AI insight</span>
+        <iconify-icon icon="solar:lightbulb-bolt-linear" stroke-width="1.5" class="text-xl"></iconify-icon>
+      </div>
+      <p class="mt-5 text-base font-medium leading-relaxed tracking-tight">${
+        nClash
+          ? 'Roadmap review clashes with your team sync. Maya is free Thursday 14:00 — move it there and your morning stays whole.'
+          : booked < 3*60
+            ? 'This day is mostly open. Two hours here would clear the onboarding spec before the beta cut-off.'
+            : 'Your afternoon is back-to-back. Move one flexible block to tomorrow and you keep a recovery window.'
+      }</p>
+      <div class="mt-5 flex gap-2">
+        <button id="dayInsightApply" class="rounded-lg bg-[#121212] px-4 py-2.5 text-white transition hover:bg-[#252525]">${nClash ? 'Move it' : 'Do it'}</button>
+        <button id="dayInsightDismiss" class="rounded-lg border border-[#121212]/15 px-4 py-2.5 transition hover:bg-white/25">${nClash ? 'Keep both' : 'Dismiss'}</button>
+      </div>
+    </div>
+
+    <div class="rounded-2xl border border-white/10 bg-[#121212] p-5 shadow-2xl">
+      <h3 class="text-sm font-medium text-white">Protected ${sameDay(d, TODAY) ? 'today' : 'this day'}</h3>
+      <div class="mt-4 space-y-2">${
+        list.filter(e => e.kind === 'focus' || e.kind === 'break').map(e => e.kind === 'focus'
+          ? `<div class="flex items-center gap-3 rounded-xl border border-[#ccff00]/30 bg-[#ccff00]/10 p-3">
+              <iconify-icon icon="solar:shield-check-linear" stroke-width="1.5" class="shrink-0 text-lg text-[#ccff00]"></iconify-icon>
+              <div class="min-w-0"><p class="truncate text-white">${esc(e.title)}</p><p class="mt-1 text-white/40">${e.start}–${e.end} · cannot be moved by AI</p></div></div>`
+          : `<div class="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-3">
+              <iconify-icon icon="solar:cup-hot-linear" stroke-width="1.5" class="shrink-0 text-lg text-white/45"></iconify-icon>
+              <div class="min-w-0"><p class="truncate text-white/80">${esc(e.title)}</p><p class="mt-1 text-white/40">${e.start}–${e.end} · recovery window</p></div></div>`
+        ).join('') || '<p class="text-white/40">Nothing is protected on this day. Anything here can be moved by AI.</p>'
+      }</div>
+    </div>
+  </aside>`;
+
+  return `<div>
+    ${energyBand()}
+    <div class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+      <div class="space-y-5">
+        <div class="hidden lg:block">${timeGrid}</div>
+        ${agendaHTML(d)}
+      </div>
+      <div class="hidden xl:block">${rail}</div>
+    </div>
+  </div>`;
+}
+
+/* ══════════════════ skeleton ══════════════════ */
+function renderSkeleton(){
+  const cell = `<div class="min-h-[8.75rem] bg-[#121212] p-2">
+    <div class="skel h-6 w-6 rounded-md bg-white/10"></div>
+    <div class="skel mt-3 h-5 w-full rounded bg-white/[0.07]"></div>
+    <div class="skel mt-1.5 h-5 w-4/5 rounded bg-white/[0.07]"></div></div>`;
+  return `<div class="overflow-hidden rounded-2xl border border-white/10 shadow-2xl" aria-busy="true">
+    <div class="grid grid-cols-7 gap-px bg-white/10">${WD.map(d => `<div class="bg-[#0e0e0e] py-2.5 text-center uppercase tracking-[0.16rem] text-white/25">${d}</div>`).join('')}</div>
+    <div class="grid grid-cols-7 gap-px bg-white/10">${cell.repeat(28)}</div>
+    <div class="flex items-center gap-2 border-t border-white/10 bg-[#0e0e0e] px-4 py-3 text-[#ccff00]">
+      <iconify-icon icon="solar:refresh-circle-linear" stroke-width="1.5" class="skel text-base"></iconify-icon>
+      <span class="uppercase tracking-widest">Loading calendar…</span></div></div>`;
+}
+
+/* ══════════════════ main render ══════════════════ */
+const viewport = document.getElementById('viewport');
+
+function render(){
+  /* toolbar chrome */
+  document.querySelectorAll('.view-tab').forEach(t => {
+    const on = t.dataset.view === state.view;
+    t.className = 'view-tab h-8 rounded-md px-3 transition ' +
+      (on ? 'bg-[#ccff00] font-medium text-[#121212] shadow-[0_0_16px_rgba(204,255,0,.35)]' : 'text-white/55 hover:bg-white/10 hover:text-white');
+    t.setAttribute('aria-selected', on);
+  });
+
+  const c = state.cursor, s = state.selected;
+  const wkStart = startOfWeek(c);
+  if (state.view === 'month'){
+    document.getElementById('periodTitle').textContent = `${MO[c.getMonth()]} ${c.getFullYear()}`;
+    const n = EVENTS.filter(e => fromIso(e.date).getMonth() === c.getMonth() && fromIso(e.date).getFullYear() === c.getFullYear()).length;
+    document.getElementById('eyebrow').textContent = `${MO[c.getMonth()].slice(0,3).toUpperCase()} ${c.getFullYear()} · ${n} events · ${n ? '1 conflict' : 'no conflicts'}`;
+    document.getElementById('periodSub').textContent = n
+      ? 'Sep 7 – 13 is your densest week. Three focus blocks are protected and one clash needs a decision.'
+      : 'Nothing scheduled yet. A clean month is a planning opportunity, not a problem.';
+  } else if (state.view === 'week'){
+    const e2 = addDays(wkStart, 6);
+    document.getElementById('periodTitle').textContent =
+      `${MO[wkStart.getMonth()].slice(0,3)} ${wkStart.getDate()} – ${MO[e2.getMonth()].slice(0,3)} ${e2.getDate()}`;
+    const n = EVENTS.filter(e => { const d = fromIso(e.date); return d >= wkStart && d <= e2; }).length;
+    document.getElementById('eyebrow').textContent = `Week ${isoWeek(wkStart)} · ${n} events · ${n ? '1 conflict' : 'no conflicts'}`;
+    document.getElementById('periodSub').textContent = 'Wednesday is over capacity. Thursday morning is the only clean two-hour run left.';
+  } else {
+    document.getElementById('periodTitle').textContent =
+      `${WD_LONG[(s.getDay()+6)%7]} ${s.getDate()} ${MO[s.getMonth()]}`;
+    const n = byDate(s).length;
+    document.getElementById('eyebrow').textContent = `Day ${Math.round((s - new Date(s.getFullYear(),0,0))/86400000)} · ${n} blocks · energy 78`;
+    document.getElementById('periodSub').textContent = sameDay(s, TODAY)
+      ? 'Three focused hours are still available before the afternoon dip.'
+      : 'Planned around your energy curve and the deadlines behind each project.';
+  }
+
+  const hasConflict = state.view === 'day'
+    ? byDate(s).some(e => e.conflict)
+    : state.view === 'week'
+      ? EVENTS.some(e => e.conflict && fromIso(e.date) >= wkStart && fromIso(e.date) <= addDays(wkStart,6))
+      : EVENTS.some(e => e.conflict && fromIso(e.date).getMonth() === c.getMonth());
+  const banner = document.getElementById('conflictBanner');
+  banner.classList.toggle('hidden', !hasConflict);
+  banner.classList.toggle('flex', hasConflict);
+
+  if (state.loading){ viewport.innerHTML = renderSkeleton(); return; }
+  viewport.innerHTML = state.view === 'month' ? renderMonth() : state.view === 'week' ? renderWeek() : renderDay();
+
+  renderMini();
+  wireDrag();
+  /* open the time grid on the working day, not on 07:00.
+     Deferred: the Tailwind CDN applies max-height/overflow on the next tick. */
+  setTimeout(() => document.querySelectorAll('.js-scroll').forEach(el => { el.scrollTop = ROW; }), 80);
+  const badge = document.getElementById('calCount');
+  if (badge) badge.textContent = EVENTS.length;
+}
+
+/* mini month in sidebar */
+let miniCursor = new Date(TODAY);
+function renderMini(){
+  document.getElementById('miniTitle').textContent = `${MO[miniCursor.getMonth()].slice(0,3)} ${miniCursor.getFullYear()}`;
+  document.getElementById('miniGrid').innerHTML = monthCells(miniCursor).map(d => {
+    const other = d.getMonth() !== miniCursor.getMonth();
+    const isToday = sameDay(d, TODAY), sel = sameDay(d, state.selected);
+    const has = byDate(d).length > 0;
+    return `<button data-pick="${iso(d)}" class="relative flex h-7 items-center justify-center rounded text-[11px] transition hover:bg-white/10
+      ${isToday ? 'bg-[#ccff00] font-medium text-[#121212]' : sel ? 'ring-1 ring-[#ccff00]/60 text-white' : other ? 'text-white/20' : 'text-white/60'}">
+      ${d.getDate()}
+      ${has && !isToday ? '<span class="absolute bottom-0.5 h-0.5 w-0.5 rounded-full bg-[#ccff00]"></span>' : ''}
+    </button>`;
+  }).join('');
+}
+
+/* calendars list */
+document.getElementById('calendarList').innerHTML = Object.entries(CATS).map(([k,v]) =>
+  `<button class="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-white/70 transition hover:bg-white/10 hover:text-white">
+    <span class="h-2 w-2 rounded-full" style="background:${v.color}"></span>
+    <span class="flex-1 truncate">${v.label}</span>
+    <span class="text-white/25">${EVENTS.filter(e => e.cat === k).length}</span></button>`).join('');
+
+/* ══════════════════ navigation ══════════════════ */
+function withLoading(fn){
+  state.loading = true; render();
+  setTimeout(() => { fn(); state.loading = false; render(); }, 280);
+}
+function step(dir){
+  withLoading(() => {
+    if (state.view === 'month') state.cursor = addMonths(state.cursor, dir);
+    else if (state.view === 'week'){ state.cursor = addDays(state.cursor, dir*7); state.selected = addDays(state.selected, dir*7); }
+    else { state.cursor = addDays(state.cursor, dir); state.selected = addDays(state.selected, dir); }
+    miniCursor = new Date(state.cursor);
+  });
+}
+document.getElementById('navPrev').addEventListener('click', () => step(-1));
+document.getElementById('navNext').addEventListener('click', () => step(1));
+document.getElementById('navToday').addEventListener('click', () => {
+  state.cursor = new Date(TODAY); state.selected = new Date(TODAY); miniCursor = new Date(TODAY);
+  render(); showToast('Back to today, Wed 9 Sep');
+});
+document.querySelectorAll('.view-tab').forEach(t => t.addEventListener('click', () => {
+  state.view = t.dataset.view; render();
+}));
+document.getElementById('miniPrev').addEventListener('click', () => { miniCursor = addMonths(miniCursor, -1); renderMini(); });
+document.getElementById('miniNext').addEventListener('click', () => { miniCursor = addMonths(miniCursor, 1); renderMini(); });
+
+/* ══════════════════ delegated interactions ══════════════════ */
+document.addEventListener('click', e => {
+  const pick = e.target.closest('[data-pick]');
+  if (pick){
+    state.selected = fromIso(pick.dataset.pick);
+    if (state.view === 'month' && window.innerWidth >= 1024){ state.view = 'day'; state.cursor = new Date(state.selected); }
+    else state.cursor = new Date(state.selected);
+    miniCursor = new Date(state.selected);
+    render(); return;
+  }
+  const more = e.target.closest('[data-more]');
+  if (more){
+    state.selected = fromIso(more.dataset.more); state.cursor = new Date(state.selected);
+    state.view = 'day'; render(); return;
+  }
+  const add = e.target.closest('[data-add]');
+  if (add){ e.stopPropagation(); openCompose(null, add.dataset.add, add.dataset.at || '09:00'); return; }
+
+  const evt = e.target.closest('.evt');
+  if (evt){ openEvent(Number(evt.dataset.ev), evt); return; }
+
+  const tile = e.target.closest('.daytile');
+  if (tile){ state.selected = fromIso(tile.dataset.day); state.cursor = new Date(state.selected); state.view = 'day'; render(); return; }
+
+  if (e.target.closest('[data-open-compose]')) { openCompose(null, iso(state.selected), '09:00'); return; }
+  if (e.target.closest('[data-close-compose]')) { closeCompose(); return; }
+  if (e.target.closest('[data-open-ai]')) { openAI(); return; }
+  if (e.target.closest('[data-close-ai]')) { closeAI(); return; }
+  if (e.target.closest('[data-close-picker]')) { pickerSheet.classList.add('hidden'); pickerSheet.classList.remove('flex'); return; }
+
+  if (!e.target.closest('#eventPopover')) hidePopover();
+});
+
+/* nav chrome feedback (matches dashboard behaviour) */
+document.querySelectorAll('.nav-item, .mobile-nav').forEach(item => {
+  item.addEventListener('click', () => {
+    if (!item.dataset.nav) return;
+    if (item.dataset.nav !== 'Calendar') showToast(`${item.dataset.nav} is out of scope for this prototype`);
+  });
+});
+document.getElementById('searchButton').addEventListener('click', () => showToast('Search events, projects, and free windows'));
+document.getElementById('notificationButton').addEventListener('click', () => showToast('1 clash and 2 AI suggestions waiting'));
+
+/* ══════════════════ event detail: popover / sheet ══════════════════ */
+const popover = document.getElementById('eventPopover');
+const eventSheet = document.getElementById('eventSheet');
+const eventSheetBody = document.getElementById('eventSheetBody');
+
+function detailHTML(ev, sheet){
+  const c = CATS[ev.cat];
+  return `${sheet ? '<div class="mx-auto mt-3 h-1 w-10 rounded-full bg-white/20"></div>' : ''}
+  <div class="h-1 w-full" style="background:${c.color}"></div>
+  <div class="p-5">
+    <div class="flex items-start justify-between gap-3">
+      <div class="min-w-0">
+        <div class="flex items-center gap-2">
+          <span class="h-1.5 w-1.5 rounded-full" style="background:${c.color}"></span>
+          <span class="uppercase tracking-widest text-white/40">${c.label}</span>
+          ${ev.kind === 'focus' ? '<span class="rounded-full bg-[#ccff00]/15 px-2 py-0.5 text-[#ccff00]">Protected</span>' : ''}
+          ${ev.conflict ? '<span class="rounded-full bg-[#ff4400]/20 px-2 py-0.5 text-[#ff4400]">Clash</span>' : ''}
+        </div>
+        <h3 class="mt-2 text-base font-medium leading-snug tracking-tight text-white">${esc(ev.title)}</h3>
+      </div>
+      <button data-close-detail class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 text-white/45 transition hover:bg-white/10 hover:text-white" aria-label="Close">
+        <iconify-icon icon="solar:close-circle-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+      </button>
+    </div>
+
+    <div class="mt-4 space-y-2.5 text-white/55">
+      <p class="flex items-center gap-2"><iconify-icon icon="solar:clock-circle-linear" stroke-width="1.5" class="text-base text-white/35"></iconify-icon>
+        ${WD_LONG[(fromIso(ev.date).getDay()+6)%7]} ${fromIso(ev.date).getDate()} ${MO[fromIso(ev.date).getMonth()].slice(0,3)} · ${ev.start}–${ev.end} · ${durLabel(toMin(ev.end)-toMin(ev.start))}</p>
+      ${ev.project ? `<p class="flex items-center gap-2"><iconify-icon icon="solar:folder-with-files-linear" stroke-width="1.5" class="text-base text-white/35"></iconify-icon>${esc(ev.project)}</p>` : ''}
+      <p class="flex items-center gap-2"><iconify-icon icon="solar:bolt-linear" stroke-width="1.5" class="text-base text-white/35"></iconify-icon>
+        ${toMin(ev.start) < 12*60 ? 'Placed in your morning energy peak' : 'Placed after the midday dip'}</p>
+      ${ev.notes ? `<p class="rounded-lg border border-white/10 bg-white/5 p-3 leading-relaxed text-white/60">${esc(ev.notes)}</p>` : ''}
+    </div>
+
+    ${ev.conflict ? `<div class="mt-4 flex items-start gap-2 rounded-lg border border-[#ff4400]/40 bg-[#ff4400]/10 p-3 text-white/70">
+      <iconify-icon icon="solar:danger-triangle-linear" stroke-width="1.5" class="mt-0.5 shrink-0 text-base text-[#ff4400]"></iconify-icon>
+      <span>Overlaps another block for 30 minutes. Find time can move whichever is flexible.</span></div>` : ''}
+
+    <div class="mt-5 grid grid-cols-2 gap-2">
+      <button data-edit="${ev.id}" class="flex h-10 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 text-white/75 transition hover:bg-white/10 hover:text-white">
+        <iconify-icon icon="solar:pen-new-square-linear" stroke-width="1.5" class="text-base"></iconify-icon>Edit</button>
+      <button data-reschedule="${ev.id}" class="flex h-10 items-center justify-center gap-2 rounded-lg bg-[#ccff00] text-[#121212] transition hover:bg-[#d7ff33]">
+        <iconify-icon icon="solar:magic-stick-3-linear" stroke-width="1.5" class="text-base"></iconify-icon>Reschedule</button>
+    </div>
+    <div class="mt-2 flex gap-2">
+      <button data-protect="${ev.id}" class="flex h-10 flex-1 items-center justify-center gap-2 rounded-lg border border-white/10 text-white/60 transition hover:bg-white/10 hover:text-white">
+        <iconify-icon icon="solar:shield-check-linear" stroke-width="1.5" class="text-base"></iconify-icon>${ev.kind === 'focus' ? 'Unprotect' : 'Protect'}</button>
+      <button data-del="${ev.id}" class="flex h-10 items-center justify-center gap-2 rounded-lg border border-[#ff4400]/30 px-4 text-[#ff4400] transition hover:bg-[#ff4400]/10" aria-label="Delete event">
+        <iconify-icon icon="solar:trash-bin-trash-linear" stroke-width="1.5" class="text-base"></iconify-icon></button>
+    </div>
+  </div>`;
+}
+
+function openEvent(id, anchor){
+  const ev = EVENTS.find(x => x.id === id);
+  if (!ev) return;
+  if (window.innerWidth < 1024){
+    eventSheetBody.innerHTML = detailHTML(ev, true);
+    eventSheet.classList.remove('hidden'); eventSheet.classList.add('flex');
+  } else {
+    popover.innerHTML = detailHTML(ev, false);
+    popover.classList.remove('hidden');
+    const r = anchor.getBoundingClientRect();
+    const w = 336, h = popover.offsetHeight;
+    let left = r.right + 12, top = r.top - 8;
+    if (left + w > window.innerWidth - 12) left = Math.max(12, r.left - w - 12);
+    if (top + h > window.innerHeight - 12) top = Math.max(12, window.innerHeight - h - 12);
+    popover.style.left = left + 'px'; popover.style.top = top + 'px';
+  }
+}
+function hidePopover(){ popover.classList.add('hidden'); }
+function hideSheet(){ eventSheet.classList.add('hidden'); eventSheet.classList.remove('flex'); }
+eventSheet.addEventListener('click', e => { if (e.target === eventSheet) hideSheet(); });
+
+document.addEventListener('click', e => {
+  if (e.target.closest('[data-close-detail]')) { hidePopover(); hideSheet(); return; }
+  const ed = e.target.closest('[data-edit]');
+  if (ed){ hidePopover(); hideSheet(); openCompose(Number(ed.dataset.edit)); return; }
+  const rs = e.target.closest('[data-reschedule]');
+  if (rs){
+    const ev = EVENTS.find(x => x.id === Number(rs.dataset.reschedule));
+    hidePopover(); hideSheet(); openAI(`Find a better slot for “${ev.title}” this week`);
+    return;
+  }
+  const pr = e.target.closest('[data-protect]');
+  if (pr){
+    const ev = EVENTS.find(x => x.id === Number(pr.dataset.protect));
+    ev.kind = ev.kind === 'focus' ? 'event' : 'focus';
+    hidePopover(); hideSheet(); render();
+    showToast(ev.kind === 'focus' ? 'Block protected — AI will not move it' : 'Block is flexible again');
+    return;
+  }
+  const dl = e.target.closest('[data-del]');
+  if (dl){
+    EVENTS = EVENTS.filter(x => x.id !== Number(dl.dataset.del));
+    hidePopover(); hideSheet(); render(); showToast('Event removed');
+  }
+});
+
+/* ══════════════════ compose ══════════════════ */
+const composeModal = document.getElementById('composeModal');
+let composeCat = 'deep', composeAI = true;
+
+function renderCatChips(){
+  document.getElementById('cCats').innerHTML = Object.entries(CATS).map(([k,v]) =>
+    `<button type="button" data-cat="${k}" class="flex items-center gap-2 rounded-full border px-3 py-2 transition ${k === composeCat ? 'border-white/40 bg-white/10 text-white' : 'border-white/10 text-white/50 hover:border-white/25 hover:text-white'}">
+      <span class="h-2 w-2 rounded-full" style="background:${v.color}"></span>${v.label}</button>`).join('');
+}
+document.getElementById('cCats').addEventListener('click', e => {
+  const b = e.target.closest('[data-cat]'); if (!b) return;
+  composeCat = b.dataset.cat; renderCatChips();
+});
+
+function setAIToggle(on){
+  composeAI = on;
+  const track = document.getElementById('cAiTrack'), knob = document.getElementById('cAiKnob'),
+        btn = document.getElementById('cAiToggle'), hint = document.getElementById('cAiHint');
+  btn.setAttribute('aria-checked', String(on));
+  track.style.background = on ? '#ccff00' : 'rgba(255,255,255,.18)';
+  knob.style.left = on ? '1.125rem' : '0.125rem';
+  knob.style.background = on ? '#121212' : '#f4f4f4';
+  btn.className = 'mt-4 flex w-full items-center gap-3 rounded-xl border p-3 text-left transition ' +
+    (on ? 'border-[#ccff00]/40 bg-[#ccff00]/10 hover:bg-[#ccff00]/15' : 'border-white/10 bg-white/5 hover:bg-white/10');
+  hint.textContent = on ? 'Find the best slot around my energy and deadlines.' : 'Use exactly the time I picked.';
+}
+document.getElementById('cAiToggle').addEventListener('click', () => setAIToggle(!composeAI));
+
+function openCompose(id, date, at){
+  state.composeId = id;
+  const ev = id ? EVENTS.find(x => x.id === id) : null;
+  document.getElementById('composeEyebrow').textContent = ev ? 'Edit block' : 'New block';
+  document.getElementById('composeTitle').textContent = ev ? 'Adjust this event' : 'Add to your calendar';
+  document.getElementById('cTitle').value = ev ? ev.title : '';
+  document.getElementById('cDate').value = ev ? ev.date : (date || iso(state.selected));
+  document.getElementById('cStart').value = ev ? ev.start : (at || '09:00');
+  document.getElementById('cDuration').value = ev ? String(toMin(ev.end) - toMin(ev.start)) : '60';
+  document.getElementById('cProject').value = ev && ev.project ? ev.project : 'No project';
+  document.getElementById('cNotes').value = ev ? ev.notes : '';
+  composeCat = ev ? ev.cat : 'deep'; renderCatChips();
+  setAIToggle(!ev);
+  document.getElementById('cDelete').classList.toggle('hidden', !ev);
+  document.getElementById('cDelete').classList.toggle('flex', !!ev);
+  composeModal.classList.remove('hidden'); composeModal.classList.add('flex');
+  setTimeout(() => document.getElementById('cTitle').focus(), 80);
+}
+function closeCompose(){ composeModal.classList.add('hidden'); composeModal.classList.remove('flex'); }
+composeModal.addEventListener('click', e => { if (e.target === composeModal) closeCompose(); });
+
+document.getElementById('cSave').addEventListener('click', () => {
+  const title = document.getElementById('cTitle').value.trim();
+  if (!title){ document.getElementById('cTitle').focus(); showToast('Give the block a name'); return; }
+  const date = document.getElementById('cDate').value || iso(state.selected);
+  let start = document.getElementById('cStart').value || '09:00';
+  const dur = Number(document.getElementById('cDuration').value);
+  let placed = false;
+
+  if (composeAI && !state.composeId){
+    const taken = byDate(date).map(e => [toMin(e.start), toMin(e.end)]);
+    for (let m = 8*60; m + dur <= 18*60; m += 15){
+      if (!taken.some(([s,t]) => m < t && m + dur > s)){ start = fromMin(m); placed = true; break; }
+    }
+  }
+
+  if (state.composeId){
+    const ev = EVENTS.find(x => x.id === state.composeId);
+    Object.assign(ev, { title, date, start, end: fromMin(toMin(start)+dur), cat: composeCat,
+      project: document.getElementById('cProject').value === 'No project' ? '' : document.getElementById('cProject').value,
+      notes: document.getElementById('cNotes').value.trim() });
+    showToast('Event updated');
+  } else {
+    EVENTS.push(E(date, start, fromMin(toMin(start)+dur), title, composeCat, {
+      project: document.getElementById('cProject').value === 'No project' ? '' : document.getElementById('cProject').value,
+      notes: document.getElementById('cNotes').value.trim()
+    }));
+    showToast(placed ? `Time found at ${start}. No conflicts.` : `Added at ${start}`);
+  }
+  state.selected = fromIso(date); state.cursor = fromIso(date);
+  closeCompose(); render();
+});
+document.getElementById('cDelete').addEventListener('click', () => {
+  EVENTS = EVENTS.filter(x => x.id !== state.composeId);
+  closeCompose(); render(); showToast('Event removed');
+});
+
+/* ══════════════════ drag-to-create in the time grid ══════════════════ */
+function wireDrag(){
+  document.querySelectorAll('.wk-col').forEach(col => {
+    let ghost = null, y0 = 0;
+    col.addEventListener('pointerdown', e => {
+      if (e.target.closest('.evt')) return;
+      const r = col.getBoundingClientRect();
+      y0 = e.clientY - r.top;
+      ghost = document.createElement('div');
+      ghost.className = 'pointer-events-none absolute z-30 rounded-lg border border-dashed border-[#ccff00] bg-[#ccff00]/15 p-2 text-[#ccff00]';
+      ghost.style.left = '2px'; ghost.style.right = '2px';
+      col.appendChild(ghost);
+      col.setPointerCapture(e.pointerId);
+      paint(y0, y0 + ROW/2);
+    });
+    col.addEventListener('pointermove', e => {
+      if (!ghost) return;
+      const r = col.getBoundingClientRect();
+      paint(y0, e.clientY - r.top);
+    });
+    col.addEventListener('pointerup', e => {
+      if (!ghost) return;
+      const r = col.getBoundingClientRect();
+      const [a,b] = span(y0, e.clientY - r.top);
+      ghost.remove(); ghost = null;
+      if (b - a >= 15) openCompose(null, col.dataset.col, fromMin(a));
+    });
+    col.addEventListener('pointercancel', () => { if (ghost){ ghost.remove(); ghost = null; } });
+
+    const snap = px => Math.max(DAY_START*60, Math.min(DAY_END*60,
+      Math.round((DAY_START*60 + px / ROW * 60) / 15) * 15));
+    const span = (p, q) => { const a = snap(Math.min(p,q)), b = snap(Math.max(p,q)); return [a, Math.max(b, a+30)]; };
+    function paint(p, q){
+      const [a,b] = span(p,q);
+      ghost.style.top = ((a - DAY_START*60)/60*ROW) + 'px';
+      ghost.style.height = ((b - a)/60*ROW) + 'px';
+      ghost.innerHTML = `<span class="block truncate font-medium">New block</span><span class="mt-0.5 block">${fromMin(a)}–${fromMin(b)}</span>`;
+    }
+  });
+}
+
+/* ══════════════════ AI: find time ══════════════════ */
+const aiPanel = document.getElementById('aiPanel');
+const aiPromptEl = document.getElementById('aiPrompt');
+const aiResult = document.getElementById('aiResult');
+
+function openAI(prefill){
+  aiPanel.classList.remove('hidden'); aiPanel.classList.add('flex');
+  if (prefill) aiPromptEl.value = prefill;
+  setTimeout(() => aiPromptEl.focus(), 80);
+}
+function closeAI(){ aiPanel.classList.add('hidden'); aiPanel.classList.remove('flex'); }
+aiPanel.addEventListener('click', e => { if (e.target === aiPanel) closeAI(); });
+document.querySelectorAll('.ai-chip').forEach(chip => chip.addEventListener('click', () => {
+  aiPromptEl.value = chip.textContent.trim() === '2h deep work Thursday'
+    ? 'Make room for 2h deep work on Thursday'
+    : chip.textContent.trim() === 'Protect my mornings'
+    ? 'Protect 09:00–11:00 every weekday for focused work'
+    : 'Fix the clash on Wednesday at 11:00';
+  aiPromptEl.focus();
+}));
+document.getElementById('aiVoice').addEventListener('click', function(){
+  this.classList.toggle('bg-[#ff4400]'); this.classList.toggle('text-white');
+  showToast(this.classList.contains('bg-[#ff4400]') ? 'Listening…' : 'Voice input stopped');
+});
+
+const moveRow = (title, from, to, tone) =>
+  `<div class="flex items-start gap-3 rounded-xl border border-white/10 bg-white/5 p-3">
+    <span class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg" style="background:${rgba(tone,.18)};color:${tone}">
+      <iconify-icon icon="solar:transfer-horizontal-linear" stroke-width="1.5" class="text-base"></iconify-icon></span>
+    <span class="min-w-0 flex-1">
+      <span class="block truncate text-white">${title}</span>
+      <span class="mt-1 flex flex-wrap items-center gap-2 text-white/40">
+        <span class="line-through">${from}</span>
+        <iconify-icon icon="solar:arrow-right-linear" stroke-width="1.5" class="text-sm"></iconify-icon>
+        <span class="text-[#ccff00]">${to}</span></span></span></div>`;
+
+document.getElementById('aiRun').addEventListener('click', function(){
+  const q = aiPromptEl.value.trim();
+  if (!q){ aiPromptEl.focus(); showToast('Tell Find time what to make room for'); return; }
+  const btn = this, original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<iconify-icon icon="solar:refresh-circle-linear" stroke-width="1.5" class="skel text-lg"></iconify-icon><span class="font-medium">Reading calendar…</span>';
+  aiResult.innerHTML = `<div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+    <p class="uppercase tracking-widest text-[#ccff00]">Analysing</p>
+    <div class="mt-4 space-y-2">
+      <div class="skel h-3 w-3/4 rounded bg-white/10"></div>
+      <div class="skel h-3 w-full rounded bg-white/10"></div>
+      <div class="skel h-3 w-2/3 rounded bg-white/10"></div>
+    </div>
+    <p class="mt-4 text-white/40">Checking energy curve, protected blocks, and deadlines…</p></div>`;
+
+  setTimeout(() => {
+    btn.disabled = false; btn.innerHTML = original;
+    aiResult.innerHTML = `<div class="overflow-hidden rounded-2xl border border-[#ccff00]/30 bg-[#ccff00]/[0.06]">
+      <div class="flex items-center justify-between border-b border-[#ccff00]/20 px-4 py-3">
+        <span class="flex items-center gap-2 text-[#ccff00]">
+          <iconify-icon icon="solar:stars-minimalistic-linear" stroke-width="1.5" class="text-lg"></iconify-icon>
+          <span class="uppercase tracking-widest">Time found</span></span>
+        <span class="rounded-full bg-[#ccff00] px-2 py-1 text-[#121212]">3 changes · 0 conflicts</span>
+      </div>
+      <div class="space-y-2 p-4">
+        <div class="flex items-start gap-3 rounded-xl border border-[#ccff00]/40 bg-[#ccff00]/10 p-3">
+          <span class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#ccff00] text-[#121212]">
+            <iconify-icon icon="solar:add-circle-linear" stroke-width="1.5" class="text-base"></iconify-icon></span>
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-white">Deep work · onboarding spec</span>
+            <span class="mt-1 block text-[#ccff00]">New · Thu 10 Sep, 10:00–12:00 · protected</span></span></div>
+        ${moveRow('Stakeholder review', 'Thu 10:00', 'Mon 16:00', '#ffd600')}
+        ${moveRow('Draft launch checklist', 'Thu 13:00', 'Fri 09:30', '#ff7040')}
+        <p class="pt-1 leading-relaxed text-white/50">
+          Your Wednesday focus block and Thursday's usability test were left untouched. Both moved items are flexible and have no attendees outside the team.
+        </p>
+      </div>
+      <div class="flex gap-2 border-t border-[#ccff00]/20 p-4">
+        <button id="aiApply" class="h-10 flex-1 rounded-lg bg-[#ccff00] font-medium text-[#121212] transition hover:-translate-y-0.5 hover:bg-[#d7ff33]">Apply 3 changes</button>
+        <button id="aiDismiss" class="h-10 rounded-lg border border-white/10 px-4 text-white/60 transition hover:bg-white/10 hover:text-white">Dismiss</button>
+      </div></div>`;
+
+    document.getElementById('aiApply').addEventListener('click', () => {
+      const sr = EVENTS.find(e => e.title === 'Stakeholder review');
+      if (sr){ sr.date = '2026-09-07'; sr.start = '16:00'; sr.end = '17:00'; }
+      const dc = EVENTS.find(e => e.title === 'Draft launch checklist');
+      if (dc){ dc.date = '2026-09-11'; dc.start = '09:30'; dc.end = '10:30'; }
+      if (!EVENTS.some(e => e.title === 'Deep work · onboarding spec'))
+        EVENTS.push(E('2026-09-10','10:00','12:00','Deep work · onboarding spec','deep',{kind:'focus',project:'Mobile launch',notes:'Two clean hours found by Find time.'}));
+      state.view = 'week'; state.cursor = new Date(2026,8,10); state.selected = new Date(2026,8,10);
+      closeAI(); render(); showToast('3 changes applied · 0 conflicts');
+    });
+    document.getElementById('aiDismiss').addEventListener('click', () => { aiResult.innerHTML = ''; showToast('Suggestion dismissed'); });
+  }, 1300);
+});
+
+/* ══════════════════ mobile month picker ══════════════════ */
+const pickerSheet = document.getElementById('pickerSheet');
+let pickCursor = new Date(TODAY);
+function renderPicker(){
+  document.getElementById('pickTitle').textContent = `${MO[pickCursor.getMonth()]} ${pickCursor.getFullYear()}`;
+  document.getElementById('pickGrid').innerHTML = monthCells(pickCursor).map(d => {
+    const other = d.getMonth() !== pickCursor.getMonth(), isToday = sameDay(d, TODAY), has = byDate(d).length > 0;
+    return `<button data-pickjump="${iso(d)}" class="relative flex h-11 items-center justify-center rounded-lg border transition
+      ${isToday ? 'border-[#ccff00] bg-[#ccff00] font-medium text-[#121212]' : other ? 'border-white/5 text-white/20' : 'border-white/10 text-white/70 hover:bg-white/10'}">
+      ${d.getDate()}${has && !isToday ? '<span class="absolute bottom-1.5 h-1 w-1 rounded-full bg-[#ccff00]"></span>' : ''}</button>`;
+  }).join('');
+}
+document.getElementById('titleButton').addEventListener('click', () => {
+  if (window.innerWidth >= 1024) return;
+  pickCursor = new Date(state.cursor); renderPicker();
+  pickerSheet.classList.remove('hidden'); pickerSheet.classList.add('flex');
+});
+document.getElementById('pickPrev').addEventListener('click', () => { pickCursor = addMonths(pickCursor,-1); renderPicker(); });
+document.getElementById('pickNext').addEventListener('click', () => { pickCursor = addMonths(pickCursor, 1); renderPicker(); });
+document.getElementById('pickToday').addEventListener('click', () => {
+  state.cursor = new Date(TODAY); state.selected = new Date(TODAY); miniCursor = new Date(TODAY);
+  pickerSheet.classList.add('hidden'); pickerSheet.classList.remove('flex'); render();
+});
+document.getElementById('pickGrid').addEventListener('click', e => {
+  const b = e.target.closest('[data-pickjump]'); if (!b) return;
+  state.selected = fromIso(b.dataset.pickjump); state.cursor = new Date(state.selected);
+  pickerSheet.classList.add('hidden'); pickerSheet.classList.remove('flex'); render();
+});
+pickerSheet.addEventListener('click', e => {
+  if (e.target === pickerSheet){ pickerSheet.classList.add('hidden'); pickerSheet.classList.remove('flex'); }
+});
+
+/* ══════════════════ day-view insight card ══════════════════ */
+document.addEventListener('click', e => {
+  if (e.target.id === 'dayInsightApply'){
+    const rr = EVENTS.find(x => x.title === 'Roadmap review with Maya');
+    if (rr){ rr.date = '2026-09-10'; rr.start = '14:00'; rr.end = '15:00'; rr.conflict = false; }
+    const ps = EVENTS.find(x => x.title === 'Product team sync' && x.date === '2026-09-09');
+    if (ps) ps.conflict = false;
+    render(); showToast('Moved to Thursday 14:00 · 0 conflicts');
+  }
+  if (e.target.id === 'dayInsightDismiss'){
+    e.target.closest('.rounded-2xl').style.display = 'none';
+    showToast('Kept both — you will be double-booked');
+  }
+});
+
+/* ══════════════════ keyboard ══════════════════ */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape'){ closeCompose(); closeAI(); hidePopover(); hideSheet(); closeThemeMenu();
+    pickerSheet.classList.add('hidden'); pickerSheet.classList.remove('flex'); return; }
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k'){ e.preventDefault(); showToast('Search events, projects, and free windows'); return; }
+  if (e.target.matches('input, textarea, select')) return;
+  const k = e.key.toLowerCase();
+  if (k === 'm'){ state.view = 'month'; render(); }
+  if (k === 'w'){ state.view = 'week'; render(); }
+  if (k === 'd'){ state.view = 'day'; render(); }
+  if (k === 't'){ document.getElementById('navToday').click(); }
+  if (k === 'n'){ e.preventDefault(); openCompose(null, iso(state.selected), '09:00'); }
+  if (e.key === 'ArrowLeft') step(-1);
+  if (e.key === 'ArrowRight') step(1);
+});
+
+/* ══════════════════ background themes ══════════════════ */
+const THEMES = [
+  { key:'electric', name:'Electric (current)',      sw:'#2047e6', tag:'Current',   note:'Maximum energy — the loud one' },
+  { key:'ink',      name:'Ink',                     sw:'#0b0b0d', tag:'Safe',      note:'Near-black; every accent pops' },
+  { key:'navy',     name:'Deep Navy',               sw:'#0a1126', tag:'Pick',      note:'Still a blue app — calm, easy on the eyes' },
+  { key:'slate',    name:'Slate',                   sw:'#161a22', tag:'Safe',      note:'Desaturated blue-grey; neutral SaaS' },
+  { key:'eclipse',  name:'Eclipse',                 sw:'#111a4d', tag:'Brand',     note:'The current hue at ~20% brightness' },
+  { key:'carbon',   name:'Warm Carbon',             sw:'#141110', tag:'Character', note:'Warm near-black; lime and coral glow' },
+  { key:'graphite', name:'Graphite + blue frame',   sw:'#141416', tag:'Balanced',  note:'Neutral field; blue kept as a frame accent' }
+];
+
+function applyTheme(key){
+  const t = THEMES.find(x => x.key === key) || THEMES[0];
+  document.body.dataset.theme = t.key;
+  try { localStorage.setItem('ft-theme', t.key); } catch (e) {}
+  document.querySelectorAll('#themeList [data-theme-key]').forEach(b => {
+    const on = b.dataset.themeKey === t.key;
+    b.setAttribute('aria-checked', String(on));
+    b.classList.toggle('bg-white/5', on);
+    b.classList.toggle('ring-1', on);
+    b.classList.toggle('ring-white/10', on);
+    b.querySelector('.check').classList.toggle('opacity-0', !on);
+  });
+}
+
+function buildThemeList(){
+  const list = document.getElementById('themeList');
+  list.innerHTML = THEMES.map(t => `
+    <button role="menuitemradio" data-theme-key="${t.key}" aria-checked="false"
+      class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-white/5">
+      <span class="h-8 w-8 shrink-0 rounded-lg border border-white/15" style="background:${t.sw}"></span>
+      <span class="min-w-0 flex-1">
+        <span class="flex items-center gap-2">
+          <span class="text-white/85">${t.name}</span>
+          <span class="rounded-full border border-white/15 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-white/45">${t.tag}</span>
+        </span>
+        <span class="mt-0.5 block truncate text-white/40">${t.note}</span>
+      </span>
+      <iconify-icon icon="solar:check-circle-bold" class="check shrink-0 text-lg text-[#ccff00] opacity-0 transition"></iconify-icon>
+    </button>`).join('');
+  list.addEventListener('click', e => {
+    const b = e.target.closest('[data-theme-key]'); if (!b) return;
+    const t = THEMES.find(x => x.key === b.dataset.themeKey);
+    applyTheme(t.key);
+    showToast(`Background: ${t.name}`);
+    closeThemeMenu();
+  });
+}
+
+const themeMenu = document.getElementById('themeMenu');
+const themeBtn  = document.getElementById('themeButton');
+function openThemeMenu(){ themeMenu.classList.remove('hidden'); themeBtn.setAttribute('aria-expanded', 'true'); }
+function closeThemeMenu(){ themeMenu.classList.add('hidden'); themeBtn.setAttribute('aria-expanded', 'false'); }
+themeBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  themeMenu.classList.contains('hidden') ? openThemeMenu() : closeThemeMenu();
+});
+document.addEventListener('click', e => {
+  if (!themeMenu.classList.contains('hidden') && !themeMenu.contains(e.target) && !themeBtn.contains(e.target))
+    closeThemeMenu();
+});
+function initTheme(){
+  buildThemeList();
+  let saved = 'electric';
+  try { saved = localStorage.getItem('ft-theme') || 'electric'; } catch (e) {}
+  applyTheme(saved);
+}
+
+/* boot */
+renderCatChips();
+initTheme();
+render();
+</script>
+</body></html>

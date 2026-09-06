@@ -1,0 +1,643 @@
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Find Time — AI Productivity Management</title>
+<meta name="description" content="Organize your day in seconds, prioritize what matters, and find time for anything with AI-assisted planning.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script></head>
+
+  <body class="min-h-screen overflow-x-hidden bg-[#2047e6] text-xs text-white antialiased selection:bg-[#ccff00] selection:text-[#121212]" style="font-family:'JetBrains Mono',monospace;background-image:radial-gradient(rgba(255,255,255,.16) 1px,transparent 1px),linear-gradient(rgba(32,71,230,.92),rgba(24,55,196,.98));background-size:20px 20px,cover;">
+    <!-- Start: Find Time interface -->
+    <div class="pointer-events-none fixed inset-0 z-0 opacity-70" style="background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.025) 0,rgba(255,255,255,.025) 1px,transparent 1px,transparent 9px);"></div>
+
+    <div class="pointer-events-none fixed inset-4 z-0 border border-white/10 sm:inset-6 lg:inset-8">
+      <div class="absolute left-1/2 top-0 h-full w-px bg-white/5"></div>
+      <div class="absolute left-0 top-1/2 h-px w-full bg-white/5"></div>
+      <div class="absolute left-0 top-0 h-6 w-6 border-l border-t border-[#ccff00]"></div>
+      <div class="absolute right-0 top-0 h-6 w-6 border-r border-t border-[#ccff00]"></div>
+      <div class="absolute bottom-0 left-0 h-6 w-6 border-b border-l border-[#ccff00]"></div>
+      <div class="absolute bottom-0 right-0 h-6 w-6 border-b border-r border-[#ccff00]"></div>
+    </div>
+
+    <div class="fixed left-0 top-0 z-50 w-full overflow-hidden border-b border-white/10 bg-[#2047e6]/85 py-1.5 backdrop-blur-md">
+      <div id="marquee" class="flex w-max whitespace-nowrap uppercase tracking-widest text-[#ccff00]/80">
+        <span class="pr-16">
+          YOUR DAY HAS SPACE // PRIORITIZE WHAT MATTERS // PLAN IN SECONDS //
+          LEARN SOMETHING NEW // FIND TIME FOR ANYTHING //
+        </span>
+        <span class="pr-16">
+          YOUR DAY HAS SPACE // PRIORITIZE WHAT MATTERS // PLAN IN SECONDS //
+          LEARN SOMETHING NEW // FIND TIME FOR ANYTHING //
+        </span>
+      </div>
+    </div>
+
+    <header class="relative z-40 mx-auto mt-8 flex max-w-7xl items-center justify-between px-6 py-5 sm:px-10">
+      <a href="#" class="group flex items-center gap-3" aria-label="Find Time home">
+        <span class="flex h-10 w-10 items-center justify-center rounded-full border border-white/25 bg-white/10 backdrop-blur-md transition group-hover:border-[#ccff00]">
+          <iconify-icon icon="solar:clock-circle-linear" class="text-xl text-[#ccff00]" style="--iconify-stroke-width:1.5;"></iconify-icon>
+        </span>
+        <span class="text-sm font-medium tracking-tight text-white">
+          FIND TIME
+        </span>
+      </a>
+
+      <nav class="hidden items-center gap-7 text-white/60 md:flex">
+        <a href="#planner" class="transition hover:text-white">PLANNER</a>
+        <a href="#features" class="transition hover:text-white">HOW IT WORKS</a>
+        <a href="#focus" class="transition hover:text-white">FOCUS</a>
+      </nav>
+
+      <button id="openPlanner" class="flex items-center gap-2 rounded-full border border-[#ccff00]/50 bg-[#ccff00] px-4 py-2.5 font-medium text-[#121212] shadow-lg transition hover:-translate-y-0.5 hover:bg-[#d7ff33]">
+        START PLANNING
+        <iconify-icon icon="solar:arrow-right-up-linear" class="text-base" style="--iconify-stroke-width:1.5;"></iconify-icon>
+      </button>
+    </header>
+
+    <main class="relative z-10 mx-auto min-h-screen max-w-[1440px] px-6 pb-20 sm:px-10">
+      <aside class="absolute bottom-16 left-4 top-24 hidden flex-col justify-between text-white/35 xl:flex">
+        <span>DAY.247</span>
+        <span>WK.36</span>
+        <span>CAP.08H</span>
+        <span>FOC.04</span>
+        <span>BRK.03</span>
+        <span>UTC.14:22</span>
+        <span>PRIORITY.A</span>
+        <span>ENERGY.78</span>
+        <span>STATUS.OPEN</span>
+      </aside>
+
+      <section class="relative mx-auto min-h-[940px] max-w-7xl pt-10 lg:min-h-[860px] lg:pt-16">
+        <div class="relative z-20 max-w-2xl lg:ml-14">
+          <div class="mb-5 flex items-center gap-3 text-[#ccff00]">
+            <span class="h-2 w-2 rounded-full bg-[#ccff00] shadow-[0_0_16px_rgba(204,255,0,.8)]"></span>
+            <span class="tracking-widest">
+              AI PRODUCTIVITY DASHBOARD / WEB + APP
+            </span>
+          </div>
+
+          <h1 class="max-w-2xl text-4xl font-medium leading-none tracking-tight text-white sm:text-5xl lg:text-6xl">
+            FIND TIME FOR
+            <br>
+            <span class="text-[#ccff00]">WHAT MATTERS.</span>
+          </h1>
+
+          <p class="mt-6 max-w-lg text-sm leading-relaxed text-white/65">
+            See your entire day in one place. Plan from the web dashboard, make
+            quick updates in the mobile app, and let AI protect your focus
+            across both.
+          </p>
+
+          <div class="mt-7 flex flex-wrap items-center gap-3">
+            <button id="heroPlanButton" class="group flex items-center gap-3 rounded-lg bg-[#121212] px-5 py-3.5 font-medium text-white shadow-2xl transition hover:-translate-y-0.5">
+              <iconify-icon icon="solar:magic-stick-3-linear" class="text-lg text-[#ccff00]" style="--iconify-stroke-width:1.5;"></iconify-icon>
+              PLAN MY DAY
+              <span class="text-white/30 transition group-hover:translate-x-1">
+                →
+              </span>
+            </button>
+            <button id="watchDemo" class="flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-5 py-3.5 text-white/75 backdrop-blur-md transition hover:bg-white/15 hover:text-white">
+              <iconify-icon icon="solar:play-circle-linear" class="text-lg" style="--iconify-stroke-width:1.5;"></iconify-icon>
+              SEE 40 SEC DEMO
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-12 grid gap-5 lg:absolute lg:left-[31%] lg:top-[34%] lg:mt-0 lg:w-[69%] lg:grid-cols-[1.2fr_.72fr] lg:items-start">
+          <article id="planner" class="relative z-30 overflow-hidden rounded-2xl border border-white/20 bg-[#121212]/90 shadow-2xl backdrop-blur-xl">
+            <div class="flex items-center justify-between border-b border-white/10 bg-white/[0.04] px-5 py-3 text-white/40">
+              <div class="flex items-center gap-2">
+                <span class="h-2 w-2 rounded-full bg-[#ff4400]"></span>
+                <span class="h-2 w-2 rounded-full bg-[#ffd600]"></span>
+                <span class="h-2 w-2 rounded-full bg-[#ccff00]"></span>
+              </div>
+              <div class="rounded-md border border-white/10 bg-white/[0.04] px-4 py-1.5 text-[10px] tracking-wider">
+                APP.FINDTIME.AI / DASHBOARD
+              </div>
+              <iconify-icon icon="solar:lock-keyhole-minimalistic-linear" class="text-sm"></iconify-icon>
+            </div>
+            <div class="flex items-center justify-between border-b border-white/10 px-5 py-4">
+              <div>
+                <div class="flex items-center gap-2 text-white">
+                  <span class="h-2 w-2 rounded-full bg-[#ccff00]"></span>
+                  TODAY / SEPTEMBER 04
+                </div>
+                <div class="mt-1 text-white/40">
+                  THURSDAY · 7H 30M AVAILABLE
+                </div>
+              </div>
+              <button id="regenerate" class="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 text-white/60 transition hover:border-[#ccff00]/60 hover:text-[#ccff00]" aria-label="Regenerate schedule">
+                <iconify-icon icon="solar:refresh-linear" class="text-lg" style="--iconify-stroke-width:1.5;"></iconify-icon>
+              </button>
+            </div>
+
+            <div class="grid grid-cols-[3.5rem_1fr] px-4 py-4">
+              <div class="space-y-12 pt-2 text-right text-white/30">
+                <div>08:00</div>
+                <div>09:30</div>
+                <div>11:00</div>
+                <div>12:30</div>
+                <div>14:00</div>
+                <div>16:00</div>
+              </div>
+
+              <div id="schedule" class="ml-4 space-y-2 border-l border-white/10 pl-4">
+                <button class="schedule-item flex w-full items-center gap-3 rounded-lg border border-[#ccff00]/20 bg-[#ccff00]/10 p-3 text-left transition hover:translate-x-1 hover:border-[#ccff00]/50" data-title="Spanish practice">
+                  <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#ccff00] text-[#121212]">
+                    <iconify-icon icon="solar:book-2-linear" class="text-lg" style="--iconify-stroke-width:1.5;"></iconify-icon>
+                  </span>
+                  <span class="min-w-0 flex-1">
+                    <span class="block font-medium text-white">
+                      Spanish practice
+                    </span>
+                    <span class="mt-1 block text-white/45">
+                      08:00–08:35 · High energy
+                    </span>
+                  </span>
+                  <span class="rounded-full bg-[#ccff00]/15 px-2 py-1 text-[#ccff00]">
+                    35M
+                  </span>
+                </button>
+
+                <button class="schedule-item flex w-full items-center gap-3 rounded-lg border border-white/10 bg-white/[0.06] p-3 text-left transition hover:translate-x-1 hover:border-white/25" data-title="Deep work">
+                  <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#ff4400] text-[#121212]">
+                    <iconify-icon icon="solar:bolt-linear" class="text-lg" style="--iconify-stroke-width:1.5;"></iconify-icon>
+                  </span>
+                  <span class="min-w-0 flex-1">
+                    <span class="block font-medium text-white">
+                      Deep work · Product brief
+                    </span>
+                    <span class="mt-1 block text-white/45">
+                      08:45–10:45 · Focus protected
+                    </span>
+                  </span>
+                  <span class="rounded-full bg-white/10 px-2 py-1 text-white/60">
+                    2H
+                  </span>
+                </button>
+
+                <button class="schedule-item flex w-full items-center gap-3 rounded-lg border border-white/10 bg-white/[0.06] p-3 text-left transition hover:translate-x-1 hover:border-white/25" data-title="Team sync">
+                  <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#c8c8ff] text-[#121212]">
+                    <iconify-icon icon="solar:users-group-rounded-linear" class="text-lg" style="--iconify-stroke-width:1.5;"></iconify-icon>
+                  </span>
+                  <span class="min-w-0 flex-1">
+                    <span class="block font-medium text-white">Team sync</span>
+                    <span class="mt-1 block text-white/45">
+                      11:00–11:30 · Calendar event
+                    </span>
+                  </span>
+                  <span class="rounded-full bg-white/10 px-2 py-1 text-white/60">
+                    30M
+                  </span>
+                </button>
+
+                <div class="flex items-center gap-3 py-2 text-white/35">
+                  <div class="h-px flex-1 bg-white/10"></div>
+                  <iconify-icon icon="solar:cup-hot-linear" class="text-base" style="--iconify-stroke-width:1.5;"></iconify-icon>
+                  <span>RECOVERY WINDOW · 45M</span>
+                  <div class="h-px flex-1 bg-white/10"></div>
+                </div>
+
+                <button class="schedule-item flex w-full items-center gap-3 rounded-lg border border-white/10 bg-white/[0.06] p-3 text-left transition hover:translate-x-1 hover:border-white/25" data-title="Admin batch">
+                  <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#ffd600] text-[#121212]">
+                    <iconify-icon icon="solar:inbox-line-linear" class="text-lg" style="--iconify-stroke-width:1.5;"></iconify-icon>
+                  </span>
+                  <span class="min-w-0 flex-1">
+                    <span class="block font-medium text-white">
+                      Admin batch
+                    </span>
+                    <span class="mt-1 block text-white/45">
+                      13:15–14:00 · 6 small tasks
+                    </span>
+                  </span>
+                  <span class="rounded-full bg-white/10 px-2 py-1 text-white/60">
+                    45M
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between border-t border-white/10 px-5 py-4">
+              <div class="flex items-center gap-2 text-white/45">
+                <iconify-icon icon="solar:shield-check-linear" class="text-base text-[#ccff00]" style="--iconify-stroke-width:1.5;"></iconify-icon>
+                90M BUFFER PROTECTED
+              </div>
+              <button id="addTaskButton" class="flex items-center gap-2 rounded-md bg-white/10 px-3 py-2 text-white transition hover:bg-white/15">
+                <iconify-icon icon="solar:add-circle-linear" class="text-base" style="--iconify-stroke-width:1.5;"></iconify-icon>
+                ADD TASK
+              </button>
+            </div>
+          </article>
+
+          <article class="relative z-20 w-full max-w-sm justify-self-center overflow-hidden rounded-[2rem] border-[6px] border-[#121212] bg-[#f4f4f4] p-6 text-[#121212] shadow-2xl lg:mt-12 lg:-ml-5">
+            <div class="relative -mx-2 -mt-3 mb-5 flex items-center justify-between text-[10px] font-medium text-[#121212]/55">
+              <span>9:41</span>
+              <span class="absolute left-1/2 top-0 h-5 w-20 -translate-x-1/2 rounded-full bg-[#121212]"></span>
+              <div class="flex items-center gap-1.5">
+                <iconify-icon icon="solar:wi-fi-router-minimalistic-linear" class="text-sm"></iconify-icon>
+                <iconify-icon icon="solar:battery-charge-minimalistic-linear" class="text-sm"></iconify-icon>
+              </div>
+            </div>
+            <div class="pointer-events-none absolute inset-0 opacity-20" style="background-image:radial-gradient(circle at center,transparent 0,transparent 30%,rgba(255,68,0,.35) 30.3%,transparent 30.7%),linear-gradient(90deg,transparent 49.8%,rgba(255,68,0,.3) 50%,transparent 50.2%),linear-gradient(transparent 49.8%,rgba(255,68,0,.3) 50%,transparent 50.2%);"></div>
+
+            <div class="relative flex items-start justify-between">
+              <div>
+                <div class="text-[#121212]/45">AI PRIORITY ENGINE</div>
+                <div class="mt-1 text-sm font-medium">YOUR REALISTIC DAY</div>
+              </div>
+              <span class="flex h-10 w-10 items-center justify-center rounded-full bg-[#121212] text-[#ccff00]">
+                <iconify-icon icon="solar:magic-stick-3-linear" class="text-xl" style="--iconify-stroke-width:1.5;"></iconify-icon>
+              </span>
+            </div>
+
+            <div class="relative mt-8 rounded-lg border border-[#121212]/10 bg-white/70 p-4">
+              <div class="mb-3 flex items-center justify-between">
+                <span class="text-[#121212]/45">TODAY'S CAPACITY</span>
+                <span class="font-medium">78%</span>
+              </div>
+              <div class="h-2 overflow-hidden rounded-full bg-[#121212]/10">
+                <div id="capacityBar" class="h-full w-[78%] rounded-full bg-[#ff4400] transition-all duration-700"></div>
+              </div>
+              <div class="mt-3 flex justify-between text-[#121212]/45">
+                <span>5H 50M PLANNED</span>
+                <span>1H 40M FREE</span>
+              </div>
+            </div>
+
+            <div class="relative mt-5">
+              <div class="mb-2 text-[#121212]/45">ASK FIND TIME</div>
+              <div class="flex items-center gap-2 rounded-lg border border-[#121212]/15 bg-white p-2 shadow-sm">
+                <input id="aiPrompt" type="text" value="Make room for 30 min of Spanish" class="min-w-0 flex-1 bg-transparent px-2 py-2 text-[#121212] outline-none placeholder:text-[#121212]/35" aria-label="Ask Find Time">
+                <button id="askAI" class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#ff4400] text-[#121212] transition hover:scale-105" aria-label="Submit request">
+                  <iconify-icon icon="solar:arrow-right-linear" class="text-lg" style="--iconify-stroke-width:1.5;"></iconify-icon>
+                </button>
+              </div>
+            </div>
+
+            <div id="aiResponse" class="relative mt-4 rounded-lg bg-[#c8c8ff] p-4 leading-relaxed text-[#121212]/75">
+              <div class="mb-2 flex items-center gap-2 font-medium text-[#121212]">
+                <iconify-icon icon="solar:stars-minimalistic-linear" class="text-lg" style="--iconify-stroke-width:1.5;"></iconify-icon>
+                TIME FOUND
+              </div>
+              I moved email review to your admin batch and reserved 08:00–08:35
+              for Spanish, when your energy is strongest.
+            </div>
+
+            <div class="relative mt-5 flex items-center justify-between border-t border-[#121212]/10 pt-4 text-[#121212]/45">
+              <span>4 CHANGES · 0 CONFLICTS</span>
+              <button id="applyPlan" class="rounded-full bg-[#121212] px-4 py-2.5 font-medium text-white transition hover:-translate-y-0.5">
+                APPLY PLAN
+              </button>
+            </div>
+          </article>
+        </div>
+
+        <div data-drag="" class="absolute right-[8%] top-14 z-30 hidden w-56 cursor-grab rounded-md border border-white/30 bg-[#ccff00] p-3 text-[#121212] shadow-2xl active:cursor-grabbing lg:block">
+          <div class="flex items-center justify-between">
+            <span>WEEKLY GOAL / 04</span>
+            <iconify-icon icon="solar:globus-linear" class="text-lg" style="--iconify-stroke-width:1.5;"></iconify-icon>
+          </div>
+          <div class="mt-5 flex items-end justify-between">
+            <div>
+              <div class="text-3xl font-medium leading-none tracking-tight">
+                3.5H
+              </div>
+              <div class="mt-1 text-[#121212]/55">LANGUAGE LEARNING</div>
+            </div>
+            <div class="flex gap-1">
+              <span class="h-7 w-2 bg-[#121212]"></span>
+              <span class="h-10 w-2 bg-[#121212]"></span>
+              <span class="h-5 w-2 bg-[#121212]/30"></span>
+              <span class="h-8 w-2 bg-[#ff4400]"></span>
+            </div>
+          </div>
+        </div>
+
+        <div data-drag="" class="absolute right-[2%] top-[43%] z-40 hidden w-48 cursor-grab rounded-lg border border-white/20 bg-[#ff4400] p-4 text-[#121212] shadow-2xl active:cursor-grabbing xl:block">
+          <div class="flex justify-between">
+            <iconify-icon icon="solar:chat-round-dots-linear" class="text-xl" style="--iconify-stroke-width:1.5;"></iconify-icon>
+            <span>COMMENT.02</span>
+          </div>
+          <p class="mt-5 leading-relaxed">
+            Keep this session short. Review yesterday's vocabulary first.
+          </p>
+          <div class="mt-4 flex items-center gap-2 border-t border-[#121212]/20 pt-3">
+            <span class="flex h-6 w-6 items-center justify-center rounded-full bg-[#121212] text-white">
+              M
+            </span>
+            <span>MAYA · 2M AGO</span>
+          </div>
+        </div>
+
+        <div data-drag="" class="absolute bottom-[8%] left-[8%] z-30 hidden w-60 cursor-grab rounded-full border border-white/20 bg-[#121212] p-1 shadow-2xl active:cursor-grabbing lg:flex">
+          <div class="flex flex-1 items-center gap-3 px-4">
+            <iconify-icon icon="solar:alarm-play-linear" class="text-lg text-[#ccff00]" style="--iconify-stroke-width:1.5;"></iconify-icon>
+            <div>
+              <div class="text-white">FOCUS MODE</div>
+              <div class="text-white/35">25:00 READY</div>
+            </div>
+          </div>
+          <button id="focusButton" class="flex h-11 w-11 items-center justify-center rounded-full bg-white text-[#121212] transition hover:scale-105" aria-label="Start focus timer">
+            <iconify-icon id="focusIcon" icon="solar:play-linear" class="text-lg" style="--iconify-stroke-width:1.5;"></iconify-icon>
+          </button>
+        </div>
+
+        <div class="absolute bottom-[2%] right-[5%] hidden items-end gap-4 text-[#ccff00] md:flex">
+          <div class="text-right">
+            <div>PLAN ACCURACY</div>
+            <div class="mt-1 text-3xl font-medium tracking-tight">94.8%</div>
+          </div>
+          <div class="relative flex h-24 w-24 items-center justify-center rounded-full border border-[#ccff00]/40">
+            <div class="absolute h-full w-px rotate-45 bg-[#ccff00]/50"></div>
+            <div class="absolute h-px w-full -rotate-12 bg-[#ccff00]/50"></div>
+            <span class="h-3 w-3 rounded-full bg-[#ccff00] shadow-[0_0_20px_rgba(204,255,0,.8)]"></span>
+          </div>
+        </div>
+      </section>
+
+      <section id="features" class="mx-auto grid max-w-6xl gap-px overflow-hidden rounded-xl border border-white/15 bg-white/15 md:grid-cols-3">
+        <article class="bg-[#1739bc]/95 p-6">
+          <iconify-icon icon="solar:calendar-mark-linear" class="text-2xl text-[#ccff00]" style="--iconify-stroke-width:1.5;"></iconify-icon>
+          <h2 class="mt-5 text-base font-medium text-white">
+            PLAN AROUND REAL LIFE
+          </h2>
+          <p class="mt-3 leading-relaxed text-white/55">
+            Find Time balances meetings, energy, deadlines, breaks, and personal
+            goals without overbooking you.
+          </p>
+        </article>
+        <article class="bg-[#1739bc]/95 p-6">
+          <iconify-icon icon="solar:sort-by-time-linear" class="text-2xl text-[#ccff00]" style="--iconify-stroke-width:1.5;"></iconify-icon>
+          <h2 class="mt-5 text-base font-medium text-white">
+            PRIORITIES THAT ADAPT
+          </h2>
+          <p class="mt-3 leading-relaxed text-white/55">
+            When plans change, AI rearranges flexible tasks and keeps
+            high-impact work protected.
+          </p>
+        </article>
+        <article id="focus" class="bg-[#1739bc]/95 p-6">
+          <iconify-icon icon="solar:meditation-round-linear" class="text-2xl text-[#ccff00]" style="--iconify-stroke-width:1.5;"></iconify-icon>
+          <h2 class="mt-5 text-base font-medium text-white">
+            MAKE PROGRESS DAILY
+          </h2>
+          <p class="mt-3 leading-relaxed text-white/55">
+            Build consistent time for language learning, health, reading, or any
+            goal that usually gets postponed.
+          </p>
+        </article>
+      </section>
+    </main>
+
+    <div id="taskModal" class="fixed inset-0 z-[70] hidden items-center justify-center bg-[#121212]/70 p-5 backdrop-blur-sm">
+      <div class="w-full max-w-md rounded-xl border border-white/20 bg-[#f4f4f4] p-6 text-[#121212] shadow-2xl">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-[#121212]/45">NEW TIME BLOCK</div>
+            <h2 class="mt-1 text-xl font-medium tracking-tight">
+              What needs your time?
+            </h2>
+          </div>
+          <button id="closeModal" class="flex h-9 w-9 items-center justify-center rounded-full border border-[#121212]/15 transition hover:bg-[#121212]/5" aria-label="Close">
+            <iconify-icon icon="solar:close-circle-linear" class="text-xl" style="--iconify-stroke-width:1.5;"></iconify-icon>
+          </button>
+        </div>
+
+        <label class="mt-6 block">
+          <span class="text-[#121212]/50">TASK OR GOAL</span>
+          <input id="taskName" type="text" placeholder="e.g. Review French vocabulary" class="mt-2 w-full rounded-lg border border-[#121212]/15 bg-white px-4 py-3 outline-none transition focus:border-[#2047e6]">
+        </label>
+
+        <div class="mt-4 grid grid-cols-2 gap-3">
+          <button class="priorityOption rounded-lg border border-[#2047e6] bg-[#2047e6] p-3 text-left text-white" data-priority="High">
+            <span class="block">HIGH PRIORITY</span>
+            <span class="mt-1 block text-white/55">Protect this time</span>
+          </button>
+          <button class="priorityOption rounded-lg border border-[#121212]/15 bg-white p-3 text-left" data-priority="Flexible">
+            <span class="block">FLEXIBLE</span>
+            <span class="mt-1 block text-[#121212]/45">Move if needed</span>
+          </button>
+        </div>
+
+        <button id="saveTask" class="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-[#121212] py-3.5 font-medium text-white transition hover:bg-[#2047e6]">
+          <iconify-icon icon="solar:magic-stick-3-linear" class="text-lg text-[#ccff00]" style="--iconify-stroke-width:1.5;"></iconify-icon>
+          FIND THE BEST TIME
+        </button>
+      </div>
+    </div>
+
+    <div id="toast" class="fixed bottom-6 left-1/2 z-[80] flex -translate-x-1/2 translate-y-24 items-center gap-3 rounded-full border border-white/20 bg-[#121212] px-5 py-3 text-white opacity-0 shadow-2xl transition duration-500">
+      <iconify-icon icon="solar:check-circle-linear" class="text-lg text-[#ccff00]" style="--iconify-stroke-width:1.5;"></iconify-icon>
+      <span id="toastText">Your plan is ready.</span>
+    </div>
+
+    <script>
+      const marquee = document.getElementById('marquee');
+      let marqueeX = 0;
+
+      function animateMarquee() {
+        marqueeX -= 0.45;
+        if (Math.abs(marqueeX) >= marquee.scrollWidth / 2) marqueeX = 0;
+        marquee.style.transform = `translateX(${marqueeX}px)`;
+        requestAnimationFrame(animateMarquee);
+      }
+      animateMarquee();
+
+      const modal = document.getElementById('taskModal');
+      const taskName = document.getElementById('taskName');
+      const schedule = document.getElementById('schedule');
+      const toast = document.getElementById('toast');
+      const toastText = document.getElementById('toastText');
+      let selectedPriority = 'High';
+
+      function showToast(message) {
+        toastText.textContent = message;
+        toast.classList.remove('translate-y-24', 'opacity-0');
+        setTimeout(() => toast.classList.add('translate-y-24', 'opacity-0'), 2600);
+      }
+
+      function openModal() {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        setTimeout(() => taskName.focus(), 100);
+      }
+
+      function closeModal() {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+
+      document.getElementById('addTaskButton').addEventListener('click', openModal);
+      document.getElementById('openPlanner').addEventListener('click', openModal);
+      document.getElementById('heroPlanButton').addEventListener('click', openModal);
+      document.getElementById('closeModal').addEventListener('click', closeModal);
+
+      modal.addEventListener('click', event => {
+        if (event.target === modal) closeModal();
+      });
+
+      document.querySelectorAll('.priorityOption').forEach(button => {
+        button.addEventListener('click', () => {
+          selectedPriority = button.dataset.priority;
+          document.querySelectorAll('.priorityOption').forEach(option => {
+            option.className = 'priorityOption rounded-lg border border-[#121212]/15 bg-white p-3 text-left';
+            option.querySelector('span:last-child').className = 'mt-1 block text-[#121212]/45';
+          });
+          button.className = 'priorityOption rounded-lg border border-[#2047e6] bg-[#2047e6] p-3 text-left text-white';
+          button.querySelector('span:last-child').className = 'mt-1 block text-white/55';
+        });
+      });
+
+      document.getElementById('saveTask').addEventListener('click', () => {
+        const name = taskName.value.trim();
+        if (!name) {
+          taskName.focus();
+          return;
+        }
+
+        const item = document.createElement('button');
+        item.className = 'schedule-item flex w-full items-center gap-3 rounded-lg border border-[#ccff00]/30 bg-[#ccff00]/10 p-3 text-left opacity-0 transition duration-500 hover:translate-x-1 hover:border-[#ccff00]/60';
+        item.innerHTML = `
+          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#ccff00] text-[#121212]">
+            <iconify-icon icon="solar:target-linear" class="text-lg" style="--iconify-stroke-width:1.5;"></iconify-icon>
+          </span>
+          <span class="min-w-0 flex-1">
+            <span class="block font-medium text-white">${name.replace(/[<>]/g, '')}</span>
+            <span class="mt-1 block text-white/45">16:10–16:40 · ${selectedPriority} priority</span>
+          </span>
+          <span class="rounded-full bg-[#ccff00]/15 px-2 py-1 text-[#ccff00]">30M</span>
+        `;
+        schedule.appendChild(item);
+        requestAnimationFrame(() => item.classList.remove('opacity-0'));
+        taskName.value = '';
+        closeModal();
+        showToast('Time found at 16:10. No conflicts.');
+      });
+
+      document.getElementById('askAI').addEventListener('click', () => {
+        const prompt = document.getElementById('aiPrompt').value.trim();
+        const response = document.getElementById('aiResponse');
+        if (!prompt) return;
+
+        response.classList.add('opacity-40');
+        response.innerHTML = `
+          <div class="mb-2 flex items-center gap-2 font-medium text-[#121212]">
+            <iconify-icon icon="solar:stars-minimalistic-linear" class="text-lg animate-pulse" style="--iconify-stroke-width:1.5;"></iconify-icon>
+            ANALYZING CALENDAR
+          </div>
+          Checking priorities, energy, and flexible blocks…
+        `;
+
+        setTimeout(() => {
+          response.classList.remove('opacity-40');
+          response.innerHTML = `
+            <div class="mb-2 flex items-center gap-2 font-medium text-[#121212]">
+              <iconify-icon icon="solar:stars-minimalistic-linear" class="text-lg" style="--iconify-stroke-width:1.5;"></iconify-icon>
+              TIME FOUND
+            </div>
+            I reserved 16:10–16:40 and moved two flexible tasks into your admin batch. Your focus blocks remain protected.
+          `;
+          showToast('A conflict-free time was found.');
+        }, 1100);
+      });
+
+      document.getElementById('applyPlan').addEventListener('click', event => {
+        event.currentTarget.textContent = 'APPLIED ✓';
+        event.currentTarget.classList.add('bg-[#2047e6]');
+        showToast('Plan applied to your calendar.');
+      });
+
+      document.getElementById('regenerate').addEventListener('click', event => {
+        event.currentTarget.firstElementChild.animate(
+          [{ transform: 'rotate(0deg)' }, { transform: 'rotate(360deg)' }],
+          { duration: 650, easing: 'ease-in-out' }
+        );
+        document.getElementById('capacityBar').style.width = '72%';
+        showToast('Day optimized. 25 extra minutes found.');
+      });
+
+      document.getElementById('watchDemo').addEventListener('click', () => {
+        document.getElementById('planner').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        document.querySelectorAll('.schedule-item').forEach((item, index) => {
+          setTimeout(() => {
+            item.animate(
+              [
+                { transform: 'translateX(0)', backgroundColor: 'rgba(255,255,255,.06)' },
+                { transform: 'translateX(8px)', backgroundColor: 'rgba(204,255,0,.16)' },
+                { transform: 'translateX(0)' }
+              ],
+              { duration: 700, easing: 'ease-out' }
+            );
+          }, index * 180);
+        });
+      });
+
+      let focusActive = false;
+      let focusSeconds = 25 * 60;
+      let focusTimer;
+
+      document.getElementById('focusButton').addEventListener('click', () => {
+        focusActive = !focusActive;
+        const icon = document.getElementById('focusIcon');
+        const label = document.querySelector('#focusButton').previousElementSibling.querySelector('div:last-child');
+
+        icon.setAttribute('icon', focusActive ? 'solar:pause-linear' : 'solar:play-linear');
+
+        if (focusActive) {
+          focusTimer = setInterval(() => {
+            focusSeconds--;
+            const minutes = String(Math.floor(focusSeconds / 60)).padStart(2, '0');
+            const seconds = String(focusSeconds % 60).padStart(2, '0');
+            label.textContent = `${minutes}:${seconds} ACTIVE`;
+            if (focusSeconds <= 0) {
+              clearInterval(focusTimer);
+              focusActive = false;
+              showToast('Focus session complete.');
+            }
+          }, 1000);
+        } else {
+          clearInterval(focusTimer);
+          label.textContent = '25:00 READY';
+          focusSeconds = 25 * 60;
+        }
+      });
+
+      document.querySelectorAll('[data-drag]').forEach(element => {
+        let dragging = false;
+        let startX = 0;
+        let startY = 0;
+        let offsetX = 0;
+        let offsetY = 0;
+
+        element.addEventListener('pointerdown', event => {
+          dragging = true;
+          startX = event.clientX - offsetX;
+          startY = event.clientY - offsetY;
+          element.setPointerCapture(event.pointerId);
+        });
+
+        element.addEventListener('pointermove', event => {
+          if (!dragging) return;
+          offsetX = event.clientX - startX;
+          offsetY = event.clientY - startY;
+          element.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
+        });
+
+        element.addEventListener('pointerup', () => dragging = false);
+        element.addEventListener('pointercancel', () => dragging = false);
+      });
+
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') closeModal();
+        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+          event.preventDefault();
+          openModal();
+        }
+      });
+    </script>
+    <!-- End: Your time, organized -->
+  
+</body></html>

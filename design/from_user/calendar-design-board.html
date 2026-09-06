@@ -1,0 +1,1324 @@
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#2047e6">
+<title>Find time — Calendar design board</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
+
+<style>
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border-radius: 99px; }
+  html { scroll-behavior: smooth; }
+  .callout { position:absolute; z-index:30; display:flex; height:1.35rem; width:1.35rem; align-items:center; justify-content:center;
+             border-radius:99px; background:#ccff00; color:#121212; font-size:10px; font-weight:600;
+             box-shadow:0 0 0 3px rgba(18,18,18,.7), 0 0 14px rgba(204,255,0,.55); }
+  .board-scroll { overflow-x:auto; }
+  @keyframes ftpulse { 0%,100% { opacity: .35 } 50% { opacity: .8 } }
+  .skel { animation: ftpulse 1.4s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce){ html{scroll-behavior:auto} *{animation-duration:.001ms!important;transition-duration:.001ms!important} }
+</style>
+</head>
+
+<body class="min-h-screen overflow-x-hidden bg-[#2047e6] text-xs text-white antialiased selection:bg-[#ccff00] selection:text-[#121212]" style="font-family:'JetBrains Mono',monospace;background-image:radial-gradient(rgba(255,255,255,0.14) 1px,transparent 1px),linear-gradient(135deg,rgba(9,26,102,0.12),rgba(32,71,230,0.96));background-size:20px 20px,cover;">
+
+<div class="pointer-events-none fixed inset-0 z-0 opacity-70" style="background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.025) 0,rgba(255,255,255,.025) 1px,transparent 1px,transparent 9px);"></div>
+
+<div class="pointer-events-none fixed inset-3 z-0 border border-white/10 sm:inset-5 lg:inset-7">
+  <div class="absolute left-1/2 top-0 h-full w-px bg-white/5"></div>
+  <div class="absolute left-0 top-1/2 h-px w-full bg-white/5"></div>
+  <div class="absolute left-0 top-0 h-5 w-5 border-l-2 border-t-2 border-[#ccff00]"></div>
+  <div class="absolute right-0 top-0 h-5 w-5 border-r-2 border-t-2 border-[#ccff00]"></div>
+  <div class="absolute bottom-0 left-0 h-5 w-5 border-b-2 border-l-2 border-[#ccff00]"></div>
+  <div class="absolute bottom-0 right-0 h-5 w-5 border-b-2 border-r-2 border-[#ccff00]"></div>
+</div>
+
+<!-- marquee -->
+<div class="sticky top-0 z-50 overflow-hidden border-b border-white/10 bg-[#173abf]/90 py-2 backdrop-blur-xl">
+  <div id="marquee" class="flex w-max whitespace-nowrap uppercase tracking-[0.18rem] text-[#ccff00]/80">
+    <span class="pr-16">Calendar design board // 11 surfaces // web + mobile // month · week · day // sheets, popovers, states //</span>
+    <span class="pr-16">Calendar design board // 11 surfaces // web + mobile // month · week · day // sheets, popovers, states //</span>
+  </div>
+</div>
+
+<main class="relative z-10 mx-auto max-w-[1240px] px-4 pb-24 pt-10 sm:px-8">
+
+  <!-- ══════════ COVER ══════════ -->
+  <header class="mb-14">
+    <div class="mb-4 flex items-center gap-2 text-[#ccff00]">
+      <span class="h-2 w-2 rounded-full bg-[#ccff00] shadow-[0_0_16px_rgba(204,255,0,.8)]"></span>
+      <span class="uppercase tracking-[0.18rem]">Find time / calendar / v1 design board</span>
+    </div>
+    <h1 class="max-w-3xl text-4xl font-medium leading-none tracking-tight text-white sm:text-5xl">
+      The calendar,<br><span class="text-[#ccff00]">drawn out.</span>
+    </h1>
+    <p class="mt-6 max-w-xl text-sm leading-relaxed text-white/60">
+      Every calendar surface in the Find time design language — web and mobile, side by side, annotated.
+      Black panels on the blue grid, lime for now and for AI, hairline seams instead of borders.
+      The working version lives in <span class="text-[#ccff00]">calendar.html</span>.
+    </p>
+
+    <div class="mt-8 grid gap-px overflow-hidden rounded-xl border border-white/15 bg-white/15 sm:grid-cols-4">
+      <div class="bg-[#1739bc]/95 p-4">
+        <div class="text-white/45">Surface</div>
+        <div class="mt-3 flex items-center gap-2"><span class="h-4 w-4 rounded bg-[#121212] ring-1 ring-white/20"></span><span class="text-white">#121212</span></div>
+        <div class="mt-2 flex items-center gap-2"><span class="h-4 w-4 rounded bg-[#f4f4f4]"></span><span class="text-white">#f4f4f4</span></div>
+      </div>
+      <div class="bg-[#1739bc]/95 p-4">
+        <div class="text-white/45">Accent</div>
+        <div class="mt-3 flex items-center gap-2"><span class="h-4 w-4 rounded bg-[#ccff00]"></span><span class="text-white">#ccff00</span></div>
+        <div class="mt-2 flex items-center gap-2"><span class="h-4 w-4 rounded bg-[#ff4400]"></span><span class="text-white">#ff4400</span></div>
+      </div>
+      <div class="bg-[#1739bc]/95 p-4">
+        <div class="text-white/45">Categories</div>
+        <div class="mt-3 flex gap-1.5">
+          <span class="h-4 w-4 rounded-full bg-[#ccff00]"></span><span class="h-4 w-4 rounded-full bg-[#c8c8ff]"></span>
+          <span class="h-4 w-4 rounded-full bg-[#ffb39a]"></span><span class="h-4 w-4 rounded-full bg-[#ffd600]"></span>
+          <span class="h-4 w-4 rounded-full bg-[#ff7040]"></span>
+        </div>
+        <div class="mt-2 text-white/45">Deep · Design · Research · Meetings · Admin</div>
+      </div>
+      <div class="bg-[#1739bc]/95 p-4">
+        <div class="text-white/45">Rhythm</div>
+        <div class="mt-3 text-white">56px / hour</div>
+        <div class="mt-2 text-white/45">rounded-2xl cards · 1px seams · text-xs base</div>
+      </div>
+    </div>
+
+    <nav class="mt-8 flex flex-wrap gap-2" aria-label="Board contents">
+      <a href="#shell" class="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-white/60 transition hover:border-[#ccff00]/50 hover:text-white">00 · Shell</a>
+      <a href="#month" class="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-white/60 transition hover:border-[#ccff00]/50 hover:text-white">01 · Web month</a>
+      <a href="#week" class="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-white/60 transition hover:border-[#ccff00]/50 hover:text-white">02 · Web week</a>
+      <a href="#day" class="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-white/60 transition hover:border-[#ccff00]/50 hover:text-white">03 · Web day</a>
+      <a href="#detail" class="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-white/60 transition hover:border-[#ccff00]/50 hover:text-white">04 · Popover + modal</a>
+      <a href="#ai" class="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-white/60 transition hover:border-[#ccff00]/50 hover:text-white">05 · Find time flow</a>
+      <a href="#mmonth" class="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-white/60 transition hover:border-[#ccff00]/50 hover:text-white">06 · Mobile month</a>
+      <a href="#mweek" class="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-white/60 transition hover:border-[#ccff00]/50 hover:text-white">07 · Mobile week</a>
+      <a href="#mday" class="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-white/60 transition hover:border-[#ccff00]/50 hover:text-white">08 · Mobile day</a>
+      <a href="#sheets" class="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-white/60 transition hover:border-[#ccff00]/50 hover:text-white">09 · Sheets</a>
+      <a href="#states" class="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-white/60 transition hover:border-[#ccff00]/50 hover:text-white">10 · States</a>
+    </nav>
+  </header>
+
+  <!-- ══════════ 00 · SHELL ══════════ -->
+  <section id="shell" class="mb-16 scroll-mt-16">
+    <div class="mb-5 flex flex-wrap items-end justify-between gap-3 border-b border-white/10 pb-4">
+      <div>
+        <span class="uppercase tracking-[0.18rem] text-[#ccff00]">00 / The shell</span>
+        <h2 class="mt-2 text-2xl font-medium tracking-tight text-white">The calendar lives inside the dashboard, not beside it.</h2>
+        <p class="mt-2 max-w-2xl leading-relaxed text-white/50">
+          Same sidebar, same marquee, same telemetry column, same bottom nav. Only the centre surface changes between Today, Projects and Calendar — so switching views never feels like switching apps.
+        </p>
+      </div>
+      <span class="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-white/45">1440 × 900 reference</span>
+    </div>
+
+    <div class="board-scroll rounded-2xl border border-white/10 bg-[#0a1a5c]/40 p-3 backdrop-blur-md sm:p-5">
+      <div class="relative" style="min-width:1040px">
+        <!-- callouts -->
+        <span class="callout" style="left:6px;top:70px">1</span>
+        <span class="callout" style="left:186px;top:24px">2</span>
+        <span class="callout" style="left:212px;top:180px">3</span>
+        <span class="callout" style="left:640px;top:96px">4</span>
+        <span class="callout" style="left:1043px;top:393px">5</span>
+
+        <div class="overflow-hidden rounded-xl border border-white/15 shadow-2xl" style="background:#2047e6;background-image:radial-gradient(rgba(255,255,255,.14) 1px,transparent 1px);background-size:20px 20px">
+          <!-- marquee -->
+          <div class="overflow-hidden border-b border-white/10 bg-[#173abf]/90 py-1.5 text-center uppercase tracking-[0.18rem] text-[#ccff00]/80">
+            Calendar synced // 03 focus blocks protected this week // 06h 40m free on thursday //
+          </div>
+          <div class="flex" style="min-height:430px">
+            <!-- sidebar -->
+            <div class="w-[168px] shrink-0 border-r border-white/10 bg-[#173abf]/30 p-3">
+              <div class="mb-5 flex items-center gap-2">
+                <span class="flex h-7 w-7 items-center justify-center rounded-lg bg-[#ccff00] text-[10px] font-semibold text-[#121212]">FT</span>
+                <span class="text-white">Find time</span>
+              </div>
+              <div class="space-y-1">
+                <div class="flex items-center gap-2 rounded-lg px-2 py-2 text-white/45"><iconify-icon icon="solar:sun-2-linear" class="text-base"></iconify-icon>Today</div>
+                <div class="flex items-center gap-2 rounded-lg px-2 py-2 text-white/45"><iconify-icon icon="solar:folder-with-files-linear" class="text-base"></iconify-icon>Projects</div>
+                <div class="flex items-center gap-2 rounded-lg bg-white/10 px-2 py-2 text-white ring-1 ring-white/10"><iconify-icon icon="solar:calendar-minimalistic-linear" class="text-base text-[#ccff00]"></iconify-icon>Calendar</div>
+                <div class="flex items-center gap-2 rounded-lg px-2 py-2 text-white/45"><iconify-icon icon="solar:magic-stick-3-linear" class="text-base"></iconify-icon>AI sessions</div>
+              </div>
+              <div class="mt-4 rounded-lg border border-white/10 bg-[#121212]/70 p-2">
+                <div class="mb-2 flex items-center justify-between text-[10px] uppercase tracking-widest text-white/50">Sep 2026 <span class="text-white/30">‹ ›</span></div>
+                <div class="grid grid-cols-7 gap-y-0.5 text-center text-[9px] text-white/25">
+                  <span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span>
+                </div>
+                <div class="mt-1 grid grid-cols-7 gap-y-0.5 text-center text-[9px] text-white/55">
+                  <span class="text-white/20">31</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span>
+                  <span>7</span><span>8</span><span class="rounded bg-[#ccff00] text-[#121212]">9</span><span>10</span><span>11</span><span>12</span><span>13</span>
+                  <span>14</span><span>15</span><span>16</span><span>17</span><span>18</span><span>19</span><span>20</span>
+                </div>
+              </div>
+              <div class="mt-4 space-y-1.5 text-[10px] text-white/60">
+                <div class="uppercase tracking-widest text-white/35">Calendars</div>
+                <div class="flex items-center gap-2"><span class="h-1.5 w-1.5 rounded-full bg-[#ccff00]"></span>Deep work</div>
+                <div class="flex items-center gap-2"><span class="h-1.5 w-1.5 rounded-full bg-[#c8c8ff]"></span>Design</div>
+                <div class="flex items-center gap-2"><span class="h-1.5 w-1.5 rounded-full bg-[#ffb39a]"></span>Research</div>
+                <div class="flex items-center gap-2"><span class="h-1.5 w-1.5 rounded-full bg-[#ffd600]"></span>Meetings</div>
+                <div class="flex items-center gap-2"><span class="h-1.5 w-1.5 rounded-full bg-[#ff7040]"></span>Admin</div>
+              </div>
+            </div>
+            <!-- telemetry -->
+            <div class="flex w-[64px] shrink-0 flex-col justify-between border-r border-white/10 py-4 text-center text-[9px] uppercase text-white/30">
+              <span>DAY.252</span><span>WK.37</span><span>CAP.08H</span><span>FOC.04</span>
+              <span>UTC.14:22</span><span>ENERGY.78</span><span>CONF.01</span><span>STATUS.OPEN</span>
+            </div>
+            <!-- main -->
+            <div class="min-w-0 flex-1">
+              <div class="flex h-11 items-center justify-between border-b border-white/10 bg-[#2047e6]/80 px-4 text-white/45">
+                <span>Workspace / <span class="text-white">Calendar</span></span>
+                <div class="flex items-center gap-2">
+                  <span class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5">Search ⌘K</span>
+                  <span class="rounded-lg bg-[#ccff00] px-3 py-1.5 text-[#121212]">Plan with AI</span>
+                </div>
+              </div>
+              <div class="p-4">
+                <div class="flex items-end justify-between">
+                  <div>
+                    <div class="flex items-center gap-2 text-[#ccff00]"><span class="h-1.5 w-1.5 rounded-full bg-[#ccff00] shadow-[0_0_12px_#ccff00]"></span><span class="uppercase tracking-[0.16rem]">Week 37 · 25 events · 1 conflict</span></div>
+                    <div class="mt-1 text-xl font-medium tracking-tight text-white">September 2026</div>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-white/60">‹ Today ›</span>
+                    <span class="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 p-1">
+                      <span class="rounded bg-[#ccff00] px-2 py-1 text-[#121212]">Month</span>
+                      <span class="px-2 py-1 text-white/50">Week</span><span class="px-2 py-1 text-white/50">Day</span>
+                    </span>
+                    <span class="rounded-lg bg-[#ccff00] px-3 py-2 text-[#121212]">Find time</span>
+                  </div>
+                </div>
+                <div class="mt-4 overflow-hidden rounded-xl border border-white/10">
+                  <div class="grid grid-cols-7 gap-px bg-white/10">
+                    <div class="bg-[#0e0e0e] py-1.5 text-center text-[9px] uppercase tracking-widest text-white/40">Mon</div>
+                    <div class="bg-[#0e0e0e] py-1.5 text-center text-[9px] uppercase tracking-widest text-white/40">Tue</div>
+                    <div class="bg-[#0e0e0e] py-1.5 text-center text-[9px] uppercase tracking-widest text-[#ccff00]">Wed</div>
+                    <div class="bg-[#0e0e0e] py-1.5 text-center text-[9px] uppercase tracking-widest text-white/40">Thu</div>
+                    <div class="bg-[#0e0e0e] py-1.5 text-center text-[9px] uppercase tracking-widest text-white/40">Fri</div>
+                    <div class="bg-[#0e0e0e] py-1.5 text-center text-[9px] uppercase tracking-widest text-white/40">Sat</div>
+                    <div class="bg-[#0e0e0e] py-1.5 text-center text-[9px] uppercase tracking-widest text-white/40">Sun</div>
+                  </div>
+                  <div class="grid grid-cols-7 gap-px bg-white/10 text-[9px]">
+                    <div class="h-[86px] bg-[#121212] p-1.5 text-white/55">7<div class="mt-1 truncate rounded bg-white/[0.06] px-1 py-0.5 text-white/80">Onboarding flow</div><div class="mt-0.5 truncate rounded bg-white/[0.06] px-1 py-0.5 text-white/80">Standup</div></div>
+                    <div class="h-[86px] bg-[#121212] p-1.5 text-white/55">8<div class="mt-1 truncate rounded bg-white/[0.06] px-1 py-0.5 text-white/80">Deep work</div><div class="mt-0.5 truncate rounded border border-dashed border-white/15 px-1 py-0.5 text-white/35">Lunch</div></div>
+                    <div class="h-[86px] bg-[#121212] p-1.5"><span class="rounded bg-[#ccff00] px-1 text-[#121212]">9</span><div class="mt-1 truncate rounded bg-white/[0.06] px-1 py-0.5 text-white/80">Onboarding flow</div><div class="mt-0.5 truncate rounded bg-white/[0.06] px-1 py-0.5 text-white/80 ring-1 ring-[#ff4400]/70">Team sync</div></div>
+                    <div class="h-[86px] bg-[#121212] p-1.5 text-white/55">10<div class="mt-1 truncate rounded bg-white/[0.06] px-1 py-0.5 text-white/80">Standup</div><div class="mt-0.5 truncate rounded bg-white/[0.06] px-1 py-0.5 text-white/80">Stakeholders</div></div>
+                    <div class="h-[86px] bg-[#121212] p-1.5 text-white/55">11<div class="mt-1 truncate rounded bg-white/[0.06] px-1 py-0.5 text-white/80">Design audit</div><div class="mt-0.5 truncate rounded border border-dashed border-[#ccff00]/50 bg-[#ccff00]/10 px-1 py-0.5 text-[#ccff00]">Focus window</div></div>
+                    <div class="h-[86px] bg-[#121212] p-1.5 text-white/55">12<div class="mt-1 truncate rounded bg-white/[0.06] px-1 py-0.5 text-white/80">Case study</div></div>
+                    <div class="h-[86px] bg-[#121212] p-1.5 text-white/55">13</div>
+
+                    <div class="h-[86px] bg-[#121212] p-1.5 text-white/55">14<div class="mt-1 truncate rounded bg-white/[0.06] px-1 py-0.5 text-white/80">Spec review</div><div class="mt-0.5 truncate rounded bg-white/[0.06] px-1 py-0.5 text-white/80">Standup</div></div>
+                    <div class="h-[86px] bg-[#121212] p-1.5 text-white/55">15<div class="mt-1 truncate rounded bg-white/[0.06] px-1 py-0.5 text-white/80">Go / no-go</div><div class="mt-0.5 truncate rounded bg-white/[0.06] px-1 py-0.5 text-white/80">Usability test</div></div>
+                    <div class="h-[86px] bg-[#121212] p-1.5 text-white/55">16<div class="mt-1 truncate rounded bg-white/[0.06] px-1 py-0.5 text-white/80">Activation metrics</div><div class="mt-0.5 truncate rounded bg-white/[0.06] px-1 py-0.5 text-white/80">Product team sync</div></div>
+                    <div class="h-[86px] bg-[#121212] p-1.5 text-white/55">17<div class="mt-1 truncate rounded bg-white/[0.06] px-1 py-0.5 text-white/80">Press kit copy</div></div>
+                    <div class="h-[86px] bg-[#121212] p-1.5 text-white/55">18<div class="mt-1 truncate rounded bg-white/[0.06] px-1 py-0.5 text-white/80">Sprint retro</div><div class="mt-0.5 truncate rounded border border-dashed border-white/15 px-1 py-0.5 text-white/35">Team lunch</div></div>
+                    <div class="h-[86px] bg-[#121212] p-1.5 text-white/55">19</div>
+                    <div class="h-[86px] bg-[#121212] p-1.5 text-white/55">20</div>
+
+                    <div class="h-[86px] bg-[#121212] p-1.5 text-white/55">21<div class="mt-1 truncate rounded bg-white/[0.06] px-1 py-0.5 text-white/80">Mobile beta ships</div></div>
+                    <div class="h-[86px] bg-[#121212] p-1.5 text-white/55">22</div>
+                    <div class="h-[86px] bg-[#121212] p-1.5 text-white/55">23<div class="mt-1 truncate rounded bg-white/[0.06] px-1 py-0.5 text-white/80">Product team sync</div></div>
+                    <div class="h-[86px] bg-[#121212] p-1.5 text-white/55">24<div class="mt-1 truncate rounded bg-white/[0.06] px-1 py-0.5 text-white/80">Investor update</div></div>
+                    <div class="h-[86px] bg-[#121212] p-1.5 text-white/55">25<div class="mt-1 truncate rounded bg-white/[0.06] px-1 py-0.5 text-white/80">Weekly review</div></div>
+                    <div class="h-[86px] bg-[#121212] p-1.5 text-white/55">26</div>
+                    <div class="h-[86px] bg-[#121212] p-1.5 text-white/55">27</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <ol class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">1</span><span class="text-white/60"><b class="text-white">Sidebar, unchanged.</b> Same nav as the dashboard, with a mini-month and a per-category calendar list added below it. Category colours here are the same dots used on every chip.</span></li>
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">2</span><span class="text-white/60"><b class="text-white">Marquee stays.</b> Its copy becomes calendar telemetry — protected blocks, free hours, sync state — so the ticker carries real information rather than slogans.</span></li>
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">3</span><span class="text-white/60"><b class="text-white">Telemetry column (xl+ only).</b> DAY.252 / WK.37 / CONF.01 — the landing page's engineering readout, now bound to the visible period. First thing dropped below 1280px.</span></li>
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">4</span><span class="text-white/60"><b class="text-white">One toolbar, three controls.</b> ‹ Today › for time, a segmented control for grain, one lime CTA for AI. Nothing else competes for the accent colour.</span></li>
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">5</span><span class="text-white/60"><b class="text-white">The black surface.</b> Every calendar grid is a <span class="text-[#ccff00]">#121212</span> card floating on the blue canvas, so dense data never sits directly on the pattern.</span></li>
+    </ol>
+  </section>
+
+  <!-- ══════════ 01 · WEB MONTH ══════════ -->
+  <section id="month" class="mb-16 scroll-mt-16">
+    <div class="mb-5 flex flex-wrap items-end justify-between gap-3 border-b border-white/10 pb-4">
+      <div>
+        <span class="uppercase tracking-[0.18rem] text-[#ccff00]">01 / Web · month</span>
+        <h2 class="mt-2 text-2xl font-medium tracking-tight text-white">The hero view. Tiles with hairline seams, not a table with borders.</h2>
+        <p class="mt-2 max-w-2xl leading-relaxed text-white/50">
+          A <span class="text-[#ccff00]">grid gap-px</span> on a <span class="text-[#ccff00]">bg-white/10</span> parent: the gaps are the grid lines. Each tile is its own black panel that lifts on hover — the landing page's tile language applied to dates.
+        </p>
+      </div>
+    </div>
+
+    <div class="board-scroll rounded-2xl border border-white/10 bg-[#0a1a5c]/40 p-3 backdrop-blur-md sm:p-5">
+      <div class="relative" style="min-width:960px">
+        <span class="callout" style="left:104px;top:1px">1</span>
+        <span class="callout" style="left:232px;top:62px">2</span>
+        <span class="callout" style="left:716px;top:232px">3</span>
+        <span class="callout" style="left:344px;top:152px">4</span>
+        <span class="callout" style="left:-4px;top:152px">5</span>
+        <span class="callout" style="left:110px;top:258px">6</span>
+
+        <div class="overflow-hidden rounded-2xl border border-white/10 shadow-2xl">
+          <div class="grid gap-px bg-white/10" style="grid-template-columns:2.25rem repeat(7,minmax(0,1fr))">
+            <div class="bg-[#0e0e0e] py-2.5 text-center text-[10px] uppercase tracking-widest text-white/25">Wk</div>
+            <div class="bg-[#0e0e0e] py-2.5 text-center uppercase tracking-[0.16rem] text-white/40">Mon</div>
+            <div class="bg-[#0e0e0e] py-2.5 text-center uppercase tracking-[0.16rem] text-white/40">Tue</div>
+            <div class="bg-[#0e0e0e] py-2.5 text-center uppercase tracking-[0.16rem] text-white/40">Wed</div>
+            <div class="bg-[#0e0e0e] py-2.5 text-center uppercase tracking-[0.16rem] text-white/40">Thu</div>
+            <div class="bg-[#0e0e0e] py-2.5 text-center uppercase tracking-[0.16rem] text-white/40">Fri</div>
+            <div class="bg-[#0e0e0e] py-2.5 text-center uppercase tracking-[0.16rem] text-white/40">Sat</div>
+            <div class="bg-[#0e0e0e] py-2.5 text-center uppercase tracking-[0.16rem] text-white/40">Sun</div>
+          </div>
+          <div class="grid gap-px bg-white/10" style="grid-template-columns:2.25rem repeat(7,minmax(0,1fr))">
+            <!-- week 36 -->
+            <div class="flex items-start justify-center bg-[#0e0e0e] pt-3 text-[10px] text-white/20">36</div>
+            <div class="min-h-[7rem] bg-[#0d0d0d] p-2"><span class="text-white/20">31</span>
+              <div class="mt-1.5 flex items-center gap-1.5 rounded-md bg-white/[0.06] px-1.5 py-1"><span class="h-1.5 w-1.5 rounded-full bg-[#ffd600]"></span><span class="truncate text-white/85">Quarter kickoff</span></div></div>
+            <div class="min-h-[7rem] bg-[#121212] p-2"><span class="text-white/55">1</span>
+              <div class="mt-1.5 flex items-center gap-1.5 rounded-md bg-white/[0.06] px-1.5 py-1"><span class="h-1.5 w-1.5 rounded-full bg-[#ffd600]"></span><span class="truncate text-white/85">Sprint planning</span></div>
+              <div class="mt-1 flex items-center gap-1.5 rounded-md bg-white/[0.06] px-1.5 py-1"><span class="h-1.5 w-1.5 rounded-full bg-[#ffb39a]"></span><span class="truncate text-white/85">Persona workshop</span></div></div>
+            <div class="min-h-[7rem] bg-[#121212] p-2"><span class="text-white/55">2</span>
+              <div class="mt-1.5 flex items-center gap-1.5 rounded-md bg-white/[0.06] px-1.5 py-1"><span class="h-1.5 w-1.5 rounded-full bg-[#ffd600]"></span><span class="truncate text-white/85">Product team sync</span></div>
+              <div class="mt-1 flex items-center gap-1.5 rounded-md bg-white/[0.06] px-1.5 py-1"><span class="h-1.5 w-1.5 rounded-full bg-[#c8c8ff]"></span><span class="truncate text-white/85">Wireframe pass</span></div></div>
+            <div class="min-h-[7rem] bg-[#121212] p-2"><span class="text-white/55">3</span>
+              <div class="mt-1.5 flex items-center gap-1.5 rounded-md bg-white/[0.06] px-1.5 py-1"><span class="h-1.5 w-1.5 rounded-full bg-[#ccff00]"></span><span class="truncate text-white/85">Pricing model</span><iconify-icon icon="solar:shield-check-linear" class="shrink-0 text-[11px] text-[#ccff00]"></iconify-icon></div></div>
+            <div class="min-h-[7rem] bg-[#121212] p-2"><span class="text-white/55">4</span>
+              <div class="mt-1.5 flex items-center gap-1.5 rounded-md bg-white/[0.06] px-1.5 py-1"><span class="h-1.5 w-1.5 rounded-full bg-[#c8c8ff]"></span><span class="truncate text-white/85">Design review</span></div></div>
+            <div class="min-h-[7rem] bg-[#121212] p-2"><span class="text-white/55">5</span></div>
+            <div class="min-h-[7rem] bg-[#121212] p-2"><span class="text-white/55">6</span></div>
+
+            <!-- week 37 -->
+            <div class="flex items-start justify-center bg-[#0e0e0e] pt-3 text-[10px] text-white/20">37</div>
+            <div class="min-h-[7rem] bg-[#121212] p-2"><span class="text-white/55">7</span>
+              <div class="mt-1.5 flex items-center gap-1.5 rounded-md bg-white/[0.06] px-1.5 py-1"><span class="h-1.5 w-1.5 rounded-full bg-[#ccff00]"></span><span class="truncate text-white/85">Onboarding flow</span><iconify-icon icon="solar:shield-check-linear" class="shrink-0 text-[11px] text-[#ccff00]"></iconify-icon></div>
+              <div class="mt-1 flex items-center gap-1.5 rounded-md bg-white/[0.06] px-1.5 py-1"><span class="h-1.5 w-1.5 rounded-full bg-[#ffd600]"></span><span class="truncate text-white/85">Standup</span></div>
+              <div class="mt-1 flex items-center gap-1.5 rounded-md bg-white/[0.06] px-1.5 py-1"><span class="h-1.5 w-1.5 rounded-full bg-[#c8c8ff]"></span><span class="truncate text-white/85">Empty states</span></div>
+              <div class="mt-1 px-1.5 text-white/40">+1 more</div></div>
+            <div class="min-h-[7rem] bg-[#121212] p-2"><span class="text-white/55">8</span>
+              <div class="mt-1.5 flex items-center gap-1.5 rounded-md bg-white/[0.06] px-1.5 py-1"><span class="h-1.5 w-1.5 rounded-full bg-[#ff7040]"></span><span class="truncate text-white/85">Inbox + triage</span></div>
+              <div class="mt-1 flex items-center gap-1.5 rounded-md bg-white/[0.06] px-1.5 py-1"><span class="h-1.5 w-1.5 rounded-full bg-[#ccff00]"></span><span class="truncate text-white/85">Activation metrics</span></div>
+              <div class="mt-1 flex items-center gap-1.5 rounded-md border border-dashed border-white/15 px-1.5 py-1 text-white/35"><iconify-icon icon="solar:cup-hot-linear" class="text-[11px]"></iconify-icon><span class="truncate">Lunch and reset</span></div>
+              <div class="mt-1 px-1.5 text-white/40">+3 more</div></div>
+            <div class="min-h-[7rem] bg-[#121212] p-2 ring-1 ring-inset ring-white/10">
+              <span class="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-md bg-[#ccff00] px-1 font-medium text-[#121212] shadow-[0_0_16px_rgba(204,255,0,.55)]">9</span>
+              <div class="mt-1.5 flex items-center gap-1.5 rounded-md bg-white/[0.06] px-1.5 py-1"><span class="h-1.5 w-1.5 rounded-full bg-[#ccff00]"></span><span class="truncate text-white/85">Onboarding flow</span><iconify-icon icon="solar:shield-check-linear" class="shrink-0 text-[11px] text-[#ccff00]"></iconify-icon></div>
+              <div class="mt-1 flex items-center gap-1.5 rounded-md bg-white/[0.06] px-1.5 py-1 ring-1 ring-[#ff4400]/70"><span class="h-1.5 w-1.5 rounded-full bg-[#ffd600]"></span><span class="truncate text-white/85">Product team sync</span></div>
+              <div class="mt-1 flex items-center gap-1.5 rounded-md bg-white/[0.06] px-1.5 py-1 ring-1 ring-[#ff4400]/70"><span class="h-1.5 w-1.5 rounded-full bg-[#ffd600]"></span><span class="truncate text-white/85">Roadmap review</span></div>
+              <div class="mt-1 px-1.5 text-white/40">+3 more</div></div>
+            <div class="min-h-[7rem] bg-[#121212] p-2"><span class="text-white/55">10</span>
+              <div class="mt-1.5 flex items-center gap-1.5 rounded-md bg-white/[0.06] px-1.5 py-1"><span class="h-1.5 w-1.5 rounded-full bg-[#ffd600]"></span><span class="truncate text-white/85">Standup</span></div>
+              <div class="mt-1 flex items-center gap-1.5 rounded-md bg-white/[0.06] px-1.5 py-1"><span class="h-1.5 w-1.5 rounded-full bg-[#ffd600]"></span><span class="truncate text-white/85">Stakeholder review</span></div>
+              <div class="mt-1 flex items-center gap-1.5 rounded-md bg-white/[0.06] px-1.5 py-1"><span class="h-1.5 w-1.5 rounded-full bg-[#ff7040]"></span><span class="truncate text-white/85">Launch checklist</span></div>
+              <div class="mt-1 px-1.5 text-white/40">+1 more</div></div>
+            <div class="min-h-[7rem] bg-[#121212] p-2"><span class="text-white/55">11</span>
+              <div class="mt-1.5 flex items-center gap-1.5 rounded-md bg-white/[0.06] px-1.5 py-1"><span class="h-1.5 w-1.5 rounded-full bg-[#ffd600]"></span><span class="truncate text-white/85">Standup</span></div>
+              <div class="mt-1 flex items-center gap-1.5 rounded-md bg-white/[0.06] px-1.5 py-1"><span class="h-1.5 w-1.5 rounded-full bg-[#c8c8ff]"></span><span class="truncate text-white/85">Design audit</span></div>
+              <div class="mt-1 flex items-center gap-1.5 rounded-md border border-dashed border-[#ccff00]/50 bg-[#ccff00]/10 px-1.5 py-1 text-[#ccff00]"><iconify-icon icon="solar:magic-stick-3-linear" class="text-[11px]"></iconify-icon><span class="truncate">Focus window</span></div></div>
+            <div class="min-h-[7rem] bg-[#121212] p-2"><span class="text-white/55">12</span>
+              <div class="mt-1.5 flex items-center gap-1.5 rounded-md bg-white/[0.06] px-1.5 py-1"><span class="h-1.5 w-1.5 rounded-full bg-[#ff7040]"></span><span class="truncate text-white/85">Launch case study</span></div></div>
+            <div class="min-h-[7rem] bg-[#121212] p-2"><span class="text-white/55">13</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <ol class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">1</span><span class="text-white/60"><b class="text-white">Weekday header on #0e0e0e.</b> One step darker than the tiles so the header row separates without a border. Uppercase, tracking-[0.16rem].</span></li>
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">2</span><span class="text-white/60"><b class="text-white">Event chip.</b> Category dot + truncated title + time. Never a filled colour block — colour is a 6px dot, so ten chips in a column still read as text.</span></li>
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">3</span><span class="text-white/60"><b class="text-white">AI window.</b> Dashed lime border, lime text, magic-stick icon. Dashed = not yet real. This is the only place a whole chip goes lime.</span></li>
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">4</span><span class="text-white/60"><b class="text-white">Today = lime chip with glow.</b> <span class="text-[#ccff00]">shadow-[0_0_16px_rgba(204,255,0,.55)]</span>, the same glow as the landing page's status dot. Other-month tiles drop to #0d0d0d with white/20 numerals.</span></li>
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">5</span><span class="text-white/60"><b class="text-white">Week-number gutter.</b> 2.25rem of #0e0e0e carrying the ISO week — the mono telemetry habit, useful for a team that plans in sprints.</span></li>
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">6</span><span class="text-white/60"><b class="text-white">Overflow, not compression.</b> Three chips maximum, then "+N more" pinned to the bottom of the tile. Clicking it opens that day rather than growing the row.</span></li>
+    </ol>
+  </section>
+
+  <!-- ══════════ 02 · WEB WEEK ══════════ -->
+  <section id="week" class="mb-16 scroll-mt-16">
+    <div class="mb-5 flex flex-wrap items-end justify-between gap-3 border-b border-white/10 pb-4">
+      <div>
+        <span class="uppercase tracking-[0.18rem] text-[#ccff00]">02 / Web · week</span>
+        <h2 class="mt-2 text-2xl font-medium tracking-tight text-white">Where the day actually has a shape.</h2>
+        <p class="mt-2 max-w-2xl leading-relaxed text-white/50">
+          07:00–21:00 at 56px per hour. Hour lines are a repeating gradient, not elements. Blocks are tinted 16% in their category colour with a 2px solid spine — legible on black, and colour-coded without shouting.
+        </p>
+      </div>
+    </div>
+
+    <div class="board-scroll rounded-2xl border border-white/10 bg-[#0a1a5c]/40 p-3 backdrop-blur-md sm:p-5">
+      <div class="relative" style="min-width:960px">
+        <span class="callout" style="left:-4px;top:160px">1</span>
+        <span class="callout" style="left:56px;top:74px">2</span>
+        <span class="callout" style="left:364px;top:278px">3</span>
+        <span class="callout" style="left:274px;top:335px">4</span>
+        <span class="callout" style="left:404px;top:451px">5</span>
+        <span class="callout" style="left:984px;top:348px">6</span>
+
+        <div class="overflow-hidden rounded-2xl border border-white/10 shadow-2xl">
+          <div class="grid gap-px bg-white/10" style="grid-template-columns:4rem repeat(7,minmax(0,1fr))">
+            <div class="flex items-end justify-end bg-[#0e0e0e] p-2 text-[10px] uppercase tracking-widest text-white/25">W37</div>
+            <div class="flex flex-col items-center gap-1 bg-[#0e0e0e] py-2.5"><span class="uppercase tracking-[0.16rem] text-white/40">Mon</span><span class="text-sm text-white/70">7</span></div>
+            <div class="flex flex-col items-center gap-1 bg-[#0e0e0e] py-2.5"><span class="uppercase tracking-[0.16rem] text-white/40">Tue</span><span class="text-sm text-white/70">8</span></div>
+            <div class="flex flex-col items-center gap-1 bg-[#0e0e0e] py-2.5"><span class="uppercase tracking-[0.16rem] text-[#ccff00]">Wed</span><span class="flex h-7 min-w-[1.75rem] items-center justify-center rounded-md bg-[#ccff00] px-1 text-sm font-medium text-[#121212] shadow-[0_0_16px_rgba(204,255,0,.55)]">9</span></div>
+            <div class="flex flex-col items-center gap-1 bg-[#0e0e0e] py-2.5"><span class="uppercase tracking-[0.16rem] text-white/40">Thu</span><span class="text-sm text-white/70">10</span></div>
+            <div class="flex flex-col items-center gap-1 bg-[#0e0e0e] py-2.5"><span class="uppercase tracking-[0.16rem] text-white/40">Fri</span><span class="text-sm text-white/70">11</span></div>
+            <div class="flex flex-col items-center gap-1 bg-[#0e0e0e] py-2.5"><span class="uppercase tracking-[0.16rem] text-white/40">Sat</span><span class="text-sm text-white/70">12</span></div>
+            <div class="flex flex-col items-center gap-1 bg-[#0e0e0e] py-2.5"><span class="uppercase tracking-[0.16rem] text-white/40">Sun</span><span class="text-sm text-white/70">13</span></div>
+          </div>
+          <div class="grid gap-px bg-white/10" style="grid-template-columns:4rem repeat(7,minmax(0,1fr))">
+            <div class="flex items-center justify-end bg-[#0e0e0e] px-2 text-[10px] uppercase tracking-widest text-white/25">All day</div>
+            <div class="min-h-[2.25rem] bg-[#121212] p-1"><span class="block truncate rounded bg-[#c8c8ff]/20 px-1.5 py-1 text-[#c8c8ff]">Sprint 14 · week 1 of 2</span></div>
+            <div class="min-h-[2.25rem] bg-[#121212]"></div>
+            <div class="min-h-[2.25rem] bg-[#121212]"></div>
+            <div class="min-h-[2.25rem] bg-[#121212]"></div>
+            <div class="min-h-[2.25rem] bg-[#121212] p-1"><span class="block truncate rounded bg-[#ff7040]/20 px-1.5 py-1 text-[#ffb39a]">Beta cut-off</span></div>
+            <div class="min-h-[2.25rem] bg-[#121212]"></div>
+            <div class="min-h-[2.25rem] bg-[#121212]"></div>
+          </div>
+          <div class="grid gap-px bg-white/10" style="grid-template-columns:4rem repeat(7,minmax(0,1fr))">
+            <div class="bg-[#0e0e0e] pt-2" style="height:392px">
+              <div class="relative h-[56px] text-right text-white/25"><span class="absolute right-2 -top-1.5">08:00</span></div>
+              <div class="relative h-[56px] text-right text-white/25"><span class="absolute right-2 -top-1.5">09:00</span></div>
+              <div class="relative h-[56px] text-right text-white/25"><span class="absolute right-2 -top-1.5">10:00</span></div>
+              <div class="relative h-[56px] text-right text-white/25"><span class="absolute right-2 -top-1.5">11:00</span></div>
+              <div class="relative h-[56px] text-right text-white/25"><span class="absolute right-2 -top-1.5">12:00</span></div>
+              <div class="relative h-[56px] text-right text-white/25"><span class="absolute right-2 -top-1.5">13:00</span></div>
+              <div class="relative h-[56px] text-right text-white/25"><span class="absolute right-2 -top-1.5">14:00</span></div>
+            </div>
+            <!-- MON -->
+            <div class="relative bg-[#121212]" style="height:392px;background-image:repeating-linear-gradient(to bottom,rgba(255,255,255,.09) 0 1px,transparent 1px 56px),repeating-linear-gradient(to bottom,transparent 0 28px,rgba(255,255,255,.035) 28px 29px,transparent 29px 56px)">
+              <div class="absolute overflow-hidden rounded-lg border border-white/10 p-2 ring-1 ring-[#ccff00]/40" style="top:56px;height:82px;left:2px;right:2px;background:rgba(204,255,0,.16);border-left:2px solid #ccff00">
+                <span class="flex items-start gap-1"><span class="min-w-0 flex-1 truncate font-medium text-white">Onboarding flow</span><iconify-icon icon="solar:shield-check-linear" class="shrink-0 text-sm text-[#ccff00]"></iconify-icon></span>
+                <span class="mt-1 block truncate text-white/45">09:00–10:30 · Mobile launch</span></div>
+              <div class="absolute overflow-hidden rounded-lg border border-white/10 p-2" style="top:168px;height:26px;left:2px;right:2px;background:rgba(255,214,0,.16);border-left:2px solid #ffd600"><span class="truncate font-medium text-white">Standup</span></div>
+              <div class="absolute overflow-hidden rounded-lg border border-white/10 p-2" style="top:336px;height:54px;left:2px;right:2px;background:rgba(200,200,255,.16);border-left:2px solid #c8c8ff"><span class="truncate font-medium text-white">Empty states</span><span class="mt-1 block truncate text-white/45">13:00–14:00</span></div>
+            </div>
+            <!-- TUE -->
+            <div class="relative bg-[#121212]" style="height:392px;background-image:repeating-linear-gradient(to bottom,rgba(255,255,255,.09) 0 1px,transparent 1px 56px),repeating-linear-gradient(to bottom,transparent 0 28px,rgba(255,255,255,.035) 28px 29px,transparent 29px 56px)">
+              <div class="absolute overflow-hidden rounded-lg border border-white/10 p-2" style="top:0px;height:26px;left:2px;right:2px;background:rgba(255,112,64,.16);border-left:2px solid #ff7040"><span class="truncate font-medium text-white">Inbox + triage</span></div>
+              <div class="absolute overflow-hidden rounded-lg border border-white/10 p-2 ring-1 ring-[#ccff00]/40" style="top:84px;height:110px;left:2px;right:2px;background:rgba(204,255,0,.16);border-left:2px solid #ccff00">
+                <span class="flex items-start gap-1"><span class="min-w-0 flex-1 truncate font-medium text-white">Activation metrics</span><iconify-icon icon="solar:shield-check-linear" class="shrink-0 text-sm text-[#ccff00]"></iconify-icon></span>
+                <span class="mt-1 block truncate text-white/45">09:30–11:30 · protected</span></div>
+              <div class="absolute overflow-hidden rounded-lg border border-dashed border-white/15 bg-white/[0.03] p-2 text-white/40" style="top:224px;height:40px;left:2px;right:2px"><span class="flex items-center gap-1.5"><iconify-icon icon="solar:cup-hot-linear" class="text-sm"></iconify-icon><span class="truncate">Lunch and reset</span></span></div>
+            </div>
+            <!-- WED (today, conflict) -->
+            <div class="relative bg-[#121212]" style="height:392px;background-image:repeating-linear-gradient(to bottom,rgba(255,255,255,.09) 0 1px,transparent 1px 56px),repeating-linear-gradient(to bottom,transparent 0 28px,rgba(255,255,255,.035) 28px 29px,transparent 29px 56px)">
+              <div class="absolute overflow-hidden rounded-lg border border-white/10 p-2 ring-1 ring-[#ccff00]/40" style="top:56px;height:82px;left:2px;right:2px;background:rgba(204,255,0,.16);border-left:2px solid #ccff00">
+                <span class="flex items-start gap-1"><span class="min-w-0 flex-1 truncate font-medium text-white">Onboarding flow</span><iconify-icon icon="solar:shield-check-linear" class="shrink-0 text-sm text-[#ccff00]"></iconify-icon></span>
+                <span class="mt-1 block truncate text-white/45">09:00–10:30</span></div>
+              <div class="absolute overflow-hidden rounded-lg border border-white/10 p-2 ring-1 ring-[#ff4400]" style="top:168px;height:54px;left:calc(0% + 2px);width:calc(50% - 4px);background:rgba(255,214,0,.16);border-left:2px solid #ffd600">
+                <span class="flex items-start gap-1"><span class="min-w-0 flex-1 truncate font-medium text-white">Roadmap</span><iconify-icon icon="solar:danger-triangle-linear" class="shrink-0 text-sm text-[#ff4400]"></iconify-icon></span>
+                <span class="mt-1 block truncate text-white/45">11:00–12:00</span></div>
+              <div class="absolute overflow-hidden rounded-lg border border-white/10 p-2 ring-1 ring-[#ff4400]" style="top:168px;height:26px;left:calc(50% + 2px);width:calc(50% - 4px);background:rgba(255,214,0,.16);border-left:2px solid #ffd600">
+                <span class="flex items-start gap-1"><span class="min-w-0 flex-1 truncate font-medium text-white">Sync</span><iconify-icon icon="solar:danger-triangle-linear" class="shrink-0 text-sm text-[#ff4400]"></iconify-icon></span></div>
+              <div class="absolute overflow-hidden rounded-lg border border-dashed border-white/15 bg-white/[0.03] p-2 text-white/40" style="top:224px;height:40px;left:2px;right:2px"><span class="flex items-center gap-1.5"><iconify-icon icon="solar:cup-hot-linear" class="text-sm"></iconify-icon><span class="truncate">Lunch and reset</span></span></div>
+              <div class="absolute overflow-hidden rounded-lg border border-white/10 p-2" style="top:280px;height:44px;left:2px;right:2px;background:rgba(255,179,154,.16);border-left:2px solid #ffb39a"><span class="truncate font-medium text-white">Research patterns</span></div>
+              <div class="pointer-events-none absolute left-0 right-0 z-20" style="top:356px"><div class="relative h-px bg-[#ff4400]"><span class="absolute -left-1 -top-[3px] h-[7px] w-[7px] rounded-full bg-[#ff4400] shadow-[0_0_10px_#ff4400]"></span><span class="absolute -top-2 right-2 rounded bg-[#ff4400] px-1.5 py-0.5 text-[10px] text-[#121212]">14:22</span></div></div>
+            </div>
+            <!-- THU -->
+            <div class="relative bg-[#121212]" style="height:392px;background-image:repeating-linear-gradient(to bottom,rgba(255,255,255,.09) 0 1px,transparent 1px 56px),repeating-linear-gradient(to bottom,transparent 0 28px,rgba(255,255,255,.035) 28px 29px,transparent 29px 56px)">
+              <div class="absolute overflow-hidden rounded-lg border border-white/10 p-2" style="top:84px;height:26px;left:2px;right:2px;background:rgba(255,214,0,.16);border-left:2px solid #ffd600"><span class="truncate font-medium text-white">Standup</span></div>
+              <div class="absolute overflow-hidden rounded-lg border border-dashed border-[#ccff00]/60 bg-[#ccff00]/10 p-2 text-[#ccff00]" style="top:112px;height:110px;left:2px;right:2px">
+                <span class="flex items-center gap-1.5"><iconify-icon icon="solar:magic-stick-3-linear" class="text-sm"></iconify-icon><span class="truncate font-medium">Deep work · spec</span></span>
+                <span class="mt-1 block text-[#ccff00]/70">10:00–12:00 · proposed</span></div>
+              <div class="absolute overflow-hidden rounded-lg border border-white/10 p-2" style="top:336px;height:54px;left:2px;right:2px;background:rgba(255,112,64,.16);border-left:2px solid #ff7040"><span class="truncate font-medium text-white">Launch checklist</span></div>
+            </div>
+            <!-- FRI -->
+            <div class="relative bg-[#121212]" style="height:392px;background-image:repeating-linear-gradient(to bottom,rgba(255,255,255,.09) 0 1px,transparent 1px 56px),repeating-linear-gradient(to bottom,transparent 0 28px,rgba(255,255,255,.035) 28px 29px,transparent 29px 56px)">
+              <div class="absolute overflow-hidden rounded-lg border border-white/10 p-2" style="top:56px;height:26px;left:2px;right:2px;background:rgba(255,214,0,.16);border-left:2px solid #ffd600"><span class="truncate font-medium text-white">Standup</span></div>
+              <div class="absolute overflow-hidden rounded-lg border border-white/10 p-2" style="top:112px;height:82px;left:2px;right:2px;background:rgba(200,200,255,.16);border-left:2px solid #c8c8ff"><span class="truncate font-medium text-white">Design audit</span><span class="mt-1 block truncate text-white/45">10:00–11:30 · Website v2</span></div>
+              <div class="absolute overflow-hidden rounded-lg border border-dashed border-[#ccff00]/60 bg-[#ccff00]/10 p-2 text-[#ccff00]" style="top:210px;height:82px;left:2px;right:2px">
+                <span class="flex items-center gap-1.5"><iconify-icon icon="solar:magic-stick-3-linear" class="text-sm"></iconify-icon><span class="truncate font-medium">Focus window</span></span>
+                <span class="mt-1 block text-[#ccff00]/70">11:45–13:15 · tap to accept</span></div>
+            </div>
+            <!-- SAT -->
+            <div class="relative bg-[#121212]" style="height:392px;background-image:repeating-linear-gradient(to bottom,rgba(255,255,255,.09) 0 1px,transparent 1px 56px),repeating-linear-gradient(to bottom,transparent 0 28px,rgba(255,255,255,.035) 28px 29px,transparent 29px 56px)">
+              <div class="absolute overflow-hidden rounded-lg border border-white/10 p-2" style="top:112px;height:82px;left:2px;right:2px;background:rgba(255,112,64,.16);border-left:2px solid #ff7040"><span class="truncate font-medium text-white">Launch case study</span></div>
+            </div>
+            <!-- SUN + drag ghost -->
+            <div class="relative bg-[#121212]" style="height:392px;background-image:repeating-linear-gradient(to bottom,rgba(255,255,255,.09) 0 1px,transparent 1px 56px),repeating-linear-gradient(to bottom,transparent 0 28px,rgba(255,255,255,.035) 28px 29px,transparent 29px 56px)">
+              <div class="absolute rounded-lg border border-dashed border-[#ccff00] bg-[#ccff00]/15 p-2 text-[#ccff00]" style="top:224px;height:84px;left:2px;right:2px">
+                <span class="block truncate font-medium">New block</span><span class="mt-0.5 block">12:00–13:30</span></div>
+            </div>
+          </div>
+          <div class="flex items-center justify-between border-t border-white/10 bg-[#0e0e0e] px-4 py-2.5 text-white/35">
+            <span class="flex items-center gap-2"><iconify-icon icon="solar:cursor-linear" class="text-sm text-[#ccff00]"></iconify-icon>Drag any empty slot to block time</span>
+            <span>Snaps to 15 min · release to name it</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <ol class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">1</span><span class="text-white/60"><b class="text-white">Hour gutter, 4rem.</b> Labels hang off the hour line (−6px), so the number reads as a boundary rather than a row label.</span></li>
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">2</span><span class="text-white/60"><b class="text-white">All-day row.</b> Sprints, cut-offs, launches. Tinted pill, no dot — it isn't a time block and shouldn't look like one.</span></li>
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">3</span><span class="text-white/60"><b class="text-white">Conflicts split the column.</b> Overlapping events are laid out in columns and both get a <span class="text-[#ff4400]">#ff4400</span> ring plus a warning glyph. Orange is used for nothing else.</span></li>
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">4</span><span class="text-white/60"><b class="text-white">Breaks are dashed and quiet.</b> Same dashed language as the dashboard's "Lunch and reset" row — protected, but not work.</span></li>
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">5</span><span class="text-white/60"><b class="text-white">Current time line.</b> 1px <span class="text-[#ff4400]">#ff4400</span> with a glowing dot and a time chip, drawn only in today's column so it can't be mistaken for a divider.</span></li>
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">6</span><span class="text-white/60"><b class="text-white">Drag-to-create ghost.</b> Dashed lime with a live time readout, snapping to 15 min. Release opens the compose sheet pre-filled — the footer states the affordance in words too.</span></li>
+    </ol>
+  </section>
+
+  <!-- ══════════ 03 · WEB DAY ══════════ -->
+  <section id="day" class="mb-16 scroll-mt-16">
+    <div class="mb-5 flex flex-wrap items-end justify-between gap-3 border-b border-white/10 pb-4">
+      <div>
+        <span class="uppercase tracking-[0.18rem] text-[#ccff00]">03 / Web · day</span>
+        <h2 class="mt-2 text-2xl font-medium tracking-tight text-white">Grid for shape, agenda for detail — and the light card returns.</h2>
+        <p class="mt-2 max-w-2xl leading-relaxed text-white/50">
+          The one place the dashboard's <span class="text-[#ccff00]">#f4f4f4</span> schedule card comes back. Long titles, descriptions and metadata belong on white; the grid above it answers "how full am I?" in one glance.
+        </p>
+      </div>
+    </div>
+
+    <div class="rounded-2xl border border-white/10 bg-[#0a1a5c]/40 p-3 backdrop-blur-md sm:p-5">
+      <!-- energy band -->
+      <div class="relative mb-4">
+        <span class="callout" style="left:-4px;top:14px">1</span>
+        <div class="overflow-hidden rounded-2xl border border-white/10 bg-[#121212] p-5 shadow-2xl">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-2 text-white/45"><iconify-icon icon="solar:bolt-linear" class="text-lg text-[#ff7040]"></iconify-icon><span class="uppercase tracking-widest">Energy forecast</span></div>
+            <span class="text-white/35">Learned from 6 weeks of your completions</span>
+          </div>
+          <div class="relative mt-4 h-9 overflow-hidden rounded-lg border border-white/10" style="background:linear-gradient(90deg,rgba(204,255,0,.55) 0%,rgba(204,255,0,.75) 18%,rgba(255,214,0,.5) 38%,rgba(255,112,64,.35) 52%,rgba(255,214,0,.4) 70%,rgba(200,200,255,.35) 88%,rgba(200,200,255,.2) 100%)">
+            <div class="absolute inset-y-0 z-10 w-px bg-[#ff4400]" style="left:52.6%"><span class="absolute -left-[3px] top-0 h-[7px] w-[7px] rounded-full bg-[#ff4400] shadow-[0_0_10px_#ff4400]"></span></div>
+          </div>
+          <div class="mt-2 flex justify-between text-[10px] uppercase tracking-widest text-white/35">
+            <span>07:00 peak</span><span>12:30 dip</span><span>15:00 second wind</span><span>21:00</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
+        <div class="relative">
+          <span class="callout" style="left:-4px;top:200px">2</span>
+          <span class="callout" style="left:300px;top:296px">3</span>
+          <span class="callout" style="left:300px;top:380px">4</span>
+          <div class="rounded-2xl border border-white/10 shadow-2xl">
+            <div class="flex flex-col gap-3 rounded-t-2xl border-b border-white/10 bg-[#121212] p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div class="flex items-center gap-2"><h3 class="text-lg font-medium tracking-tight text-white">Wednesday 9 Sep</h3><span class="rounded-full bg-[#ccff00] px-2 py-1 text-[#121212]">Today</span></div>
+                <p class="mt-1 text-white/45">Planned 4h 50m · free 8h 25m · built around your energy.</p>
+              </div>
+              <span class="flex h-9 items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 text-white/70"><iconify-icon icon="solar:add-circle-linear" class="text-base"></iconify-icon>Add</span>
+            </div>
+            <div class="overflow-hidden rounded-b-2xl bg-[#f4f4f4] text-[#121212]">
+              <div class="divide-y divide-[#121212]/10">
+                <div class="grid grid-cols-[4.5rem_minmax(0,1fr)]">
+                  <div class="border-r border-[#121212]/10 px-4 py-5 text-right text-[#121212]/60">09:00</div>
+                  <div class="p-4">
+                    <div class="flex gap-3 rounded-xl border border-[#121212]/10 bg-white p-4 shadow-sm">
+                      <span class="w-1 shrink-0 self-stretch rounded-full bg-[#ccff00]"></span>
+                      <span class="min-w-0 flex-1">
+                        <span class="flex flex-wrap items-start justify-between gap-2">
+                          <span class="min-w-0"><span class="block text-sm font-medium">Define mobile onboarding flow</span><span class="mt-1 block leading-relaxed text-[#121212]/60">Second pass — turn the map into a clickable flow.</span></span>
+                          <span class="shrink-0 rounded-full bg-[#ccff00]/70 px-2 py-1">Deep work</span>
+                        </span>
+                        <span class="mt-4 flex flex-wrap items-center gap-3 text-[#121212]/60">
+                          <span class="flex items-center gap-1.5"><iconify-icon icon="solar:clock-circle-linear" class="text-sm"></iconify-icon>09:00–10:30 · 1h 30m</span>
+                          <span class="flex items-center gap-1.5"><span class="h-1.5 w-1.5 rounded-full bg-[#ccff00]"></span>Mobile launch</span>
+                          <span class="flex items-center gap-1.5 text-[#2047e6]"><iconify-icon icon="solar:shield-check-linear" class="text-sm"></iconify-icon>Protected</span>
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div class="grid grid-cols-[4.5rem_minmax(0,1fr)]">
+                  <div class="border-r border-[#121212]/10 px-4 py-5 text-right text-[#121212]/50">10:30</div>
+                  <div class="p-4">
+                    <div class="flex items-center gap-3 rounded-xl border border-dashed border-[#121212]/20 bg-[#ececec] p-3 text-[#121212]/60">
+                      <span class="flex h-7 w-7 items-center justify-center rounded-full bg-white"><iconify-icon icon="solar:add-circle-linear" class="text-base"></iconify-icon></span>
+                      <span>free — 30m</span><span class="ml-auto text-[#121212]/50">10:30–11:00</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="grid grid-cols-[4.5rem_minmax(0,1fr)]">
+                  <div class="border-r border-[#121212]/10 px-4 py-5 text-right text-[#121212]/60">11:00</div>
+                  <div class="p-4">
+                    <div class="flex gap-3 rounded-xl border border-[#121212]/10 bg-white p-4 shadow-sm ring-1 ring-[#ff4400]">
+                      <span class="w-1 shrink-0 self-stretch rounded-full bg-[#ffd600]"></span>
+                      <span class="min-w-0 flex-1">
+                        <span class="flex flex-wrap items-start justify-between gap-2">
+                          <span class="min-w-0"><span class="block text-sm font-medium">Product team sync</span><span class="mt-1 block leading-relaxed text-[#121212]/60">Weekly team alignment. 30 min, agenda in Notion.</span></span>
+                          <span class="shrink-0 rounded-full bg-[#ffd600]/70 px-2 py-1">Meetings</span>
+                        </span>
+                        <span class="mt-4 flex flex-wrap items-center gap-3 text-[#121212]/60">
+                          <span class="flex items-center gap-1.5"><iconify-icon icon="solar:clock-circle-linear" class="text-sm"></iconify-icon>11:00–11:30 · 30m</span>
+                          <span class="flex items-center gap-1.5 text-[#cc3600]"><iconify-icon icon="solar:danger-triangle-linear" class="text-sm"></iconify-icon>Overlaps</span>
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div class="grid grid-cols-[4.5rem_minmax(0,1fr)]">
+                  <div class="border-r border-[#121212]/10 px-4 py-5 text-right text-[#121212]/60">12:00</div>
+                  <div class="p-4">
+                    <div class="flex items-center gap-3 rounded-xl border border-dashed border-[#121212]/15 bg-[#ececec] p-4 text-[#121212]/60">
+                      <div class="flex h-8 w-8 items-center justify-center rounded-full bg-white"><iconify-icon icon="solar:cup-hot-linear" class="text-lg"></iconify-icon></div>
+                      <div><p class="text-[#121212]/70">Lunch and reset</p><p class="mt-1">A protected break before your afternoon block.</p></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <aside class="relative space-y-4">
+          <span class="callout" style="left:-4px;top:14px">5</span>
+          <div class="rounded-2xl border border-white/10 bg-white/[0.07] p-5 backdrop-blur-md">
+            <div class="flex items-center justify-between text-white/45"><span class="uppercase tracking-widest">Day telemetry</span><iconify-icon icon="solar:chart-2-linear" class="text-lg text-[#ccff00]"></iconify-icon></div>
+            <div class="mt-5 grid grid-cols-2 gap-4">
+              <div><p class="text-2xl font-medium tracking-tight text-white">4h 50m</p><p class="mt-1 text-white/40">Planned</p></div>
+              <div><p class="text-2xl font-medium tracking-tight text-[#ccff00]">8h 25m</p><p class="mt-1 text-white/40">Still free</p></div>
+            </div>
+            <div class="mt-4 h-1.5 overflow-hidden rounded-full bg-white/10"><div class="h-full w-[40%] rounded-full bg-[#ccff00]"></div></div>
+            <p class="mt-3 leading-relaxed text-white/40">40% of capacity · 1 protected block · 1 clash to resolve.</p>
+          </div>
+          <div class="rounded-2xl border border-white/15 bg-[#c8c8ff] p-5 text-[#121212] shadow-2xl">
+            <div class="flex items-center justify-between"><span class="uppercase tracking-widest text-[#121212]/50">AI insight</span><iconify-icon icon="solar:lightbulb-bolt-linear" class="text-xl"></iconify-icon></div>
+            <p class="mt-5 text-base font-medium leading-relaxed tracking-tight">Roadmap review clashes with your team sync. Maya is free Thursday 14:00 — move it there and your morning stays whole.</p>
+            <div class="mt-5 flex gap-2">
+              <span class="rounded-lg bg-[#121212] px-4 py-2.5 text-white">Move it</span>
+              <span class="rounded-lg border border-[#121212]/15 px-4 py-2.5">Keep both</span>
+            </div>
+          </div>
+          <div class="rounded-2xl border border-white/10 bg-[#121212] p-5 shadow-2xl">
+            <h3 class="text-sm font-medium text-white">Protected today</h3>
+            <div class="mt-4 space-y-2">
+              <div class="flex items-center gap-3 rounded-xl border border-[#ccff00]/30 bg-[#ccff00]/10 p-3">
+                <iconify-icon icon="solar:shield-check-linear" class="shrink-0 text-lg text-[#ccff00]"></iconify-icon>
+                <div class="min-w-0"><p class="truncate text-white">Define mobile onboarding flow</p><p class="mt-1 text-white/40">09:00–10:30 · cannot be moved by AI</p></div>
+              </div>
+              <div class="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-3">
+                <iconify-icon icon="solar:cup-hot-linear" class="shrink-0 text-lg text-white/45"></iconify-icon>
+                <div class="min-w-0"><p class="truncate text-white/80">Lunch and reset</p><p class="mt-1 text-white/40">12:00–12:45 · recovery window</p></div>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <ol class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">1</span><span class="text-white/60"><b class="text-white">Energy forecast band.</b> A single gradient from lime (peak) through coral (dip) to periwinkle (evening), with the same red now-marker as the grid. It explains <i>why</i> the AI placed things where it did.</span></li>
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">2</span><span class="text-white/60"><b class="text-white">Sticky black header on a white body.</b> The date header pins under the app bar while the agenda scrolls, so you never lose which day you are reading.</span></li>
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">3</span><span class="text-white/60"><b class="text-white">Gaps are first-class rows.</b> "free — 30m" is a dashed, clickable row, not empty space. Emptiness is the product's whole promise; it gets a label and a hit target.</span></li>
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">4</span><span class="text-white/60"><b class="text-white">Category as a 4px spine.</b> On white the dot becomes a left spine — colour that survives being scanned at speed without tinting the card.</span></li>
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">5</span><span class="text-white/60"><b class="text-white">Right rail = the dashboard's cards.</b> Telemetry, the periwinkle AI insight card, protected blocks. Reused verbatim so Calendar and Today feel like one product.</span></li>
+    </ol>
+  </section>
+
+  <!-- ══════════ 04 · POPOVER + MODAL ══════════ -->
+  <section id="detail" class="mb-16 scroll-mt-16">
+    <div class="mb-5 flex flex-wrap items-end justify-between gap-3 border-b border-white/10 pb-4">
+      <div>
+        <span class="uppercase tracking-[0.18rem] text-[#ccff00]">04 / Detail + compose</span>
+        <h2 class="mt-2 text-2xl font-medium tracking-tight text-white">Read in a popover. Edit in a modal. Never both at once.</h2>
+        <p class="mt-2 max-w-2xl leading-relaxed text-white/50">
+          Clicking an event opens a read-only popover anchored beside it (a bottom sheet under 1024px). Editing is a deliberate second step, so a mis-click can never change your calendar.
+        </p>
+      </div>
+    </div>
+
+    <div class="grid gap-5 lg:grid-cols-[21rem_minmax(0,1fr)]">
+      <div class="rounded-2xl border border-white/10 bg-[#0a1a5c]/40 p-5 backdrop-blur-md">
+        <p class="mb-4 uppercase tracking-widest text-white/40">Event popover · desktop</p>
+        <div class="relative w-full overflow-hidden rounded-2xl border border-white/10 bg-[#121212] shadow-2xl">
+          <span class="callout" style="left:8px;top:8px">1</span>
+          <div class="h-1 w-full bg-[#ccff00]"></div>
+          <div class="p-5">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="h-1.5 w-1.5 rounded-full bg-[#ccff00]"></span>
+                  <span class="uppercase tracking-widest text-white/40">Deep work</span>
+                  <span class="rounded-full bg-[#ccff00]/15 px-2 py-0.5 text-[#ccff00]">Protected</span>
+                </div>
+                <h3 class="mt-2 text-base font-medium leading-snug tracking-tight text-white">Define mobile onboarding flow</h3>
+              </div>
+              <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 text-white/45"><iconify-icon icon="solar:close-circle-linear" class="text-lg"></iconify-icon></span>
+            </div>
+            <div class="mt-4 space-y-2.5 text-white/55">
+              <p class="flex items-center gap-2"><iconify-icon icon="solar:clock-circle-linear" class="text-base text-white/35"></iconify-icon>Wednesday 9 Sep · 09:00–10:30 · 1h 30m</p>
+              <p class="flex items-center gap-2"><iconify-icon icon="solar:folder-with-files-linear" class="text-base text-white/35"></iconify-icon>Mobile launch</p>
+              <p class="flex items-center gap-2"><iconify-icon icon="solar:bolt-linear" class="text-base text-white/35"></iconify-icon>Placed in your morning energy peak</p>
+              <p class="rounded-lg border border-white/10 bg-white/5 p-3 leading-relaxed text-white/60">Second pass — turn the map into a clickable flow.</p>
+            </div>
+            <div class="mt-5 grid grid-cols-2 gap-2">
+              <span class="flex h-10 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 text-white/75"><iconify-icon icon="solar:pen-new-square-linear" class="text-base"></iconify-icon>Edit</span>
+              <span class="flex h-10 items-center justify-center gap-2 rounded-lg bg-[#ccff00] text-[#121212]"><iconify-icon icon="solar:magic-stick-3-linear" class="text-base"></iconify-icon>Reschedule</span>
+            </div>
+            <div class="mt-2 flex gap-2">
+              <span class="flex h-10 flex-1 items-center justify-center gap-2 rounded-lg border border-white/10 text-white/60"><iconify-icon icon="solar:shield-check-linear" class="text-base"></iconify-icon>Unprotect</span>
+              <span class="flex h-10 items-center justify-center rounded-lg border border-[#ff4400]/30 px-4 text-[#ff4400]"><iconify-icon icon="solar:trash-bin-trash-linear" class="text-base"></iconify-icon></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="rounded-2xl border border-white/10 bg-[#0a1a5c]/40 p-5 backdrop-blur-md">
+        <p class="mb-4 uppercase tracking-widest text-white/40">Create / edit · modal on desktop, sheet on mobile</p>
+        <div class="relative mx-auto max-w-lg rounded-2xl border border-white/10 bg-[#121212] p-5 shadow-2xl">
+          <div class="flex items-start justify-between">
+            <div><p class="uppercase tracking-widest text-[#ccff00]">New block</p><h3 class="mt-1 text-xl font-medium tracking-tight text-white">Add to your calendar</h3></div>
+            <span class="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-white/50"><iconify-icon icon="solar:close-circle-linear" class="text-xl"></iconify-icon></span>
+          </div>
+          <label class="mt-5 block text-white/50">Title
+            <div class="mt-2 flex h-11 w-full items-center rounded-lg border border-[#ccff00]/60 bg-white/5 px-3 text-sm text-white">Deep work · onboarding spec</div>
+          </label>
+          <div class="mt-4 grid grid-cols-2 gap-3">
+            <label class="block text-white/50">Date<div class="mt-2 flex h-11 items-center rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-white">2026-09-10</div></label>
+            <label class="block text-white/50">Start<div class="mt-2 flex h-11 items-center rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-white">10:00</div></label>
+          </div>
+          <div class="mt-4 grid grid-cols-2 gap-3">
+            <label class="block text-white/50">Duration<div class="mt-2 flex h-11 items-center justify-between rounded-lg border border-white/10 bg-[#1d1d1d] px-3 text-sm text-white">120 min <iconify-icon icon="solar:alt-arrow-down-linear" class="text-base text-white/40"></iconify-icon></div></label>
+            <label class="block text-white/50">Repeats<div class="mt-2 flex h-11 items-center justify-between rounded-lg border border-white/10 bg-[#1d1d1d] px-3 text-sm text-white">Weekly on this day <iconify-icon icon="solar:alt-arrow-down-linear" class="text-base text-white/40"></iconify-icon></div></label>
+          </div>
+          <div class="relative mt-4"><span class="callout" style="left:-26px;top:-2px">2</span><span class="text-white/50">Category</span>
+            <div class="mt-2 flex flex-wrap gap-2">
+              <span class="flex items-center gap-2 rounded-full border border-white/40 bg-white/10 px-3 py-2 text-white"><span class="h-2 w-2 rounded-full bg-[#ccff00]"></span>Deep work</span>
+              <span class="flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-white/50"><span class="h-2 w-2 rounded-full bg-[#c8c8ff]"></span>Design</span>
+              <span class="flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-white/50"><span class="h-2 w-2 rounded-full bg-[#ffb39a]"></span>Research</span>
+              <span class="flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-white/50"><span class="h-2 w-2 rounded-full bg-[#ffd600]"></span>Meetings</span>
+              <span class="flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-white/50"><span class="h-2 w-2 rounded-full bg-[#ff7040]"></span>Admin</span>
+            </div>
+          </div>
+          <div class="relative mt-4 flex w-full items-center gap-3 rounded-xl border border-[#ccff00]/40 bg-[#ccff00]/10 p-3">
+            <span class="callout" style="left:-26px;top:14px">3</span>
+            <iconify-icon icon="solar:magic-stick-3-linear" class="text-lg text-[#ccff00]"></iconify-icon>
+            <span class="min-w-0 flex-1"><span class="block text-white">Let AI place it</span><span class="mt-1 block text-white/45">Find the best slot around my energy and deadlines.</span></span>
+            <span class="relative h-5 w-9 shrink-0 rounded-full bg-[#ccff00]"><span class="absolute left-[1.125rem] top-0.5 h-4 w-4 rounded-full bg-[#121212]"></span></span>
+          </div>
+          <div class="mt-5 flex gap-2">
+            <span class="flex h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-[#ccff00] font-medium text-[#121212]"><iconify-icon icon="solar:check-circle-linear" class="text-lg"></iconify-icon>Save event</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <ol class="mt-5 grid gap-3 sm:grid-cols-3">
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">1</span><span class="text-white/60"><b class="text-white">Category bar on top.</b> A 4px full-bleed strip in the category colour identifies the event before you read a word, and gives the popover a "cut from the block" feel.</span></li>
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">2</span><span class="text-white/60"><b class="text-white">Colour chips, not a dropdown.</b> Category is the one field where the value <i>is</i> a colour, so it's picked as a colour.</span></li>
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">3</span><span class="text-white/60"><b class="text-white">"Let AI place it" is on by default.</b> The product's core promise, expressed as a switch: on, the start time you typed is a hint; off, it is an instruction. Turning it off greys the whole row.</span></li>
+    </ol>
+  </section>
+
+  <!-- ══════════ 05 · AI FLOW ══════════ -->
+  <section id="ai" class="mb-16 scroll-mt-16">
+    <div class="mb-5 flex flex-wrap items-end justify-between gap-3 border-b border-white/10 pb-4">
+      <div>
+        <span class="uppercase tracking-[0.18rem] text-[#ccff00]">05 / Find time flow</span>
+        <h2 class="mt-2 text-2xl font-medium tracking-tight text-white">Ask → see the moves → apply. Three states, one panel.</h2>
+        <p class="mt-2 max-w-2xl leading-relaxed text-white/50">
+          A right drawer on desktop, a bottom sheet on mobile. The proposal is never applied silently: every move is listed as <span class="text-white/70">from → to</span>, and the header states the cost in the dashboard's own words — "3 changes · 0 conflicts".
+        </p>
+      </div>
+    </div>
+
+    <div class="grid gap-5 lg:grid-cols-3">
+      <!-- state 1 -->
+      <div class="rounded-2xl border border-white/10 bg-[#0a1a5c]/40 p-4 backdrop-blur-md">
+        <p class="mb-3 uppercase tracking-widest text-white/40">1 · Ask</p>
+        <div class="relative overflow-hidden rounded-2xl border border-white/10 bg-[#121212] p-5 shadow-2xl">
+          <div class="pointer-events-none absolute -right-12 -top-12 h-36 w-36 rounded-full border border-[#ccff00]/20"></div>
+          <div class="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full border border-[#ccff00]/30"></div>
+          <div class="relative flex items-start justify-between">
+            <div>
+              <div class="mb-2 flex items-center gap-2 text-[#ccff00]"><iconify-icon icon="solar:magic-stick-3-linear" class="text-xl"></iconify-icon><span class="uppercase tracking-widest">Find time</span></div>
+              <h3 class="text-xl font-medium tracking-tight text-white">What needs a slot?</h3>
+            </div>
+          </div>
+          <p class="relative mt-3 leading-relaxed text-white/45">Describe the outcome. Find time reshuffles only what is flexible and never touches a protected block.</p>
+          <div class="relative mt-5 rounded-xl border border-[#ccff00]/50 bg-white/[0.06] p-3">
+            <p class="text-sm text-white">Make room for 2h deep work on Thursday</p>
+            <div class="mt-6 flex items-center justify-between">
+              <span class="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-white/45"><iconify-icon icon="solar:microphone-3-linear" class="text-lg"></iconify-icon></span>
+              <span class="flex h-9 items-center gap-2 rounded-lg bg-[#ccff00] px-4 font-medium text-[#121212]">Find time <iconify-icon icon="solar:arrow-right-up-linear" class="text-base"></iconify-icon></span>
+            </div>
+          </div>
+          <div class="relative mt-4 flex flex-wrap gap-2">
+            <span class="rounded-full border border-white/10 px-3 py-2 text-white/45">2h deep work Thursday</span>
+            <span class="rounded-full border border-white/10 px-3 py-2 text-white/45">Protect my mornings</span>
+            <span class="rounded-full border border-white/10 px-3 py-2 text-white/45">Fix Wednesday's clash</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- state 2 -->
+      <div class="rounded-2xl border border-white/10 bg-[#0a1a5c]/40 p-4 backdrop-blur-md">
+        <p class="mb-3 uppercase tracking-widest text-white/40">2 · Analysing</p>
+        <div class="overflow-hidden rounded-2xl border border-white/10 bg-[#121212] p-5 shadow-2xl">
+          <div class="mb-2 flex items-center gap-2 text-[#ccff00]"><iconify-icon icon="solar:magic-stick-3-linear" class="text-xl"></iconify-icon><span class="uppercase tracking-widest">Find time</span></div>
+          <div class="mt-5 rounded-xl border border-white/10 bg-white/5 p-3 text-white/45">Make room for 2h deep work on Thursday</div>
+          <div class="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4">
+            <p class="uppercase tracking-widest text-[#ccff00]">Analysing</p>
+            <div class="mt-4 space-y-2">
+              <div class="h-3 w-3/4 rounded bg-white/10"></div>
+              <div class="h-3 w-full rounded bg-white/10"></div>
+              <div class="h-3 w-2/3 rounded bg-white/10"></div>
+            </div>
+            <p class="mt-4 text-white/40">Checking energy curve, protected blocks, and deadlines…</p>
+          </div>
+          <p class="mt-4 leading-relaxed text-white/30">The skeleton uses the same 3-line rhythm as every other loading state in the product, so waiting always looks the same.</p>
+        </div>
+      </div>
+
+      <!-- state 3 -->
+      <div class="rounded-2xl border border-white/10 bg-[#0a1a5c]/40 p-4 backdrop-blur-md">
+        <p class="mb-3 uppercase tracking-widest text-white/40">3 · Proposal</p>
+        <div class="relative overflow-hidden rounded-2xl border border-[#ccff00]/30 bg-[#121212] shadow-2xl">
+          <span class="callout" style="left:8px;top:8px">1</span>
+          <div class="flex items-center justify-between border-b border-[#ccff00]/20 bg-[#ccff00]/[0.06] px-4 py-3">
+            <span class="flex items-center gap-2 text-[#ccff00]"><iconify-icon icon="solar:stars-minimalistic-linear" class="text-lg"></iconify-icon><span class="uppercase tracking-widest">Time found</span></span>
+            <span class="rounded-full bg-[#ccff00] px-2 py-1 text-[#121212]">3 changes · 0 conflicts</span>
+          </div>
+          <div class="space-y-2 bg-[#ccff00]/[0.06] p-4">
+            <div class="flex items-start gap-3 rounded-xl border border-[#ccff00]/40 bg-[#ccff00]/10 p-3">
+              <span class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#ccff00] text-[#121212]"><iconify-icon icon="solar:add-circle-linear" class="text-base"></iconify-icon></span>
+              <span class="min-w-0 flex-1"><span class="block truncate text-white">Deep work · onboarding spec</span><span class="mt-1 block text-[#ccff00]">New · Thu 10 Sep, 10:00–12:00 · protected</span></span>
+            </div>
+            <div class="flex items-start gap-3 rounded-xl border border-white/10 bg-white/5 p-3">
+              <span class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg" style="background:rgba(255,214,0,.18);color:#ffd600"><iconify-icon icon="solar:transfer-horizontal-linear" class="text-base"></iconify-icon></span>
+              <span class="min-w-0 flex-1"><span class="block truncate text-white">Stakeholder review</span>
+                <span class="mt-1 flex flex-wrap items-center gap-2 text-white/40"><span class="line-through">Thu 10:00</span><iconify-icon icon="solar:arrow-right-linear" class="text-sm"></iconify-icon><span class="text-[#ccff00]">Mon 16:00</span></span></span>
+            </div>
+            <div class="flex items-start gap-3 rounded-xl border border-white/10 bg-white/5 p-3">
+              <span class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg" style="background:rgba(255,112,64,.18);color:#ff7040"><iconify-icon icon="solar:transfer-horizontal-linear" class="text-base"></iconify-icon></span>
+              <span class="min-w-0 flex-1"><span class="block truncate text-white">Draft launch checklist</span>
+                <span class="mt-1 flex flex-wrap items-center gap-2 text-white/40"><span class="line-through">Thu 13:00</span><iconify-icon icon="solar:arrow-right-linear" class="text-sm"></iconify-icon><span class="text-[#ccff00]">Fri 09:30</span></span></span>
+            </div>
+            <p class="pt-1 leading-relaxed text-white/50">Your Wednesday focus block and Thursday's usability test were left untouched. Both moved items are flexible and have no attendees outside the team.</p>
+          </div>
+          <div class="flex gap-2 border-t border-[#ccff00]/20 bg-[#ccff00]/[0.06] p-4">
+            <span class="flex h-10 flex-1 items-center justify-center rounded-lg bg-[#ccff00] font-medium text-[#121212]">Apply 3 changes</span>
+            <span class="flex h-10 items-center rounded-lg border border-white/10 px-4 text-white/60">Dismiss</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <ol class="mt-5 grid gap-3 sm:grid-cols-2">
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">1</span><span class="text-white/60"><b class="text-white">The receipt, before the change.</b> Additions are lime-filled; moves are neutral rows with a struck-through old time. A user should be able to audit the plan without trusting it.</span></li>
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">2</span><span class="text-white/60"><b class="text-white">Applying jumps you to the week.</b> After "Apply", the calendar switches to the affected week and toasts "3 changes applied · 0 conflicts", so the result is visible rather than asserted.</span></li>
+    </ol>
+  </section>
+
+  <!-- ══════════ 06–08 · MOBILE ══════════ -->
+  <section id="mmonth" class="mb-16 scroll-mt-16">
+    <div class="mb-5 flex flex-wrap items-end justify-between gap-3 border-b border-white/10 pb-4">
+      <div>
+        <span class="uppercase tracking-[0.18rem] text-[#ccff00]">06–08 / Mobile</span>
+        <h2 class="mt-2 text-2xl font-medium tracking-tight text-white">On a phone, the grid stops being the answer.</h2>
+        <p class="mt-2 max-w-2xl leading-relaxed text-white/50">
+          Chips don't fit in a 50px column, so month becomes dots and every mobile view resolves to <b class="text-white">one day's agenda</b> underneath. <b class="text-white">Week is the mobile default</b> — a scrollable day-pill strip is the fastest way to move between days with a thumb.
+        </p>
+      </div>
+    </div>
+
+    <div class="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+
+      <!-- mobile month -->
+      <div id="mmonth-frame" class="rounded-2xl border border-white/10 bg-[#0a1a5c]/40 p-4 backdrop-blur-md">
+        <p class="mb-3 uppercase tracking-widest text-white/40">06 · Month → tap a day</p>
+        <div class="relative mx-auto w-[300px] overflow-hidden rounded-[2rem] border-[6px] border-[#121212] shadow-2xl" style="background:#2047e6;background-image:radial-gradient(rgba(255,255,255,.14) 1px,transparent 1px);background-size:20px 20px">
+          <span class="callout" style="left:96px;top:302px">1</span>
+          <div class="overflow-hidden border-b border-white/10 bg-[#173abf]/90 py-1 text-center text-[9px] uppercase tracking-[0.18rem] text-[#ccff00]/80">Calendar synced // 03 focus blocks //</div>
+          <div class="flex h-11 items-center justify-between border-b border-white/10 bg-[#2047e6]/80 px-3">
+            <span class="flex items-center gap-2"><span class="flex h-6 w-6 items-center justify-center rounded bg-[#ccff00] text-[9px] font-semibold text-[#121212]">FT</span><span class="text-white">Calendar</span></span>
+            <span class="flex h-6 w-6 items-center justify-center rounded border border-white/10 text-white/60"><iconify-icon icon="solar:magnifer-linear" class="text-sm"></iconify-icon></span>
+          </div>
+          <div class="p-3">
+            <div class="text-[10px] uppercase tracking-[0.16rem] text-[#ccff00]">Sep 2026 · 50 events</div>
+            <div class="mt-1 flex items-center gap-1 text-lg font-medium tracking-tight text-white">September 2026 <iconify-icon icon="solar:alt-arrow-down-linear" class="text-base text-white/40"></iconify-icon></div>
+            <div class="mt-3 flex items-center gap-1">
+              <span class="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 p-1 text-[10px]">
+                <span class="rounded bg-[#ccff00] px-1.5 py-1 text-[#121212]">Month</span><span class="px-1.5 py-1 text-white/50">Week</span><span class="px-1.5 py-1 text-white/50">Day</span>
+              </span>
+              <span class="ml-auto rounded-lg bg-[#ccff00] px-2 py-1.5 text-[10px] text-[#121212]">Find time</span>
+            </div>
+            <div class="mt-3 overflow-hidden rounded-xl border border-white/10">
+              <div class="grid grid-cols-7 gap-px bg-white/10 text-[9px]">
+                <div class="bg-[#0e0e0e] py-1.5 text-center uppercase tracking-widest text-white/40">M</div>
+                <div class="bg-[#0e0e0e] py-1.5 text-center uppercase tracking-widest text-white/40">T</div>
+                <div class="bg-[#0e0e0e] py-1.5 text-center uppercase tracking-widest text-white/40">W</div>
+                <div class="bg-[#0e0e0e] py-1.5 text-center uppercase tracking-widest text-white/40">T</div>
+                <div class="bg-[#0e0e0e] py-1.5 text-center uppercase tracking-widest text-white/40">F</div>
+                <div class="bg-[#0e0e0e] py-1.5 text-center uppercase tracking-widest text-white/40">S</div>
+                <div class="bg-[#0e0e0e] py-1.5 text-center uppercase tracking-widest text-white/40">S</div>
+              </div>
+              <div class="grid grid-cols-7 gap-px bg-white/10 text-[10px]">
+                <div class="flex h-11 flex-col items-center justify-center gap-1 bg-[#0d0d0d] text-white/20">31<span class="flex h-1 gap-0.5"><span class="h-1 w-1 rounded-full bg-[#ffd600]"></span></span></div>
+                <div class="flex h-11 flex-col items-center justify-center gap-1 bg-[#121212] text-white/65">1<span class="flex h-1 gap-0.5"><span class="h-1 w-1 rounded-full bg-[#ffd600]"></span><span class="h-1 w-1 rounded-full bg-[#ffb39a]"></span></span></div>
+                <div class="flex h-11 flex-col items-center justify-center gap-1 bg-[#121212] text-white/65">2<span class="flex h-1 gap-0.5"><span class="h-1 w-1 rounded-full bg-[#ffd600]"></span><span class="h-1 w-1 rounded-full bg-[#c8c8ff]"></span></span></div>
+                <div class="flex h-11 flex-col items-center justify-center gap-1 bg-[#121212] text-white/65">3<span class="flex h-1 gap-0.5"><span class="h-1 w-1 rounded-full bg-[#ccff00]"></span><span class="h-1 w-1 rounded-full bg-[#ffd600]"></span></span></div>
+                <div class="flex h-11 flex-col items-center justify-center gap-1 bg-[#121212] text-white/65">4<span class="flex h-1 gap-0.5"><span class="h-1 w-1 rounded-full bg-[#c8c8ff]"></span><span class="h-1 w-1 rounded-full bg-[#ff7040]"></span></span></div>
+                <div class="flex h-11 flex-col items-center justify-center gap-1 bg-[#121212] text-white/65">5<span class="h-1"></span></div>
+                <div class="flex h-11 flex-col items-center justify-center gap-1 bg-[#121212] text-white/65">6<span class="h-1"></span></div>
+
+                <div class="flex h-11 flex-col items-center justify-center gap-1 bg-[#121212] text-white/65">7<span class="flex h-1 gap-0.5"><span class="h-1 w-1 rounded-full bg-[#ccff00]"></span><span class="h-1 w-1 rounded-full bg-[#ffd600]"></span><span class="h-1 w-1 rounded-full bg-[#c8c8ff]"></span></span></div>
+                <div class="flex h-11 flex-col items-center justify-center gap-1 bg-[#121212] text-white/65">8<span class="flex h-1 gap-0.5"><span class="h-1 w-1 rounded-full bg-[#ff7040]"></span><span class="h-1 w-1 rounded-full bg-[#ccff00]"></span><span class="h-1 w-1 rounded-full bg-[#c8c8ff]"></span></span></div>
+                <div class="flex h-11 flex-col items-center justify-center gap-1 bg-[#121212] ring-1 ring-inset ring-[#ccff00]"><span class="flex h-5 w-5 items-center justify-center rounded bg-[#ccff00] font-medium text-[#121212] shadow-[0_0_14px_rgba(204,255,0,.5)]">9</span><span class="flex h-1 gap-0.5"><span class="h-1 w-1 rounded-full bg-[#ccff00]"></span><span class="h-1 w-1 rounded-full bg-[#ffd600]"></span><span class="h-1 w-1 rounded-full bg-[#ffb39a]"></span></span></div>
+                <div class="flex h-11 flex-col items-center justify-center gap-1 bg-[#121212] text-white/65">10<span class="flex h-1 gap-0.5"><span class="h-1 w-1 rounded-full bg-[#ffd600]"></span><span class="h-1 w-1 rounded-full bg-[#ff7040]"></span></span></div>
+                <div class="flex h-11 flex-col items-center justify-center gap-1 bg-[#121212] text-white/65">11<span class="flex h-1 gap-0.5"><span class="h-1 w-1 rounded-full bg-[#ffd600]"></span><span class="h-1 w-1 rounded-full bg-[#c8c8ff]"></span><span class="h-1 w-1 rounded-full bg-[#ccff00]"></span></span></div>
+                <div class="flex h-11 flex-col items-center justify-center gap-1 bg-[#121212] text-white/65">12<span class="flex h-1 gap-0.5"><span class="h-1 w-1 rounded-full bg-[#ff7040]"></span></span></div>
+                <div class="flex h-11 flex-col items-center justify-center gap-1 bg-[#121212] text-white/65">13<span class="h-1"></span></div>
+              </div>
+            </div>
+
+            <div class="mt-3 rounded-xl border border-white/10 shadow-2xl">
+              <div class="rounded-t-xl border-b border-white/10 bg-[#121212] p-3">
+                <div class="flex items-center gap-2"><span class="text-sm font-medium tracking-tight text-white">Wednesday 9 Sep</span><span class="rounded-full bg-[#ccff00] px-1.5 py-0.5 text-[9px] text-[#121212]">Today</span></div>
+                <p class="mt-1 text-[10px] text-white/45">Planned 4h 50m · free 8h 25m</p>
+              </div>
+              <div class="overflow-hidden rounded-b-xl bg-[#f4f4f4] text-[#121212]">
+                <div class="grid grid-cols-[3rem_minmax(0,1fr)] border-b border-[#121212]/10">
+                  <div class="border-r border-[#121212]/10 px-2 py-4 text-right text-[10px] text-[#121212]/40">09:00</div>
+                  <div class="p-2"><div class="flex gap-2 rounded-lg border border-[#121212]/10 bg-white p-2 shadow-sm"><span class="w-1 shrink-0 self-stretch rounded-full bg-[#ccff00]"></span><span class="min-w-0"><span class="block text-[11px] font-medium">Onboarding flow</span><span class="mt-1 block text-[10px] text-[#121212]/60">09:00–10:30 · protected</span></span></div></div>
+                </div>
+                <div class="grid grid-cols-[3rem_minmax(0,1fr)]">
+                  <div class="border-r border-[#121212]/10 px-2 py-4 text-right text-[10px] text-[#121212]/25">10:30</div>
+                  <div class="p-2"><div class="flex items-center gap-2 rounded-lg border border-dashed border-[#121212]/20 bg-[#ececec] p-2 text-[10px] text-[#121212]/60">free — 30m</div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="border-t border-white/10 bg-[#142d99]/95 px-2 pb-2 pt-1.5">
+            <div class="grid grid-cols-5 text-[9px]">
+              <span class="flex flex-col items-center gap-0.5 py-1 text-white/45"><iconify-icon icon="solar:sun-2-linear" class="text-base"></iconify-icon>Today</span>
+              <span class="flex flex-col items-center gap-0.5 py-1 text-white/45"><iconify-icon icon="solar:folder-with-files-linear" class="text-base"></iconify-icon>Projects</span>
+              <span class="flex flex-col items-center justify-center py-0.5"><span class="flex h-9 w-9 items-center justify-center rounded-full bg-[#ccff00] text-[#121212] shadow-[0_0_24px_rgba(204,255,0,.25)]"><iconify-icon icon="solar:add-circle-linear" class="text-lg"></iconify-icon></span></span>
+              <span class="flex flex-col items-center gap-0.5 py-1 text-[#ccff00]"><iconify-icon icon="solar:calendar-minimalistic-linear" class="text-base"></iconify-icon>Calendar</span>
+              <span class="flex flex-col items-center gap-0.5 py-1 text-white/45"><iconify-icon icon="solar:magic-stick-3-linear" class="text-base"></iconify-icon>Ask AI</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- mobile week -->
+      <div id="mweek" class="scroll-mt-16 rounded-2xl border border-white/10 bg-[#0a1a5c]/40 p-4 backdrop-blur-md">
+        <p class="mb-3 uppercase tracking-widest text-white/40">07 · Week strip <span class="text-[#ccff00]">— mobile default</span></p>
+        <div class="relative mx-auto w-[300px] overflow-hidden rounded-[2rem] border-[6px] border-[#121212] shadow-2xl" style="background:#2047e6;background-image:radial-gradient(rgba(255,255,255,.14) 1px,transparent 1px);background-size:20px 20px">
+          <span class="callout" style="left:40px;top:278px">2</span>
+          <div class="overflow-hidden border-b border-white/10 bg-[#173abf]/90 py-1 text-center text-[9px] uppercase tracking-[0.18rem] text-[#ccff00]/80">06h 40m free on thursday //</div>
+          <div class="flex h-11 items-center justify-between border-b border-white/10 bg-[#2047e6]/80 px-3">
+            <span class="flex items-center gap-2"><span class="flex h-6 w-6 items-center justify-center rounded bg-[#ccff00] text-[9px] font-semibold text-[#121212]">FT</span><span class="text-white">Calendar</span></span>
+            <span class="flex h-6 w-6 items-center justify-center rounded border border-white/10 text-white/60"><iconify-icon icon="solar:bell-linear" class="text-sm"></iconify-icon></span>
+          </div>
+          <div class="p-3">
+            <div class="text-[10px] uppercase tracking-[0.16rem] text-[#ccff00]">Week 37 · 25 events · 1 conflict</div>
+            <div class="mt-1 flex items-center gap-1 text-lg font-medium tracking-tight text-white">Sep 7 – Sep 13 <iconify-icon icon="solar:alt-arrow-down-linear" class="text-base text-white/40"></iconify-icon></div>
+
+            <div class="mt-3 flex items-center gap-2 rounded-xl border border-[#ff4400]/40 bg-[#ff4400]/10 p-2">
+              <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#ff4400] text-[#121212]"><iconify-icon icon="solar:danger-triangle-linear" class="text-base"></iconify-icon></span>
+              <span class="min-w-0"><span class="block text-[11px] text-white">Double-booked Wed 11:00</span><span class="mt-0.5 block text-[10px] text-white/50">Team sync overlaps Roadmap review.</span></span>
+            </div>
+
+            <div class="mt-3 rounded-xl border border-white/10 bg-[#121212] p-2 shadow-2xl">
+              <div class="mb-2 flex items-center justify-between px-1 text-[9px] uppercase tracking-widest text-white/35"><span>Week 37</span><span>Sep 7 – 13</span></div>
+              <div class="flex gap-1.5 overflow-hidden">
+                <span class="flex min-w-[2.9rem] flex-col items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-1 py-2 text-[9px] text-white/60"><span class="uppercase tracking-widest text-white/40">Mon</span><span class="text-xs font-medium text-white">7</span><span class="flex h-1 gap-0.5"><span class="h-1 w-1 rounded-full bg-[#ccff00]"></span><span class="h-1 w-1 rounded-full bg-[#ffd600]"></span></span><span class="text-white/30">4 evts</span></span>
+                <span class="flex min-w-[2.9rem] flex-col items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-1 py-2 text-[9px] text-white/60"><span class="uppercase tracking-widest text-white/40">Tue</span><span class="text-xs font-medium text-white">8</span><span class="flex h-1 gap-0.5"><span class="h-1 w-1 rounded-full bg-[#ff7040]"></span><span class="h-1 w-1 rounded-full bg-[#ccff00]"></span></span><span class="text-white/30">6 evts</span></span>
+                <span class="flex min-w-[2.9rem] flex-col items-center gap-1 rounded-lg border border-[#ccff00] bg-[#ccff00] px-1 py-2 text-[9px] text-[#121212] shadow-[0_0_16px_rgba(204,255,0,.35)]"><span class="uppercase tracking-widest text-[#121212]/60">Wed</span><span class="text-xs font-medium">9</span><span class="flex h-1 gap-0.5"><span class="h-1 w-1 rounded-full bg-[#121212]"></span><span class="h-1 w-1 rounded-full bg-[#121212]"></span></span><span class="text-[#121212]/55">6 evts</span></span>
+                <span class="flex min-w-[2.9rem] flex-col items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-1 py-2 text-[9px] text-white/60"><span class="uppercase tracking-widest text-white/40">Thu</span><span class="text-xs font-medium text-white">10</span><span class="flex h-1 gap-0.5"><span class="h-1 w-1 rounded-full bg-[#ffd600]"></span><span class="h-1 w-1 rounded-full bg-[#ff7040]"></span></span><span class="text-white/30">4 evts</span></span>
+                <span class="flex min-w-[2.9rem] flex-col items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-1 py-2 text-[9px] text-white/60"><span class="uppercase tracking-widest text-white/40">Fri</span><span class="text-xs font-medium text-white">11</span><span class="flex h-1 gap-0.5"><span class="h-1 w-1 rounded-full bg-[#c8c8ff]"></span></span><span class="text-white/30">4 evts</span></span>
+                <span class="flex min-w-[1.2rem] items-center text-white/20">›</span>
+              </div>
+            </div>
+
+            <div class="mt-3 rounded-xl border border-white/10 shadow-2xl">
+              <div class="rounded-t-xl border-b border-white/10 bg-[#121212] p-3">
+                <div class="flex items-center gap-2"><span class="text-sm font-medium tracking-tight text-white">Wednesday 9 Sep</span><span class="rounded-full bg-[#ccff00] px-1.5 py-0.5 text-[9px] text-[#121212]">Today</span></div>
+                <p class="mt-1 text-[10px] text-white/45">Planned 4h 50m · free 8h 25m</p>
+              </div>
+              <div class="overflow-hidden rounded-b-xl bg-[#f4f4f4] text-[#121212]">
+                <div class="grid grid-cols-[3rem_minmax(0,1fr)] border-b border-[#121212]/10">
+                  <div class="border-r border-[#121212]/10 px-2 py-4 text-right text-[10px] text-[#121212]/40">11:00</div>
+                  <div class="p-2"><div class="flex gap-2 rounded-lg border border-[#121212]/10 bg-white p-2 shadow-sm ring-1 ring-[#ff4400]"><span class="w-1 shrink-0 self-stretch rounded-full bg-[#ffd600]"></span><span class="min-w-0"><span class="block text-[11px] font-medium">Product team sync</span><span class="mt-1 flex items-center gap-1 text-[10px] text-[#cc3600]"><iconify-icon icon="solar:danger-triangle-linear" class="text-[11px]"></iconify-icon>Overlaps</span></span></div></div>
+                </div>
+                <div class="grid grid-cols-[3rem_minmax(0,1fr)]">
+                  <div class="border-r border-[#121212]/10 px-2 py-4 text-right text-[10px] text-[#121212]/40">13:00</div>
+                  <div class="p-2"><div class="flex gap-2 rounded-lg border border-[#121212]/10 bg-white p-2 shadow-sm"><span class="w-1 shrink-0 self-stretch rounded-full bg-[#ffb39a]"></span><span class="min-w-0"><span class="block text-[11px] font-medium">Review research patterns</span><span class="mt-1 block text-[10px] text-[#121212]/60">13:00–13:50 · 50m</span></span></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="border-t border-white/10 bg-[#142d99]/95 px-2 pb-2 pt-1.5">
+            <div class="grid grid-cols-5 text-[9px]">
+              <span class="flex flex-col items-center gap-0.5 py-1 text-white/45"><iconify-icon icon="solar:sun-2-linear" class="text-base"></iconify-icon>Today</span>
+              <span class="flex flex-col items-center gap-0.5 py-1 text-white/45"><iconify-icon icon="solar:folder-with-files-linear" class="text-base"></iconify-icon>Projects</span>
+              <span class="flex flex-col items-center justify-center py-0.5"><span class="flex h-9 w-9 items-center justify-center rounded-full bg-[#ccff00] text-[#121212] shadow-[0_0_24px_rgba(204,255,0,.25)]"><iconify-icon icon="solar:add-circle-linear" class="text-lg"></iconify-icon></span></span>
+              <span class="flex flex-col items-center gap-0.5 py-1 text-[#ccff00]"><iconify-icon icon="solar:calendar-minimalistic-linear" class="text-base"></iconify-icon>Calendar</span>
+              <span class="flex flex-col items-center gap-0.5 py-1 text-white/45"><iconify-icon icon="solar:magic-stick-3-linear" class="text-base"></iconify-icon>Ask AI</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- mobile day -->
+      <div id="mday" class="scroll-mt-16 rounded-2xl border border-white/10 bg-[#0a1a5c]/40 p-4 backdrop-blur-md">
+        <p class="mb-3 uppercase tracking-widest text-white/40">08 · Day agenda</p>
+        <div class="relative mx-auto w-[300px] overflow-hidden rounded-[2rem] border-[6px] border-[#121212] shadow-2xl" style="background:#2047e6;background-image:radial-gradient(rgba(255,255,255,.14) 1px,transparent 1px);background-size:20px 20px">
+          <span class="callout" style="left:12px;top:196px">3</span>
+          <span class="callout" style="left:133px;top:578px">4</span>
+          <div class="overflow-hidden border-b border-white/10 bg-[#173abf]/90 py-1 text-center text-[9px] uppercase tracking-[0.18rem] text-[#ccff00]/80">AI scheduler online //</div>
+          <div class="flex h-11 items-center justify-between border-b border-white/10 bg-[#2047e6]/80 px-3">
+            <span class="flex items-center gap-2"><span class="flex h-6 w-6 items-center justify-center rounded bg-[#ccff00] text-[9px] font-semibold text-[#121212]">FT</span><span class="text-white">Calendar</span></span>
+            <span class="flex h-6 w-6 items-center justify-center rounded border border-white/10 text-white/60"><iconify-icon icon="solar:magnifer-linear" class="text-sm"></iconify-icon></span>
+          </div>
+          <div class="p-3">
+            <div class="text-[10px] uppercase tracking-[0.16rem] text-[#ccff00]">Day 252 · 6 blocks · energy 78</div>
+            <div class="mt-1 flex items-center gap-1 text-lg font-medium tracking-tight text-white">Wednesday 9 Sep <iconify-icon icon="solar:alt-arrow-down-linear" class="text-base text-white/40"></iconify-icon></div>
+
+            <div class="mt-3 rounded-xl border border-white/10 bg-[#121212] p-3 shadow-2xl">
+              <div class="flex items-center gap-2 text-white/45"><iconify-icon icon="solar:bolt-linear" class="text-base text-[#ff7040]"></iconify-icon><span class="text-[10px] uppercase tracking-widest">Energy forecast</span></div>
+              <div class="relative mt-2 h-6 overflow-hidden rounded border border-white/10" style="background:linear-gradient(90deg,rgba(204,255,0,.55) 0%,rgba(204,255,0,.75) 18%,rgba(255,214,0,.5) 38%,rgba(255,112,64,.35) 52%,rgba(255,214,0,.4) 70%,rgba(200,200,255,.35) 88%,rgba(200,200,255,.2) 100%)">
+                <div class="absolute inset-y-0 w-px bg-[#ff4400]" style="left:52.6%"><span class="absolute -left-[3px] top-0 h-[7px] w-[7px] rounded-full bg-[#ff4400] shadow-[0_0_10px_#ff4400]"></span></div>
+              </div>
+              <div class="mt-1.5 flex justify-between text-[9px] uppercase tracking-widest text-white/35"><span>07 peak</span><span>12:30 dip</span><span>15 wind</span></div>
+            </div>
+
+            <div class="mt-3 rounded-xl border border-white/10 shadow-2xl">
+              <div class="rounded-t-xl border-b border-white/10 bg-[#121212] p-3">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2"><span class="text-sm font-medium tracking-tight text-white">Wednesday 9 Sep</span><span class="rounded-full bg-[#ccff00] px-1.5 py-0.5 text-[9px] text-[#121212]">Today</span></div>
+                  <span class="flex h-7 items-center gap-1 rounded border border-white/10 bg-white/5 px-2 text-[10px] text-white/70"><iconify-icon icon="solar:add-circle-linear" class="text-sm"></iconify-icon>Add</span>
+                </div>
+                <p class="mt-1 text-[10px] text-white/45">Planned 4h 50m · free 8h 25m</p>
+              </div>
+              <div class="overflow-hidden rounded-b-xl bg-[#f4f4f4] text-[#121212]">
+                <div class="grid grid-cols-[3rem_minmax(0,1fr)] border-b border-[#121212]/10">
+                  <div class="border-r border-[#121212]/10 px-2 py-4 text-right text-[10px] text-[#121212]/40">09:00</div>
+                  <div class="p-2"><div class="flex gap-2 rounded-lg border border-[#121212]/10 bg-white p-2 shadow-sm"><span class="w-1 shrink-0 self-stretch rounded-full bg-[#ccff00]"></span><span class="min-w-0"><span class="block text-[11px] font-medium">Define mobile onboarding flow</span><span class="mt-1 block text-[10px] text-[#121212]/60">09:00–10:30 · Mobile launch</span><span class="mt-1 flex items-center gap-1 text-[10px] text-[#2047e6]"><iconify-icon icon="solar:shield-check-linear" class="text-[11px]"></iconify-icon>Protected</span></span></div></div>
+                </div>
+                <div class="grid grid-cols-[3rem_minmax(0,1fr)] border-b border-[#121212]/10">
+                  <div class="border-r border-[#121212]/10 px-2 py-4 text-right text-[10px] text-[#121212]/25">10:30</div>
+                  <div class="p-2"><div class="flex items-center gap-2 rounded-lg border border-dashed border-[#121212]/20 bg-[#ececec] p-2 text-[10px] text-[#121212]/60"><span class="flex h-6 w-6 items-center justify-center rounded-full bg-white"><iconify-icon icon="solar:add-circle-linear" class="text-sm"></iconify-icon></span>free — 30m<span class="ml-auto text-[#121212]/50">10:30–11:00</span></div></div>
+                </div>
+                <div class="grid grid-cols-[3rem_minmax(0,1fr)]">
+                  <div class="border-r border-[#121212]/10 px-2 py-4 text-right text-[10px] text-[#121212]/40">12:00</div>
+                  <div class="p-2"><div class="flex items-center gap-2 rounded-lg border border-dashed border-[#121212]/15 bg-[#ececec] p-2 text-[10px] text-[#121212]/60"><span class="flex h-6 w-6 items-center justify-center rounded-full bg-white"><iconify-icon icon="solar:cup-hot-linear" class="text-sm"></iconify-icon></span>Lunch and reset</div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="border-t border-white/10 bg-[#142d99]/95 px-2 pb-2 pt-1.5">
+            <div class="grid grid-cols-5 text-[9px]">
+              <span class="flex flex-col items-center gap-0.5 py-1 text-white/45"><iconify-icon icon="solar:sun-2-linear" class="text-base"></iconify-icon>Today</span>
+              <span class="flex flex-col items-center gap-0.5 py-1 text-white/45"><iconify-icon icon="solar:folder-with-files-linear" class="text-base"></iconify-icon>Projects</span>
+              <span class="flex flex-col items-center justify-center py-0.5"><span class="flex h-9 w-9 items-center justify-center rounded-full bg-[#ccff00] text-[#121212] shadow-[0_0_24px_rgba(204,255,0,.25)]"><iconify-icon icon="solar:add-circle-linear" class="text-lg"></iconify-icon></span></span>
+              <span class="flex flex-col items-center gap-0.5 py-1 text-[#ccff00]"><iconify-icon icon="solar:calendar-minimalistic-linear" class="text-base"></iconify-icon>Calendar</span>
+              <span class="flex flex-col items-center gap-0.5 py-1 text-white/45"><iconify-icon icon="solar:magic-stick-3-linear" class="text-base"></iconify-icon>Ask AI</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <ol class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">1</span><span class="text-white/60"><b class="text-white">Dots, not chips.</b> Up to three 4px category dots per day. Density is conveyed, titles are not — that is what the agenda underneath is for.</span></li>
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">2</span><span class="text-white/60"><b class="text-white">Day pills carry a load count.</b> "6 evts" plus dots lets you pick the light day without opening it. Selected pill goes solid lime with the glow.</span></li>
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">3</span><span class="text-white/60"><b class="text-white">Energy band shrinks, doesn't disappear.</b> 36px tall with three labels instead of four — it is the explanation for the whole schedule, so it survives to the smallest screen.</span></li>
+      <li class="flex gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 backdrop-blur-md"><span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ccff00] text-[10px] font-semibold text-[#121212]">4</span><span class="text-white/60"><b class="text-white">FAB creates, it does not "AI".</b> The dashboard's centre FAB becomes <i>new event</i> here and "Ask AI" takes the fifth nav slot — on a calendar, adding is the more common intent.</span></li>
+    </ol>
+  </section>
+
+  <!-- ══════════ 09 · SHEETS ══════════ -->
+  <section id="sheets" class="mb-16 scroll-mt-16">
+    <div class="mb-5 flex flex-wrap items-end justify-between gap-3 border-b border-white/10 pb-4">
+      <div>
+        <span class="uppercase tracking-[0.18rem] text-[#ccff00]">09 / Bottom sheets</span>
+        <h2 class="mt-2 text-2xl font-medium tracking-tight text-white">Everything modal arrives from the bottom.</h2>
+        <p class="mt-2 max-w-2xl leading-relaxed text-white/50">
+          One sheet chassis, four payloads: <span class="text-[#ccff00]">rounded-t-2xl bg-[#121212]</span>, a drag handle, a <span class="text-[#ccff00]">#07123f/70</span> scrim with backdrop-blur — the dashboard's <span class="text-[#ccff00]">taskModal</span>, reused verbatim.
+        </p>
+      </div>
+    </div>
+
+    <div class="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+      <!-- event detail sheet -->
+      <div class="rounded-2xl border border-white/10 bg-[#0a1a5c]/40 p-4 backdrop-blur-md">
+        <p class="mb-3 uppercase tracking-widest text-white/40">Event detail</p>
+        <div class="overflow-hidden rounded-t-2xl border border-white/10 bg-[#121212]">
+          <div class="mx-auto mt-3 h-1 w-10 rounded-full bg-white/20"></div>
+          <div class="mt-3 h-1 w-full bg-[#ffd600]"></div>
+          <div class="p-4">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="h-1.5 w-1.5 rounded-full bg-[#ffd600]"></span>
+              <span class="uppercase tracking-widest text-white/40">Meetings</span>
+              <span class="rounded-full bg-[#ff4400]/20 px-2 py-0.5 text-[#ff4400]">Clash</span>
+            </div>
+            <h3 class="mt-2 text-base font-medium tracking-tight text-white">Roadmap review with Maya</h3>
+            <div class="mt-3 space-y-2 text-white/55">
+              <p class="flex items-center gap-2"><iconify-icon icon="solar:clock-circle-linear" class="text-base text-white/35"></iconify-icon>Wed 9 Sep · 11:00–12:00 · 1h</p>
+              <p class="rounded-lg border border-white/10 bg-white/5 p-2 leading-relaxed text-white/60">Q4 scope. Maya can also do Thursday 14:00.</p>
+            </div>
+            <div class="mt-3 flex items-start gap-2 rounded-lg border border-[#ff4400]/40 bg-[#ff4400]/10 p-2 text-white/70">
+              <iconify-icon icon="solar:danger-triangle-linear" class="mt-0.5 shrink-0 text-base text-[#ff4400]"></iconify-icon>
+              <span>Overlaps another block for 30 minutes.</span>
+            </div>
+            <div class="mt-4 grid grid-cols-2 gap-2">
+              <span class="flex h-10 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 text-white/75">Edit</span>
+              <span class="flex h-10 items-center justify-center gap-2 rounded-lg bg-[#ccff00] text-[#121212]">Reschedule</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- create sheet -->
+      <div class="rounded-2xl border border-white/10 bg-[#0a1a5c]/40 p-4 backdrop-blur-md">
+        <p class="mb-3 uppercase tracking-widest text-white/40">FAB → create</p>
+        <div class="overflow-hidden rounded-t-2xl border border-white/10 bg-[#121212] p-4">
+          <div class="mx-auto mb-4 h-1 w-10 rounded-full bg-white/20"></div>
+          <p class="uppercase tracking-widest text-[#ccff00]">New block</p>
+          <h3 class="mt-1 text-lg font-medium tracking-tight text-white">Add to your calendar</h3>
+          <div class="mt-4 flex h-11 items-center rounded-lg border border-[#ccff00]/60 bg-white/5 px-3 text-sm text-white">Interview · Priya</div>
+          <div class="mt-3 grid grid-cols-2 gap-2">
+            <div class="flex h-11 items-center rounded-lg border border-white/10 bg-white/5 px-3 text-white/70">2026-09-15</div>
+            <div class="flex h-11 items-center rounded-lg border border-white/10 bg-white/5 px-3 text-white/70">15:00</div>
+          </div>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <span class="flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-white/50"><span class="h-2 w-2 rounded-full bg-[#ccff00]"></span>Deep</span>
+            <span class="flex items-center gap-2 rounded-full border border-white/40 bg-white/10 px-3 py-2 text-white"><span class="h-2 w-2 rounded-full bg-[#ffb39a]"></span>Research</span>
+          </div>
+          <div class="mt-3 flex items-center gap-3 rounded-xl border border-[#ccff00]/40 bg-[#ccff00]/10 p-3">
+            <iconify-icon icon="solar:magic-stick-3-linear" class="text-lg text-[#ccff00]"></iconify-icon>
+            <span class="min-w-0 flex-1 text-white">Let AI place it</span>
+            <span class="relative h-5 w-9 shrink-0 rounded-full bg-[#ccff00]"><span class="absolute left-[1.125rem] top-0.5 h-4 w-4 rounded-full bg-[#121212]"></span></span>
+          </div>
+          <div class="mt-4 flex h-11 items-center justify-center gap-2 rounded-lg bg-[#ccff00] font-medium text-[#121212]"><iconify-icon icon="solar:check-circle-linear" class="text-lg"></iconify-icon>Save event</div>
+        </div>
+      </div>
+
+      <!-- ask AI sheet -->
+      <div class="rounded-2xl border border-white/10 bg-[#0a1a5c]/40 p-4 backdrop-blur-md">
+        <p class="mb-3 uppercase tracking-widest text-white/40">Ask Find time</p>
+        <div class="overflow-hidden rounded-t-2xl border border-white/10 bg-[#121212] p-4">
+          <div class="mx-auto mb-4 h-1 w-10 rounded-full bg-white/20"></div>
+          <div class="mb-2 flex items-center gap-2 text-[#ccff00]"><iconify-icon icon="solar:magic-stick-3-linear" class="text-xl"></iconify-icon><span class="uppercase tracking-widest">Find time</span></div>
+          <h3 class="text-lg font-medium tracking-tight text-white">What needs a slot?</h3>
+          <div class="mt-4 rounded-xl border border-white/10 bg-white/[0.06] p-3">
+            <p class="text-sm text-white/25">Example: make room for 2h deep work on Thursday</p>
+            <div class="mt-6 flex items-center justify-between">
+              <span class="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-white/45"><iconify-icon icon="solar:microphone-3-linear" class="text-lg"></iconify-icon></span>
+              <span class="flex h-9 items-center gap-2 rounded-lg bg-[#ccff00] px-4 font-medium text-[#121212]">Find time</span>
+            </div>
+          </div>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <span class="rounded-full border border-white/10 px-3 py-2 text-white/45">2h deep work Thursday</span>
+            <span class="rounded-full border border-white/10 px-3 py-2 text-white/45">Protect my mornings</span>
+          </div>
+          <p class="mt-4 leading-relaxed text-white/30">On mobile this is the fifth nav item, not the FAB — asking is a considered act, creating is a reflex.</p>
+        </div>
+      </div>
+
+      <!-- month picker sheet -->
+      <div class="rounded-2xl border border-white/10 bg-[#0a1a5c]/40 p-4 backdrop-blur-md">
+        <p class="mb-3 uppercase tracking-widest text-white/40">Date header → jump</p>
+        <div class="overflow-hidden rounded-t-2xl border border-white/10 bg-[#121212] p-4">
+          <div class="mx-auto mb-4 h-1 w-10 rounded-full bg-white/20"></div>
+          <div class="flex items-center justify-between">
+            <span class="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-white/60"><iconify-icon icon="solar:alt-arrow-left-linear" class="text-lg"></iconify-icon></span>
+            <span class="text-sm font-medium tracking-tight text-white">September 2026</span>
+            <span class="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-white/60"><iconify-icon icon="solar:alt-arrow-right-linear" class="text-lg"></iconify-icon></span>
+          </div>
+          <div class="mt-4 grid grid-cols-7 text-center text-[10px] uppercase tracking-widest text-white/30">
+            <span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span>
+          </div>
+          <div class="mt-2 grid grid-cols-7 gap-1 text-[11px]">
+            <span class="flex h-9 items-center justify-center rounded-lg border border-white/5 text-white/20">31</span>
+            <span class="relative flex h-9 items-center justify-center rounded-lg border border-white/10 text-white/70">1<span class="absolute bottom-1 h-1 w-1 rounded-full bg-[#ccff00]"></span></span>
+            <span class="relative flex h-9 items-center justify-center rounded-lg border border-white/10 text-white/70">2<span class="absolute bottom-1 h-1 w-1 rounded-full bg-[#ccff00]"></span></span>
+            <span class="relative flex h-9 items-center justify-center rounded-lg border border-white/10 text-white/70">3<span class="absolute bottom-1 h-1 w-1 rounded-full bg-[#ccff00]"></span></span>
+            <span class="relative flex h-9 items-center justify-center rounded-lg border border-white/10 text-white/70">4<span class="absolute bottom-1 h-1 w-1 rounded-full bg-[#ccff00]"></span></span>
+            <span class="flex h-9 items-center justify-center rounded-lg border border-white/10 text-white/70">5</span>
+            <span class="flex h-9 items-center justify-center rounded-lg border border-white/10 text-white/70">6</span>
+            <span class="relative flex h-9 items-center justify-center rounded-lg border border-white/10 text-white/70">7<span class="absolute bottom-1 h-1 w-1 rounded-full bg-[#ccff00]"></span></span>
+            <span class="relative flex h-9 items-center justify-center rounded-lg border border-white/10 text-white/70">8<span class="absolute bottom-1 h-1 w-1 rounded-full bg-[#ccff00]"></span></span>
+            <span class="flex h-9 items-center justify-center rounded-lg border border-[#ccff00] bg-[#ccff00] font-medium text-[#121212]">9</span>
+            <span class="relative flex h-9 items-center justify-center rounded-lg border border-white/10 text-white/70">10<span class="absolute bottom-1 h-1 w-1 rounded-full bg-[#ccff00]"></span></span>
+            <span class="relative flex h-9 items-center justify-center rounded-lg border border-white/10 text-white/70">11<span class="absolute bottom-1 h-1 w-1 rounded-full bg-[#ccff00]"></span></span>
+            <span class="relative flex h-9 items-center justify-center rounded-lg border border-white/10 text-white/70">12<span class="absolute bottom-1 h-1 w-1 rounded-full bg-[#ccff00]"></span></span>
+            <span class="flex h-9 items-center justify-center rounded-lg border border-white/10 text-white/70">13</span>
+          </div>
+          <div class="mt-4 flex gap-2">
+            <span class="flex h-11 flex-1 items-center justify-center rounded-lg bg-[#ccff00] font-medium text-[#121212]">Jump to today</span>
+            <span class="flex h-11 items-center rounded-lg border border-white/10 px-4 text-white/60">Close</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ 10 · STATES ══════════ -->
+  <section id="states" class="mb-16 scroll-mt-16">
+    <div class="mb-5 flex flex-wrap items-end justify-between gap-3 border-b border-white/10 pb-4">
+      <div>
+        <span class="uppercase tracking-[0.18rem] text-[#ccff00]">10 / States</span>
+        <h2 class="mt-2 text-2xl font-medium tracking-tight text-white">Empty, conflicted, loading.</h2>
+        <p class="mt-2 max-w-2xl leading-relaxed text-white/50">
+          A planner's empty state is not a failure — it is the product working. It says so, in the dashboard's voice, and offers the two things you'd actually do next.
+        </p>
+      </div>
+    </div>
+
+    <div class="grid gap-5 lg:grid-cols-3">
+      <div class="rounded-2xl border border-white/10 bg-[#0a1a5c]/40 p-4 backdrop-blur-md">
+        <p class="mb-3 uppercase tracking-widest text-white/40">Empty day</p>
+        <div class="rounded-2xl border border-white/10 bg-[#121212] shadow-2xl">
+          <div class="rounded-t-2xl border-b border-white/10 p-4">
+            <div class="text-sm font-medium tracking-tight text-white">Sunday 13 Sep</div>
+            <p class="mt-1 text-white/45">Planned — · free — · built around your energy.</p>
+          </div>
+          <div class="flex flex-col items-center px-5 py-10 text-center">
+            <span class="flex h-14 w-14 items-center justify-center rounded-2xl border border-[#ccff00]/40 bg-[#ccff00]/10 text-[#ccff00]"><iconify-icon icon="solar:calendar-add-linear" class="text-2xl"></iconify-icon></span>
+            <p class="mt-5 text-base font-medium tracking-tight text-white">Nothing booked. That is space, not a gap.</p>
+            <p class="mt-2 max-w-xs leading-relaxed text-white/45">Eight open hours on Sunday. Block one for the work you keep postponing.</p>
+            <div class="mt-5 flex flex-wrap justify-center gap-2">
+              <span class="flex h-10 items-center rounded-lg bg-[#ccff00] px-4 font-medium text-[#121212]">Add event</span>
+              <span class="flex h-10 items-center rounded-lg border border-white/10 bg-white/5 px-4 text-white/70">Ask Find time to fill it</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="rounded-2xl border border-white/10 bg-[#0a1a5c]/40 p-4 backdrop-blur-md">
+        <p class="mb-3 uppercase tracking-widest text-white/40">Conflict</p>
+        <div class="space-y-3">
+          <div class="flex items-center gap-3 rounded-xl border border-[#ff4400]/40 bg-[#ff4400]/10 p-4 backdrop-blur-md">
+            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#ff4400] text-[#121212]"><iconify-icon icon="solar:danger-triangle-linear" class="text-lg"></iconify-icon></span>
+            <div class="min-w-0 flex-1">
+              <p class="text-white">Double-booked Wednesday 11:00</p>
+              <p class="mt-1 text-white/50">Product team sync overlaps Roadmap review with Maya by 30 minutes.</p>
+            </div>
+            <span class="shrink-0 rounded-lg bg-[#ff4400] px-3 py-2 text-[#121212]">Resolve</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-[#121212] p-3">
+            <div class="rounded-lg border border-white/10 p-2 ring-1 ring-[#ff4400]" style="background:rgba(255,214,0,.16);border-left:2px solid #ffd600">
+              <span class="flex items-start gap-1"><span class="min-w-0 flex-1 truncate font-medium text-white">Roadmap review</span><iconify-icon icon="solar:danger-triangle-linear" class="shrink-0 text-sm text-[#ff4400]"></iconify-icon></span>
+              <span class="mt-1 block text-white/45">11:00–12:00</span>
+            </div>
+            <div class="rounded-lg border border-white/10 p-2 ring-1 ring-[#ff4400]" style="background:rgba(255,214,0,.16);border-left:2px solid #ffd600">
+              <span class="flex items-start gap-1"><span class="min-w-0 flex-1 truncate font-medium text-white">Product team sync</span><iconify-icon icon="solar:danger-triangle-linear" class="shrink-0 text-sm text-[#ff4400]"></iconify-icon></span>
+              <span class="mt-1 block text-white/45">11:00–11:30</span>
+            </div>
+          </div>
+          <p class="leading-relaxed text-white/45">Orange never fills a whole block — it is a 1px ring plus a glyph, so a clash is unmistakable without dominating the grid.</p>
+        </div>
+      </div>
+
+      <div class="rounded-2xl border border-white/10 bg-[#0a1a5c]/40 p-4 backdrop-blur-md">
+        <p class="mb-3 uppercase tracking-widest text-white/40">Loading</p>
+        <div class="overflow-hidden rounded-2xl border border-white/10 shadow-2xl">
+          <div class="grid grid-cols-7 gap-px bg-white/10">
+            <div class="bg-[#0e0e0e] py-2.5 text-center uppercase tracking-[0.16rem] text-white/25">M</div>
+            <div class="bg-[#0e0e0e] py-2.5 text-center uppercase tracking-[0.16rem] text-white/25">T</div>
+            <div class="bg-[#0e0e0e] py-2.5 text-center uppercase tracking-[0.16rem] text-white/25">W</div>
+            <div class="bg-[#0e0e0e] py-2.5 text-center uppercase tracking-[0.16rem] text-white/25">T</div>
+            <div class="bg-[#0e0e0e] py-2.5 text-center uppercase tracking-[0.16rem] text-white/25">F</div>
+            <div class="bg-[#0e0e0e] py-2.5 text-center uppercase tracking-[0.16rem] text-white/25">S</div>
+            <div class="bg-[#0e0e0e] py-2.5 text-center uppercase tracking-[0.16rem] text-white/25">S</div>
+          </div>
+          <div class="grid grid-cols-7 gap-px bg-white/10">
+            <div class="h-[74px] bg-[#121212] p-2"><div class="skel h-5 w-5 rounded bg-white/10"></div><div class="skel mt-2 h-4 w-full rounded bg-white/[0.07]"></div></div>
+            <div class="h-[74px] bg-[#121212] p-2"><div class="skel h-5 w-5 rounded bg-white/10"></div><div class="skel mt-2 h-4 w-4/5 rounded bg-white/[0.07]"></div></div>
+            <div class="h-[74px] bg-[#121212] p-2"><div class="skel h-5 w-5 rounded bg-white/10"></div><div class="skel mt-2 h-4 w-full rounded bg-white/[0.07]"></div></div>
+            <div class="h-[74px] bg-[#121212] p-2"><div class="skel h-5 w-5 rounded bg-white/10"></div><div class="skel mt-2 h-4 w-3/5 rounded bg-white/[0.07]"></div></div>
+            <div class="h-[74px] bg-[#121212] p-2"><div class="skel h-5 w-5 rounded bg-white/10"></div><div class="skel mt-2 h-4 w-full rounded bg-white/[0.07]"></div></div>
+            <div class="h-[74px] bg-[#121212] p-2"><div class="skel h-5 w-5 rounded bg-white/10"></div></div>
+            <div class="h-[74px] bg-[#121212] p-2"><div class="skel h-5 w-5 rounded bg-white/10"></div></div>
+            <div class="h-[74px] bg-[#121212] p-2"><div class="skel h-5 w-5 rounded bg-white/10"></div><div class="skel mt-2 h-4 w-4/5 rounded bg-white/[0.07]"></div></div>
+            <div class="h-[74px] bg-[#121212] p-2"><div class="skel h-5 w-5 rounded bg-white/10"></div><div class="skel mt-2 h-4 w-full rounded bg-white/[0.07]"></div></div>
+            <div class="h-[74px] bg-[#121212] p-2"><div class="skel h-5 w-5 rounded bg-white/10"></div><div class="skel mt-2 h-4 w-2/3 rounded bg-white/[0.07]"></div></div>
+            <div class="h-[74px] bg-[#121212] p-2"><div class="skel h-5 w-5 rounded bg-white/10"></div><div class="skel mt-2 h-4 w-full rounded bg-white/[0.07]"></div></div>
+            <div class="h-[74px] bg-[#121212] p-2"><div class="skel h-5 w-5 rounded bg-white/10"></div><div class="skel mt-2 h-4 w-4/5 rounded bg-white/[0.07]"></div></div>
+            <div class="h-[74px] bg-[#121212] p-2"><div class="skel h-5 w-5 rounded bg-white/10"></div></div>
+            <div class="h-[74px] bg-[#121212] p-2"><div class="skel h-5 w-5 rounded bg-white/10"></div></div>
+          </div>
+          <div class="flex items-center gap-2 border-t border-white/10 bg-[#0e0e0e] px-4 py-3 text-[#ccff00]">
+            <iconify-icon icon="solar:refresh-circle-linear" class="skel text-base"></iconify-icon>
+            <span class="uppercase tracking-widest">Loading calendar…</span>
+          </div>
+        </div>
+        <p class="mt-3 leading-relaxed text-white/45">The skeleton keeps the tile geometry so the grid does not reflow when data lands. Shown on period navigation only — never on view switching, which is instant.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ RESPONSIVE SUMMARY ══════════ -->
+  <section class="mb-10">
+    <div class="mb-5 border-b border-white/10 pb-4">
+      <span class="uppercase tracking-[0.18rem] text-[#ccff00]">Rules</span>
+      <h2 class="mt-2 text-2xl font-medium tracking-tight text-white">What changes at each breakpoint, and why.</h2>
+    </div>
+    <div class="grid gap-px overflow-hidden rounded-xl border border-white/15 bg-white/15 md:grid-cols-4">
+      <article class="bg-[#1739bc]/95 p-5">
+        <div class="text-[#ccff00]">&lt; 640px</div>
+        <h3 class="mt-3 text-white">Phone</h3>
+        <p class="mt-2 leading-relaxed text-white/55">Week strip is the default. Month = dots. Every modal is a bottom sheet. Bottom nav + FAB. Telemetry, sidebar and time-grid all hidden.</p>
+      </article>
+      <article class="bg-[#1739bc]/95 p-5">
+        <div class="text-[#ccff00]">640 – 1023px</div>
+        <h3 class="mt-3 text-white">Tablet</h3>
+        <p class="mt-2 leading-relaxed text-white/55">Same mobile structure, wider agenda rows (4.5rem time gutter), compose becomes a centred modal, "New event" reappears in the toolbar.</p>
+      </article>
+      <article class="bg-[#1739bc]/95 p-5">
+        <div class="text-[#ccff00]">1024px +</div>
+        <h3 class="mt-3 text-white">Desktop</h3>
+        <p class="mt-2 leading-relaxed text-white/55">Sidebar + mini-month appear, month becomes the default view, week/day time grids render, event taps open an anchored popover instead of a sheet.</p>
+      </article>
+      <article class="bg-[#1739bc]/95 p-5">
+        <div class="text-[#ccff00]">1280px +</div>
+        <h3 class="mt-3 text-white">Wide</h3>
+        <p class="mt-2 leading-relaxed text-white/55">Telemetry column and the day-view right rail appear. At 1536px+ month chips regain their start time. Nothing structural — only more context.</p>
+      </article>
+    </div>
+
+    <div class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div class="rounded-xl border border-white/10 bg-white/[0.05] p-4 backdrop-blur-md">
+        <div class="flex items-center gap-2 text-[#ccff00]"><iconify-icon icon="solar:eye-linear" class="text-lg"></iconify-icon><span class="uppercase tracking-widest">Contrast</span></div>
+        <p class="mt-3 leading-relaxed text-white/55">Lime on #121212 measures 15.94:1; body text at white/55 is 6.18:1. Orange #ff4400 is 5.42:1 on black but only 3.45:1 on white — so alert <i>text</i> on the light agenda switches to #cc3600 (5.13:1).</p>
+      </div>
+      <div class="rounded-xl border border-white/10 bg-white/[0.05] p-4 backdrop-blur-md">
+        <div class="flex items-center gap-2 text-[#ccff00]"><iconify-icon icon="solar:keyboard-linear" class="text-lg"></iconify-icon><span class="uppercase tracking-widest">Keyboard</span></div>
+        <p class="mt-3 leading-relaxed text-white/55">M / W / D switch view, T jumps to today, N opens compose, ← → step the period, Esc closes any layer. Focus ring is a 2px lime outline with 2px offset.</p>
+      </div>
+      <div class="rounded-xl border border-white/10 bg-white/[0.05] p-4 backdrop-blur-md">
+        <div class="flex items-center gap-2 text-[#ccff00]"><iconify-icon icon="solar:hand-stars-linear" class="text-lg"></iconify-icon><span class="uppercase tracking-widest">Targets</span></div>
+        <p class="mt-3 leading-relaxed text-white/55">Mobile day cells 56px, day pills 58px, sheet buttons 44px. Month chips on desktop are 24px but the whole tile is clickable, so pointer users always have a large target.</p>
+      </div>
+      <div class="rounded-xl border border-white/10 bg-white/[0.05] p-4 backdrop-blur-md">
+        <div class="flex items-center gap-2 text-[#ccff00]"><iconify-icon icon="solar:accessibility-linear" class="text-lg"></iconify-icon><span class="uppercase tracking-widest">Not colour alone</span></div>
+        <p class="mt-3 leading-relaxed text-white/55">Protected carries a shield, clashes carry a triangle, AI carries a magic stick, breaks carry a cup. Category colour is always paired with a text label somewhere in the same view.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer class="flex flex-wrap items-center justify-between gap-4 border-t border-white/10 pt-6 text-white/35">
+    <span>Find time · calendar design board · September 2026</span>
+    <span class="flex items-center gap-4">
+      <span class="text-[#ccff00]">calendar.html</span>
+      <span>calendar-design-spec.md</span>
+    </span>
+  </footer>
+</main>
+
+<script>
+  const marquee = document.getElementById('marquee');
+  let marqueeX = 0;
+  (function animateMarquee(){
+    marqueeX -= 0.35;
+    if (Math.abs(marqueeX) >= marquee.scrollWidth / 2) marqueeX = 0;
+    marquee.style.transform = `translateX(${marqueeX}px)`;
+    requestAnimationFrame(animateMarquee);
+  })();
+</script>
+</body></html>

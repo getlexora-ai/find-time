@@ -1,0 +1,480 @@
+<title>Find Time Canvas Study</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+  :root{
+    --lime:#ccff00;
+    --ink:#0e0f13;
+    --panel:#16171c;
+    --line:rgba(255,255,255,.10);
+    --t1:#ffffff;
+    --t2:rgba(255,255,255,.62);
+    --t3:rgba(255,255,255,.40);
+    --t4:rgba(255,255,255,.26);
+    --mono:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    background:var(--ink);
+    color:var(--t2);
+    font-family:var(--mono);
+    font-size:13px;
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+  }
+  ::selection{background:var(--lime);color:#121212}
+
+  .wrap{max-width:1120px;margin:0 auto;padding:36px 22px 72px}
+
+  /* ---------- header ---------- */
+  .eyebrow{
+    font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;
+    color:var(--lime);display:flex;align-items:center;gap:10px;
+  }
+  .eyebrow::before{content:"";width:7px;height:7px;background:var(--lime);
+    box-shadow:0 0 14px rgba(204,255,0,.75);border-radius:1px;flex:none}
+  h1{
+    font-size:clamp(26px,4.4vw,40px);line-height:1.12;letter-spacing:-.02em;
+    color:var(--t1);font-weight:500;margin:16px 0 0;text-wrap:balance;max-width:18ch;
+  }
+  .lede{margin-top:16px;max-width:64ch;color:var(--t2)}
+  .lede b{color:var(--t1);font-weight:500}
+
+  /* ---------- unchanged strip ---------- */
+  .fixed-strip{
+    margin-top:26px;display:flex;flex-wrap:wrap;align-items:center;gap:8px;
+    padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--panel);
+    font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--t3);
+  }
+  .fixed-strip .k{display:flex;align-items:center;gap:7px;color:var(--t2)}
+  .fixed-strip .sw{width:12px;height:12px;border-radius:3px;flex:none;border:1px solid rgba(255,255,255,.14)}
+  .fixed-strip .tag{margin-left:auto;color:var(--t4)}
+
+  /* ---------- section chrome ---------- */
+  .sec{margin-top:52px}
+  .sec-label{
+    font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--t3);
+    display:flex;align-items:center;gap:12px;margin-bottom:16px;
+  }
+  .sec-label::after{content:"";flex:1;height:1px;background:var(--line)}
+
+  /* ---------- live stage ---------- */
+  .stage{
+    position:relative;border:1px solid var(--line);border-radius:16px;overflow:hidden;
+    min-height:440px;
+    --ground:#0a1126;
+    --grad:linear-gradient(transparent,transparent);
+    --dot:rgba(255,255,255,.07);
+    --marquee:#14245f;
+    --panelMock:#16171f;
+    --wash:linear-gradient(transparent,transparent);
+    background-color:var(--ground);
+    background-image:radial-gradient(var(--dot) 1px,transparent 1px),var(--grad);
+    background-size:20px 20px,cover;
+    transition:background-color .45s ease;
+  }
+  .stage::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:.7;
+    background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.025) 0,rgba(255,255,255,.025) 1px,transparent 1px,transparent 9px)}
+  .stage::after{content:"";position:absolute;inset:0;pointer-events:none;background:var(--wash)}
+
+  .frame{position:absolute;inset:14px;border:1px solid rgba(255,255,255,.10);pointer-events:none}
+  .frame i{position:absolute;width:18px;height:18px}
+  .frame i.tl{left:0;top:0;border-left:2px solid var(--lime);border-top:2px solid var(--lime)}
+  .frame i.tr{right:0;top:0;border-right:2px solid var(--lime);border-top:2px solid var(--lime)}
+  .frame i.bl{left:0;bottom:0;border-left:2px solid var(--lime);border-bottom:2px solid var(--lime)}
+  .frame i.br{right:0;bottom:0;border-right:2px solid var(--lime);border-bottom:2px solid var(--lime)}
+
+  .marquee{position:absolute;top:0;left:0;right:0;height:30px;display:flex;align-items:center;
+    overflow:hidden;border-bottom:1px solid rgba(255,255,255,.10);
+    background:var(--marquee);backdrop-filter:blur(8px);z-index:3;transition:background .45s ease}
+  .marquee-track{white-space:nowrap;font-size:10px;letter-spacing:.2em;text-transform:uppercase;
+    color:rgba(204,255,0,.8);animation:slide 24s linear infinite}
+  .marquee-track span{padding-right:44px}
+  @keyframes slide{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+  .mock-tele{position:absolute;left:26px;top:52px;bottom:26px;display:flex;flex-direction:column;
+    justify-content:space-between;font-size:9.5px;letter-spacing:.12em;color:var(--t4);z-index:2}
+
+  .mgrid{position:relative;z-index:2;padding:50px 22px 24px}
+  @media(min-width:900px){.mgrid{padding-left:78px;padding-right:262px}}
+
+  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;
+    background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.10);border-radius:10px;overflow:hidden}
+  .dow{background:var(--panelMock);padding:7px 0;text-align:center;font-size:9px;
+    letter-spacing:.16em;text-transform:uppercase;color:var(--t4);transition:background .45s ease}
+  .tile{background:var(--panelMock);min-height:60px;padding:6px 6px 7px;display:flex;flex-direction:column;gap:3px;
+    transition:background .45s ease}
+  .tile .date{font-size:10px;color:var(--t3);align-self:flex-start}
+  .tile.dim .date{color:var(--t4);opacity:.5}
+  .tile.today .date{background:var(--lime);color:#121212;border-radius:5px;padding:1px 6px;font-weight:500;
+    box-shadow:0 0 14px rgba(204,255,0,.55)}
+  .c{font-size:9.5px;line-height:1.35;padding:2px 5px;border-radius:4px;border-left:2px solid;color:#fff;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .c.deep{border-color:#ccff00;background:rgba(204,255,0,.16)}
+  .c.design{border-color:#c8c8ff;background:rgba(200,200,255,.16)}
+  .c.meet{border-color:#ffd600;background:rgba(255,214,0,.16)}
+  .c.res{border-color:#ffb39a;background:rgba(255,179,154,.16)}
+  .c.ai{border:1px dashed rgba(204,255,0,.55);background:rgba(204,255,0,.09);color:#ccff00}
+
+  .mock-panel{position:absolute;top:54px;right:22px;width:224px;z-index:4;
+    background:var(--panelMock);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:15px;
+    box-shadow:0 24px 60px -18px rgba(0,0,0,.6);transition:background .45s ease}
+  .mock-panel .pe{font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--lime);
+    display:flex;align-items:center;gap:6px}
+  .mock-panel .ph{color:var(--t1);font-size:13px;margin-top:9px;letter-spacing:-.01em}
+  .mock-panel .pi{margin-top:11px;border:1px solid rgba(255,255,255,.10);border-radius:9px;padding:9px;
+    font-size:10.5px;color:var(--t3);background:rgba(255,255,255,.03)}
+  .mock-panel .pc{margin-top:11px;width:100%;background:var(--lime);color:#121212;border:0;border-radius:8px;
+    padding:8px 10px;font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.03em;text-align:center}
+  @media(max-width:820px){.mock-panel,.mock-tele{display:none}}
+
+  /* ---------- swatch controls ---------- */
+  .swatches{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  .swatch{display:flex;align-items:center;gap:9px;padding:8px 12px 8px 9px;border-radius:9px;
+    border:1px solid var(--line);background:var(--panel);color:var(--t2);cursor:pointer;
+    font-family:var(--mono);font-size:11px;letter-spacing:.02em;transition:border-color .18s,color .18s}
+  .swatch .dot{width:16px;height:16px;border-radius:4px;flex:none;border:1px solid rgba(255,255,255,.16)}
+  .swatch:hover{color:var(--t1);border-color:rgba(255,255,255,.28)}
+  .swatch.on{border-color:var(--lime);color:var(--lime)}
+  .swatch:focus-visible{outline:2px solid var(--lime);outline-offset:2px}
+
+  .now{margin-top:14px;display:flex;gap:12px;flex-wrap:wrap;align-items:baseline;
+    font-size:11px;color:var(--t3);letter-spacing:.03em}
+  .now b{color:var(--t1);font-weight:500;letter-spacing:.06em;text-transform:uppercase;font-size:10.5px}
+  .now .read{color:var(--t2)}
+
+  /* ---------- board ---------- */
+  .board{display:grid;grid-template-columns:repeat(auto-fill,minmax(246px,1fr));gap:1px;
+    background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .card{background:var(--panel);padding:16px 16px 18px;display:flex;flex-direction:column;gap:11px}
+  .card .prev{height:74px;border-radius:8px;border:1px solid rgba(255,255,255,.12);position:relative;overflow:hidden;
+    background-size:16px 16px,cover}
+  .card .prev .mini{position:absolute;left:10px;bottom:10px;display:flex;gap:4px}
+  .card .prev .mini i{width:26px;height:26px;border-radius:5px;border:1px solid rgba(255,255,255,.14)}
+  .card .prev .pin{position:absolute;right:10px;top:10px;width:9px;height:9px;border-radius:2px;background:var(--lime);
+    box-shadow:0 0 12px rgba(204,255,0,.7)}
+  .card h3{color:var(--t1);font-size:13px;font-weight:500;letter-spacing:.01em;display:flex;align-items:center;
+    justify-content:space-between;gap:8px}
+  .pill{font-size:9px;letter-spacing:.12em;text-transform:uppercase;padding:3px 7px;border-radius:999px;
+    border:1px solid var(--line);color:var(--t3);white-space:nowrap}
+  .pill.rec{border-color:var(--lime);color:var(--lime)}
+  .pill.cur{border-color:rgba(255,255,255,.28);color:var(--t2)}
+  .val{font-size:10px;color:var(--t4);letter-spacing:.04em;word-break:break-all}
+  .kt{display:flex;gap:8px;font-size:10.5px;line-height:1.5}
+  .kt span:first-child{color:var(--t4);flex:none;width:44px;letter-spacing:.08em;text-transform:uppercase;font-size:9px;padding-top:1px}
+  .kt.keeps span:last-child{color:var(--t2)}
+  .kt.trades span:last-child{color:var(--t3)}
+  .card button.use{margin-top:auto;align-self:flex-start;background:transparent;border:1px solid var(--line);
+    color:var(--t2);border-radius:7px;padding:6px 11px;font-family:var(--mono);font-size:10px;letter-spacing:.08em;
+    text-transform:uppercase;cursor:pointer;transition:border-color .18s,color .18s}
+  .card button.use:hover{border-color:var(--lime);color:var(--lime)}
+  .card button.use:focus-visible{outline:2px solid var(--lime);outline-offset:2px}
+
+  /* ---------- recommendation ---------- */
+  .rec-box{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:20px 20px 22px}
+  .rec-box p{max-width:66ch;margin-top:10px}
+  .rec-box p:first-child{margin-top:0}
+  .rec-box b{color:var(--t1);font-weight:500}
+  .rec-box .note{margin-top:16px;padding-top:16px;border-top:1px solid var(--line);color:var(--t3);font-size:11.5px}
+  .rec-box code{background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:4px;padding:1px 5px;
+    font-size:11px;color:var(--t2)}
+
+  footer{margin-top:48px;font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--t4);
+    display:flex;flex-wrap:wrap;gap:16px;border-top:1px solid var(--line);padding-top:16px}
+
+  @media(prefers-reduced-motion:reduce){
+    .marquee-track{animation:none}
+    *{transition:none!important}
+  }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Canvas Study / Find Time</div>
+    <h1>The blue, dialed down.</h1>
+    <p class="lede">You said the electric blue felt <b>super blue</b> &mdash; loud enough that it
+    might cost installs. Nothing <b>inside</b> the app changes: same lime accent, same category
+    colours, same <b>#121212</b> panels. Only the ground it all sits on moves. Six grounds below &mdash;
+    click any swatch to drop the live calendar onto it.</p>
+  </header>
+
+  <div class="fixed-strip">
+    <span class="k"><span class="sw" style="background:#ccff00"></span>Lime accent</span>
+    <span class="k"><span class="sw" style="background:#c8c8ff"></span>Category hues</span>
+    <span class="k"><span class="sw" style="background:#121212"></span>#121212 panels</span>
+    <span class="tag">// unchanged in every option</span>
+  </div>
+
+  <!-- ================= LIVE STAGE ================= -->
+  <section class="sec">
+    <div class="sec-label">Live &mdash; the calendar on the selected ground</div>
+
+    <div class="stage" id="stage">
+      <div class="marquee"><div class="marquee-track" id="mq"></div></div>
+      <div class="frame"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i></div>
+
+      <div class="mock-tele">
+        <span>DAY.249</span><span>WK.36</span><span>CAP.08H</span>
+        <span>FOC.04</span><span>BRK.03</span><span>UTC.14:22</span><span>STATUS.OPEN</span>
+      </div>
+
+      <div class="mgrid">
+        <div class="cal" id="cal"></div>
+      </div>
+
+      <div class="mock-panel">
+        <div class="pe">&#10022; Plan with AI</div>
+        <div class="ph">What are you building?</div>
+        <div class="pi">Plan a mobile launch for the end of this month&hellip;</div>
+        <button class="pc" tabindex="-1">Generate plan &rarr;</button>
+      </div>
+    </div>
+
+    <div class="swatches" id="swatches"></div>
+    <div class="now">
+      <b>Showing</b>
+      <span id="nowName">Deep Navy</span>
+      <span class="read" id="nowRead"></span>
+    </div>
+  </section>
+
+  <!-- ================= BOARD ================= -->
+  <section class="sec">
+    <div class="sec-label">All six, at rest</div>
+    <div class="board" id="board"></div>
+  </section>
+
+  <!-- ================= RECOMMENDATION ================= -->
+  <section class="sec">
+    <div class="sec-label">Where I'd land</div>
+    <div class="rec-box">
+      <p>Start with <b>Deep Navy</b>. It stays a &ldquo;blue app,&rdquo; so nothing about the brand
+      has to be relearned, but it drops the saturation that made the original feel loud &mdash; and
+      of the six it's the easiest to look at for a full working day.</p>
+      <p>If keeping the <b>exact current hue</b> matters &mdash; people have already seen the electric
+      blue in the deck or on the site &mdash; <b>Eclipse</b> is that same colour at roughly a fifth
+      of the brightness. Brand survives, volume drops.</p>
+      <p>Only go all the way to <b>Ink</b> if you want the app to read as strictly a focused utility,
+      with no colour identity of its own. It makes the lime hit hardest, at the cost of feeling a
+      little anonymous.</p>
+      <div class="note">
+        One build note for any dark ground: lift the <code>#121212</code> panels to about
+        <code>#17181d</code> with a 1px <code>rgba(255,255,255,.12)</code> border and a real shadow.
+        On a near-black canvas they'd otherwise merge into it &mdash; the bright original is the only
+        ground where <code>#121212</code> separates on its own. Every other colour stays exactly as it is.
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Find Time // Canvas Study</span>
+    <span>Interior palette locked</span>
+    <span>6 grounds + current</span>
+    <span>Sep 2026</span>
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var OPTS = [
+    {
+      id:"original", name:"Original — Electric",
+      ground:"#2047e6",
+      grad:"linear-gradient(135deg,rgba(9,26,102,.12),rgba(32,71,230,.96))",
+      dot:"rgba(255,255,255,.14)", marquee:"#173abf", panel:"#121212",
+      wash:"linear-gradient(transparent,transparent)",
+      tag:"Current", tagClass:"cur",
+      val:"#2047e6 · dots 14%",
+      read:"Maximum energy and an unmistakable brand — also the loudness you flagged.",
+      keeps:"Unmistakable, high-energy, already-shipped brand colour.",
+      trades:"Reads loud on every screen; the thing you want to move away from."
+    },
+    {
+      id:"ink", name:"Ink",
+      ground:"#0b0b0d",
+      grad:"radial-gradient(120% 80% at 50% -10%,#16161b,#0b0b0d)",
+      dot:"rgba(255,255,255,.055)", marquee:"rgba(255,255,255,.045)", panel:"#17181d",
+      wash:"linear-gradient(transparent,transparent)",
+      tag:"Safe · max reach", tagClass:"",
+      val:"#0b0b0d · dots 5.5%",
+      read:"Near-black field. Lime and category colours hit their hardest.",
+      keeps:"Feels like a focused pro tool; every accent colour pops.",
+      trades:"No brand colour at all — can read as anonymous."
+    },
+    {
+      id:"navy", name:"Deep Navy",
+      ground:"#0a1126",
+      grad:"linear-gradient(160deg,#0c1531,#07091c)",
+      dot:"rgba(255,255,255,.07)", marquee:"#14245f", panel:"#16171f",
+      wash:"linear-gradient(180deg,rgba(30,58,191,.14),transparent 240px)",
+      tag:"Balanced · recommended", tagClass:"rec",
+      val:"#0a1126 · dots 7%",
+      read:"Still a blue app — calm, low-saturation, easy for all-day use.",
+      keeps:"Blue identity intact; comfortable to sit in front of for hours.",
+      trades:"Gives up the electric charge of the original."
+    },
+    {
+      id:"slate", name:"Slate",
+      ground:"#161a22",
+      grad:"linear-gradient(160deg,#1b202b,#111419)",
+      dot:"rgba(255,255,255,.07)", marquee:"rgba(255,255,255,.05)", panel:"#17181d",
+      wash:"linear-gradient(transparent,transparent)",
+      tag:"Safe · neutral", tagClass:"",
+      val:"#161a22 · dots 7%",
+      read:"Desaturated blue-grey. Modern-SaaS neutral, safe in any screenshot.",
+      keeps:"Neutral and modern; nothing to object to in a demo or embed.",
+      trades:"Cool grey is familiar to the point of forgettable."
+    },
+    {
+      id:"eclipse", name:"Eclipse — brand hue, dimmed",
+      ground:"#111a4d",
+      grad:"linear-gradient(160deg,#16215e,#0d1340)",
+      dot:"rgba(255,255,255,.09)", marquee:"#1c2f8f", panel:"#10131c",
+      wash:"linear-gradient(transparent,transparent)",
+      tag:"Brand-forward", tagClass:"",
+      val:"#111a4d · dots 9%",
+      read:"The current hue at ~20% brightness — the brand blue, turned right down.",
+      keeps:"Same colour family as today; brand recognition carries over.",
+      trades:"Still clearly ‘the blue app’, if that’s what you’re leaving."
+    },
+    {
+      id:"carbon", name:"Warm Carbon",
+      ground:"#141110",
+      grad:"radial-gradient(120% 80% at 50% -10%,#1d1713,#120f0d)",
+      dot:"rgba(255,255,255,.05)", marquee:"rgba(255,255,255,.045)", panel:"#1a1613",
+      wash:"linear-gradient(transparent,transparent)",
+      tag:"Character", tagClass:"",
+      val:"#141110 · dots 5%",
+      read:"Near-black with a warm tint — lime and coral glow, editorial feel.",
+      keeps:"Premium, magazine-ish warmth; makes lime and coral sing.",
+      trades:"Warm ground slightly fights the cool periwinkle ‘Design’ category."
+    },
+    {
+      id:"graphite", name:"Graphite + Blue Frame",
+      ground:"#141416",
+      grad:"linear-gradient(transparent,transparent)",
+      dot:"rgba(255,255,255,.055)", marquee:"#173abf", panel:"#17181d",
+      wash:"linear-gradient(180deg,rgba(28,47,143,.40),transparent 180px)",
+      tag:"Balanced · blue as accent", tagClass:"",
+      val:"#141416 · blue frame + wash",
+      read:"Neutral field to work on; blue kept only in the frame and a top wash.",
+      keeps:"Calm surface plus a blue accent — the identity without the flood.",
+      trades:"Two ideas at once; needs crisp frame detailing to hold together."
+    }
+  ];
+
+  var MQ_TEXT = "FIND TIME // SEPTEMBER 04 // 04 TASKS PROTECTED // ENERGY 78 // FIND TIME FOR WHAT MATTERS // ";
+
+  // ---- month mock data (Sep, "today" = 4) ----
+  var DOW = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  var EVENTS = {
+    2:[["meet","Standup 09:30"]],
+    3:[["deep","Onboarding spec"]],
+    4:[["design","Proto review"],["meet","Team sync"]],
+    5:[["deep","Deep work"]],
+    6:[["ai","Focus · 2h"]],
+    9:[["res","Interviews"]],
+    10:[["meet","Team sync 11:00"],["deep","Deep work"]],
+    11:[["design","Design crit"]],
+    13:[["ai","Focus · 90m"]],
+    16:[["deep","Launch prep"]],
+    17:[["meet","Stakeholders"]],
+    18:[["res","Synthesis"]],
+    20:[["design","Handoff"]]
+  };
+
+  function buildCal(){
+    var cal = document.getElementById("cal");
+    var html = "";
+    for(var d=0;d<7;d++) html += '<div class="dow">'+DOW[d]+'</div>';
+    // Sep 2026: 1st is a Tuesday -> one leading blank (Mon)
+    var lead = 1, total = 21;
+    for(var i=0;i<lead;i++){
+      html += '<div class="tile dim"><span class="date">'+(31-lead+1+i)+'</span></div>';
+    }
+    for(var n=1;n<=total-lead;n++){
+      var cls = "tile" + (n===4 ? " today" : "");
+      var chips = "";
+      var evs = EVENTS[n] || [];
+      for(var e=0;e<evs.length;e++){
+        chips += '<span class="c '+evs[e][0]+'">'+evs[e][1]+'</span>';
+      }
+      html += '<div class="'+cls+'"><span class="date">'+n+'</span>'+chips+'</div>';
+    }
+    cal.innerHTML = html;
+  }
+
+  function buildMarquee(){
+    document.getElementById("mq").innerHTML =
+      '<span>'+MQ_TEXT+'</span><span>'+MQ_TEXT+'</span>';
+  }
+
+  var stage = document.getElementById("stage");
+  function apply(o){
+    stage.style.setProperty("--ground", o.ground);
+    stage.style.setProperty("--grad", o.grad);
+    stage.style.setProperty("--dot", o.dot);
+    stage.style.setProperty("--marquee", o.marquee);
+    stage.style.setProperty("--panelMock", o.panel);
+    stage.style.setProperty("--wash", o.wash);
+    document.getElementById("nowName").textContent = o.name;
+    document.getElementById("nowRead").textContent = o.read;
+    var btns = document.querySelectorAll(".swatch");
+    for(var i=0;i<btns.length;i++){
+      btns[i].classList.toggle("on", btns[i].getAttribute("data-id") === o.id);
+    }
+  }
+
+  function buildSwatches(){
+    var box = document.getElementById("swatches");
+    OPTS.forEach(function(o){
+      var b = document.createElement("button");
+      b.className = "swatch";
+      b.setAttribute("data-id", o.id);
+      b.setAttribute("type","button");
+      b.innerHTML = '<span class="dot" style="background:'+o.ground+'"></span>'+o.name;
+      b.addEventListener("click", function(){ apply(o); });
+      box.appendChild(b);
+    });
+  }
+
+  function buildBoard(){
+    var board = document.getElementById("board");
+    OPTS.forEach(function(o){
+      var card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML =
+        '<div class="prev" style="background-color:'+o.ground+';background-image:radial-gradient('+o.dot+' 1px,transparent 1px),'+o.grad+'">'+
+          '<div class="pin"></div>'+
+          '<div class="mini">'+
+            '<i style="background:'+o.panel+'"></i>'+
+            '<i style="background:'+o.panel+'"></i>'+
+            '<i style="background:'+o.panel+'"></i>'+
+          '</div>'+
+        '</div>'+
+        '<h3>'+o.name+' <span class="pill '+(o.tagClass||"")+'">'+o.tag+'</span></h3>'+
+        '<div class="val">'+o.val+'</div>'+
+        '<div class="kt keeps"><span>Keeps</span><span>'+o.keeps+'</span></div>'+
+        '<div class="kt trades"><span>Trades</span><span>'+o.trades+'</span></div>'+
+        '<button class="use" type="button">Try it live ↑</button>';
+      card.querySelector(".use").addEventListener("click", function(){
+        apply(o);
+        document.getElementById("stage").scrollIntoView({behavior:"smooth",block:"center"});
+      });
+      board.appendChild(card);
+    });
+  }
+
+  buildMarquee();
+  buildCal();
+  buildSwatches();
+  buildBoard();
+  apply(OPTS[2]); // Deep Navy
+})();
+</script>
