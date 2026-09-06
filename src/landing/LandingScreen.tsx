@@ -37,7 +37,7 @@ export function LandingScreen() {
 }
 
 function Body() {
-  const { width, isDesktop, isWide } = useResponsive();
+  const { width, isDesktop, is2xl } = useResponsive();
   const { scrollRef, register, scrollTo } = useAnchors();
   const [capacity, setCapacity] = useState(78);
 
@@ -57,10 +57,10 @@ function Body() {
 
         <View
           onLayout={register('planner')}
-          style={[styles.hero, { minHeight: isDesktop ? 860 : 940, paddingTop: isDesktop ? 64 : 40 }]}>
+          style={[styles.hero, { minHeight: isDesktop ? 960 : 940, paddingTop: isDesktop ? 64 : 40 }]}>
           <Hero onPrimary={noop} onSecondary={() => scrollTo('planner')} />
 
-          {isWide && (
+          {is2xl && (
             <View style={styles.telemetry} pointerEvents="none">
               {TELEMETRY.map((t) => (
                 <Txt key={t} style={styles.telemetryTxt}>
@@ -111,7 +111,11 @@ const styles = StyleSheet.create({
   hero: { width: '100%', maxWidth: 1280, alignSelf: 'center', position: 'relative' },
   telemetry: {
     position: 'absolute',
-    left: 16,
+    // in the left gutter of the centred 1280 hero — only mounted at is2xl, where
+    // there is >=128px of gutter, so it never collides with the ml-56 headline
+    // (landing.html hides this behind text-white/35; the a11y contrast bump in
+    // ramp.ts makes it too loud to sit under the H1). See HANDOFF-landing.md.
+    left: -32,
     top: 96,
     bottom: 64,
     justifyContent: 'space-between',

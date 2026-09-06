@@ -149,10 +149,11 @@ function FocusTimer() {
   );
 }
 
-/** `bottom-[2%] right-[5%]`, accuracy readout + hairline dial. Not draggable. */
+/** landing.html `bottom-[2%] right-[5%]`; nudged just below the hero band so the
+ *  mock's taller RN cards don't sit on top of it (HANDOFF-landing.md). Not draggable. */
 function AccuracyDial() {
   return (
-    <View style={[styles.abs, styles.dialWrap, { bottom: '2%', right: '5%' }]}>
+    <View style={[styles.abs, styles.dialWrap, { bottom: -32, right: '5%' }]}>
       <View style={{ alignItems: 'flex-end' }}>
         <Txt style={{ color: C.lime, fontSize: 12 }}>{WIDGETS.accuracy.label}</Txt>
         <Txt style={styles.dialValue}>{WIDGETS.accuracy.value}</Txt>
