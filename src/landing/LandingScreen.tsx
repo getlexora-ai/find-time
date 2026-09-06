@@ -18,6 +18,7 @@ import { Hero } from './components/Hero';
 import { LandingHeader } from './components/LandingHeader';
 import { MockPhoneCard } from './components/MockPhoneCard';
 import { MockPlannerCard } from './components/MockPlannerCard';
+import { WaitlistSection } from './components/WaitlistSection';
 
 /**
  * Composition root for the web landing page (plan §3.3). Pinned to the `electric`
@@ -53,12 +54,12 @@ function Body() {
       <Marquee copy={MARQUEE} />
 
       <ScrollView ref={scrollRef} contentContainerStyle={[styles.content, { paddingHorizontal: pad }]}>
-        <LandingHeader onNav={scrollTo} onCta={noop} />
+        <LandingHeader onNav={scrollTo} onCta={() => scrollTo('waitlist')} />
 
         <View
           onLayout={register('planner')}
           style={[styles.hero, { minHeight: isDesktop ? 960 : 940, paddingTop: isDesktop ? 64 : 40 }]}>
-          <Hero onPrimary={noop} onSecondary={() => scrollTo('planner')} />
+          <Hero onPrimary={() => scrollTo('waitlist')} onSecondary={() => scrollTo('planner')} />
 
           {is2xl && (
             <View style={styles.telemetry} pointerEvents="none">
@@ -84,6 +85,10 @@ function Body() {
 
         <View onLayout={onFeaturesLayout} style={styles.features}>
           <FeatureGrid />
+        </View>
+
+        <View onLayout={register('waitlist')}>
+          <WaitlistSection />
         </View>
 
         <View style={styles.footer}>

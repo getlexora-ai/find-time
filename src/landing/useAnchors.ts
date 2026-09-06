@@ -3,7 +3,7 @@ import { Platform, type LayoutChangeEvent, type ScrollView } from 'react-native'
 
 import { useReducedMotion } from '@/design/useReducedMotion';
 
-export type AnchorId = 'planner' | 'features' | 'focus';
+export type AnchorId = 'planner' | 'features' | 'focus' | 'waitlist';
 
 /**
  * `href="#planner"` in RN.

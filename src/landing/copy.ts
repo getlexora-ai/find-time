@@ -205,6 +205,30 @@ export const TOASTS = {
 } as const;
 
 /**
+ * Not in landing.html — the mockup has no waitlist at all (every CTA opens a mock
+ * modal). This copy is **placeholder**, written to be plain and claim nothing the
+ * product can't back: pre-launch email capture, single opt-in, no promise of a
+ * date. Final wording is the user's call (plan §10 Q2), and EU/DE targeting would
+ * add a double-opt-in line (§10 Q4).
+ */
+export const WAITLIST = {
+  anchor: 'waitlist' as const,
+  eyebrow: 'EARLY ACCESS',
+  title: 'JOIN THE WAITLIST',
+  body: 'Find Time is in private beta. Leave your email and we’ll tell you when a spot opens — no spam, one message.',
+  placeholder: 'you@example.com',
+  emailLabel: 'Email address',
+  submit: 'REQUEST ACCESS',
+  submitting: 'SENDING…',
+  success: 'You’re on the list. We’ll be in touch.',
+  successAlready: 'You’re already on the list — hang tight.',
+  errorInvalid: 'That doesn’t look like an email address.',
+  errorServer: 'Something went wrong. Try again in a moment.',
+  /** honeypot field label — visually hidden, never shown */
+  honeypotLabel: 'Company (leave blank)',
+} as const;
+
+/**
  * Not in landing.html — it has no footer at all. Built minimal and legally
  * necessary-shaped only; the real links, and whether these pages exist, are open
  * with the user (plan §10 Q5). Nothing here makes a claim the mockup doesn't.

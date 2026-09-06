@@ -5,8 +5,10 @@ redesign.** This file logs every place the RN port of
 `design/from_user/landing.html` deviates from the reference, and why.
 
 Branch `landing-page`. M1 = the visual port with the mockup's own mock
-interactions; **no signup forms** (M2+), and every real CTA is inert pending
-plan §10 Q2. This is the plan's "STOP AND SHOW THE USER" checkpoint.
+interactions. A **working waitlist** was then added on top at the user's
+request (§7 below) — that's the M2/M3 slice, built minimal. The mock cards'
+CTAs still don't submit anything; `START PLANNING` / `PLAN MY DAY` now scroll
+to the waitlist.
 
 ---
 
@@ -127,6 +129,49 @@ between ~1024 and ~1180 before the 1536 gutter opens up.
   the cards, drops the widgets and the telemetry rail. No hydration errors in
   the console. `regenerate`, `ask-AI`, `apply`, `focus timer`, `nav scroll` all
   functioned.
+
+## 7. Waitlist (added after M1, at the user's request — the M2/M3 slice, minimal)
+
+**Not in landing.html.** A dark-panel section (`#waitlist`) between the feature
+grid and footer: eyebrow, `JOIN THE WAITLIST`, one email field + `REQUEST ACCESS`.
+`START PLANNING` (header) and `PLAN MY DAY` (hero) scroll to it.
+
+| File | What |
+|---|---|
+| `src/signup/waitlist.ts` | shared contract: `WaitlistRequest/Response`, `validateEmail` (permissive — one `@`, dotted domain, ≤254), `normalizeEmail`, `joinWaitlist` (POST `/api/waitlist`). Zero RN/Node imports. |
+| `src/signup/waitlist.check.ts` | runnable check for `validateEmail`/`normalizeEmail` — `npx tsx src/signup/waitlist.check.ts` → `waitlist.check: ok`. |
+| `src/app/api/waitlist+api.ts` | `POST` handler: 4 KB body cap → honeypot (200, silent) → `validateEmail` (400) → store (201 `added`/`already`) → 500 on throw. No rate-limit yet. |
+| `src/server/waitlist-store.ts` | **in-memory `Map`, process-lifetime** (plan §6.5). `ponytail:` seam — swap the 3 functions for queries against `db/001_waitlist.sql` once a host/DB is picked (§10 Q1). |
+| `src/landing/components/WaitlistForm.tsx` | `idle → submitting → success \| error`. Client-validates first. Honeypot `company` field parked offscreen + `aria-hidden`. Error = orange border + `danger-triangle` glyph + text; success = lime check + text; submit `aria-busy`. |
+| `src/landing/components/WaitlistSection.tsx` | the panel + copy (`WAITLIST` in `copy.ts`). |
+| `db/001_waitlist.sql` | DDL (plan §6.3, trimmed). **Not applied anywhere** — the endpoint uses the in-memory store. |
+
+**Verified:**
+- `npx expo export --platform web` — `/api/waitlist` bundles (5 KB); `/` SSR is
+  now 87 KB with the section server-rendered.
+- `curl` against `npx expo serve` (production `dist/`): valid → `201 added`,
+  same email again (case/space-insensitive) → `201 already`, `nope` →
+  `400 invalid_email`, honeypot filled → `200` (no store write), non-JSON →
+  `400`.
+- Chrome (`expo serve`, ~1280 px): section renders on the dark-panel language;
+  submitting a valid email collapses the form to "✓ You're on the list…";
+  `broken@@nope` + Enter shows the inline orange error with the glyph, no
+  network call.
+- `tsc --noEmit` · `expo lint` — green (the check file is plain TS, no `node:`
+  imports, so it type-checks in-tree).
+
+**Deliberately not built (needs the user — plan §10):**
+- **Double opt-in / confirmation email** — single opt-in only. EU/DE targeting
+  reverses this (§10 Q4) and needs an email vendor (§10 Q8). `confirm_token` /
+  `confirmed_at` columns exist in the SQL for the flip.
+- **Rate-limiting** (§6.3 `signup_rate_limit`) — honeypot + body cap only for now.
+- **Real persistence** — see `waitlist-store.ts`; the dev server (`expo start`)
+  re-evaluates the API module per request so `already` never fires there; it
+  works under `expo serve`. Both go away with a real DB.
+- **Beta-request flow** (the richer qualifying form, plan §5 flow 2) — not built;
+  this is waitlist-only.
+- **`analytics.ts` events** (§5.1) — not wired.
+- Footer `PRIVACY` / `TERMS` still inert — those pages are §10 Q5.
 
 ## 6. Not done / next
 
