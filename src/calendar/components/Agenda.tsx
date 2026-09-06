@@ -6,22 +6,26 @@ import { Icon } from '../Icon';
 import { TODAY } from '../seed';
 import type { CalActions } from '../state';
 import { useCalTheme } from '../theme-context';
-import { CATS, C, DAY_END, DAY_START, durLabel, ink, R, rgba, w } from '../tokens';
+import { CATS, C, DAY_END, DAY_START, durLabel, R, rgba, w } from '../tokens';
 import type { CalEvent } from '../types';
 import { Press, Txt } from '../ui';
 import { useResponsive } from '../useResponsive';
 
 /**
- * The day agenda (spec §2.11, §7.3). Two forms:
+ * The day agenda (spec §2.11). Dark, like every other surface in the app — the
+ * spec's "one light reading surface" is retired: an empty day already rendered
+ * on `#121212`, so a populated one on `#f4f4f4` just looked inconsistent.
  *
- *  - default  — the full-width light reading surface. Long titles, notes and the
- *               full metadata row go on `#f4f4f4`, the one light card in the app.
- *  - compact  — a dark, stripped variant that lives in the Day-view right rail
- *               next to "AI insight" / "Protected this day". Time · title ·
- *               category spine and the clickable "free — 45m" gap rows only;
- *               notes and the meta row are left to the event-detail popover.
- *               Its body lifts with the theme (`recessed`) so it reads as one of
- *               the rail cards, not a white slab under the black time grid.
+ *  - default  — full width, full detail: title, notes and the meta row (time /
+ *               project / Protected / Overlaps), with a time gutter down the
+ *               left. Used on phone and on narrow desktop below the time grid.
+ *  - compact  — stripped and denser, for the Day-view right rail next to
+ *               "AI insight" / "Protected this day": title · category spine and
+ *               the clickable "free — 45m" gap rows, no gutter; notes and the
+ *               meta row are left to the event-detail popover.
+ *
+ * Either way the body lifts with the theme (`recessed`) so it sits with the
+ * other panels instead of fighting them.
  */
 export function Agenda({
   date,
@@ -107,13 +111,13 @@ export function Agenda({
         <Row key={`gap-${idx}`} left={fromMin(gapStart)} gutter={gutter} compact={compact}>
           <Press
             onPress={() => actions.openCompose(null, iso(date), fromMin(gapStart))}
-            hoverBg={compact ? w(0.06) : '#e4e4e4'}
-            style={compact ? styles.freeRowDark : styles.freeRow}>
-            <View style={compact ? styles.freeIconDark : styles.freeIcon}>
-              <Icon name="add" size={16} color={compact ? w(0.55) : ink(0.6)} />
+            hoverBg={w(0.06)}
+            style={compact ? styles.freeRowCompact : styles.freeRow}>
+            <View style={compact ? styles.freeIconCompact : styles.freeIcon}>
+              <Icon name="add" size={16} color={w(0.55)} />
             </View>
-            <Txt style={compact ? styles.freeTxtDark : styles.freeTxt}>free — {durLabel(s - gapStart)}</Txt>
-            <Txt style={compact ? styles.freeRangeDark : styles.freeRange}>
+            <Txt style={styles.freeTxt}>free — {durLabel(s - gapStart)}</Txt>
+            <Txt style={styles.freeRange}>
               {fromMin(gapStart)}–{ev.start}
             </Txt>
           </Press>
@@ -131,9 +135,7 @@ export function Agenda({
   return (
     <View style={[styles.card, { borderColor: theme.panelBorder }]}>
       {head}
-      <View style={compact ? [styles.compactBody, { backgroundColor: theme.recessed }] : styles.lightBody}>
-        {rows}
-      </View>
+      <View style={[styles.body, { backgroundColor: theme.recessed }]}>{rows}</View>
     </View>
   );
 }
@@ -153,7 +155,7 @@ function Row({
   // already carries its own time, so the gutter was just a dead strip down the
   // left of a narrow rail. The rows then stack like the cards above them.
   if (compact) {
-    return <View style={[styles.row, styles.rowDark, styles.rowBodyDark]}>{children}</View>;
+    return <View style={[styles.row, styles.rowCompact]}>{children}</View>;
   }
   return (
     <View style={styles.row}>
@@ -169,11 +171,11 @@ function AgendaCard({ ev, compact, onPress }: { ev: CalEvent; compact?: boolean;
   if (ev.kind === 'break') {
     if (compact) {
       return (
-        <View style={styles.breakCardDark}>
-          <View style={styles.breakIconDark}>
+        <View style={styles.breakCardCompact}>
+          <View style={styles.breakIconCompact}>
             <Icon name="cup" size={16} color={w(0.5)} />
           </View>
-          <Txt numberOfLines={1} style={styles.breakTitleDark}>
+          <Txt numberOfLines={1} style={styles.breakTitleCompact}>
             {ev.title}
           </Txt>
         </View>
@@ -182,7 +184,7 @@ function AgendaCard({ ev, compact, onPress }: { ev: CalEvent; compact?: boolean;
     return (
       <View style={styles.breakCard}>
         <View style={styles.breakIcon}>
-          <Icon name="cup" size={18} color={ink(0.6)} />
+          <Icon name="cup" size={18} color={w(0.5)} />
         </View>
         <View style={{ flex: 1 }}>
           <Txt style={styles.breakTitle}>{ev.title}</Txt>
@@ -194,20 +196,20 @@ function AgendaCard({ ev, compact, onPress }: { ev: CalEvent; compact?: boolean;
   if (ev.kind === 'ai') {
     if (compact) {
       return (
-        <Press onPress={onPress} style={styles.aiCardDark}>
-          <View style={styles.aiIconDark}>
+        <Press onPress={onPress} style={styles.aiCardCompact}>
+          <View style={styles.aiIcon}>
             <Icon name="magic" size={16} color={C.lime} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Txt numberOfLines={1} style={styles.aiTitleDark}>
+            <Txt numberOfLines={1} style={styles.aiTitleCompact}>
               {ev.title}
             </Txt>
-            <Txt style={styles.aiSubDark}>
+            <Txt style={styles.aiSubCompact}>
               {ev.start}–{ev.end}
             </Txt>
           </View>
-          <View style={styles.acceptPillDark}>
-            <Txt style={styles.acceptTxtDark}>Accept</Txt>
+          <View style={styles.acceptPill}>
+            <Txt style={styles.acceptTxt}>Accept</Txt>
           </View>
         </Press>
       );
@@ -232,17 +234,17 @@ function AgendaCard({ ev, compact, onPress }: { ev: CalEvent; compact?: boolean;
   const c = CATS[ev.cat];
   if (compact) {
     return (
-      <Press onPress={onPress} style={[styles.card2Dark, ev.conflict && styles.card2Clash]}>
+      <Press onPress={onPress} style={[styles.card2Compact, ev.conflict && styles.card2Clash]}>
         <View style={[styles.spine, { backgroundColor: c.color }]} />
         <View style={{ flex: 1, minWidth: 0 }}>
-          <View style={styles.card2DarkTop}>
+          <View style={styles.card2CompactTop}>
             {ev.kind === 'focus' && <Icon name="shield" size={12} color={C.lime} />}
             {ev.conflict && <Icon name="triangle" size={12} color={C.orange} />}
-            <Txt numberOfLines={1} style={styles.card2TitleDark}>
+            <Txt numberOfLines={1} style={styles.card2TitleCompact}>
               {ev.title}
             </Txt>
           </View>
-          <Txt style={styles.card2MetaDark}>
+          <Txt style={styles.card2MetaCompact}>
             {ev.start}–{ev.end} · {durLabel(toMin(ev.end) - toMin(ev.start))}
           </Txt>
         </View>
@@ -265,7 +267,7 @@ function AgendaCard({ ev, compact, onPress }: { ev: CalEvent; compact?: boolean;
         </View>
         <View style={styles.metaRow}>
           <View style={styles.metaItem}>
-            <Icon name="clock" size={13} color={ink(0.6)} />
+            <Icon name="clock" size={13} color={w(0.5)} />
             <Txt style={styles.metaTxt}>
               {ev.start}–{ev.end} · {durLabel(toMin(ev.end) - toMin(ev.start))}
             </Txt>
@@ -278,14 +280,14 @@ function AgendaCard({ ev, compact, onPress }: { ev: CalEvent; compact?: boolean;
           )}
           {ev.kind === 'focus' && (
             <View style={styles.metaItem}>
-              <Icon name="shield" size={13} color="#2047e6" />
-              <Txt style={[styles.metaTxt, { color: '#2047e6' }]}>Protected</Txt>
+              <Icon name="shield" size={13} color={C.protectedOnDark} />
+              <Txt style={[styles.metaTxt, { color: C.protectedOnDark }]}>Protected</Txt>
             </View>
           )}
           {ev.conflict && (
             <View style={styles.metaItem}>
-              <Icon name="triangle" size={13} color={C.orangeOnLight} />
-              <Txt style={[styles.metaTxt, { color: C.orangeOnLight }]}>Overlaps</Txt>
+              <Icon name="triangle" size={13} color={C.orange} />
+              <Txt style={[styles.metaTxt, { color: C.orange }]}>Overlaps</Txt>
             </View>
           )}
         </View>
@@ -329,11 +331,17 @@ const styles = StyleSheet.create({
   },
   addTxt: { color: w(0.7), fontSize: 12 },
 
-  /* ── default: the light reading surface ── */
-  lightBody: { backgroundColor: C.light },
-  row: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: ink(0.1) },
-  rowLeft: { borderRightWidth: 1, borderRightColor: ink(0.1), paddingHorizontal: 12, paddingVertical: 20, alignItems: 'flex-end' },
-  rowLeftTxt: { color: ink(0.6), fontSize: 12 },
+  /* ── full: phone + narrow-desktop, dark, all detail ── */
+  body: {},
+  row: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: w(0.08) },
+  rowLeft: {
+    borderRightWidth: 1,
+    borderRightColor: w(0.08),
+    paddingHorizontal: 12,
+    paddingVertical: 20,
+    alignItems: 'flex-end',
+  },
+  rowLeftTxt: { color: w(0.4), fontSize: 12 },
   rowBody: { flex: 1, padding: 12 },
 
   freeRow: {
@@ -342,38 +350,34 @@ const styles = StyleSheet.create({
     gap: 12,
     borderRadius: R.xl,
     borderWidth: 1,
-    borderColor: ink(0.2),
+    borderColor: w(0.16),
     borderStyle: 'dashed',
-    backgroundColor: C.lightRecessed,
+    backgroundColor: w(0.04),
     padding: 12,
   },
-  freeIcon: { height: 28, width: 28, borderRadius: R.full, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
-  freeTxt: { color: ink(0.6), fontSize: 12 },
-  freeRange: { marginLeft: 'auto', color: ink(0.5), fontSize: 12 },
+  freeIcon: { height: 28, width: 28, borderRadius: R.full, backgroundColor: w(0.08), alignItems: 'center', justifyContent: 'center' },
+  freeTxt: { color: w(0.55), fontSize: 12 },
+  freeRange: { marginLeft: 'auto', color: w(0.4), fontSize: 12 },
 
   card2: {
     flexDirection: 'row',
     gap: 12,
     borderRadius: R.xl,
     borderWidth: 1,
-    borderColor: ink(0.1),
-    backgroundColor: '#fff',
+    borderColor: w(0.1),
+    backgroundColor: w(0.04),
     padding: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
   },
   card2Clash: { borderColor: C.orange },
   spine: { width: 4, borderRadius: R.full, alignSelf: 'stretch' },
   card2Top: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 },
-  card2Title: { color: C.surface, fontSize: 14, lineHeight: 20, fontWeight: '500' },
-  card2Notes: { marginTop: 4, color: ink(0.6), fontSize: 12, lineHeight: 18 },
+  card2Title: { color: '#fff', fontSize: 14, lineHeight: 20, fontWeight: '500' },
+  card2Notes: { marginTop: 4, color: w(0.55), fontSize: 12, lineHeight: 18 },
   catPill: { borderRadius: R.full, paddingHorizontal: 8, paddingVertical: 4 },
   catPillTxt: { color: C.surface, fontSize: 12 },
   metaRow: { marginTop: 16, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12 },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  metaTxt: { color: ink(0.6), fontSize: 12 },
+  metaTxt: { color: w(0.5), fontSize: 12 },
   metaDot: { height: 6, width: 6, borderRadius: 3 },
 
   breakCard: {
@@ -382,14 +386,14 @@ const styles = StyleSheet.create({
     gap: 12,
     borderRadius: R.xl,
     borderWidth: 1,
-    borderColor: ink(0.15),
+    borderColor: w(0.14),
     borderStyle: 'dashed',
-    backgroundColor: C.lightRecessed,
+    backgroundColor: w(0.04),
     padding: 16,
   },
-  breakIcon: { height: 32, width: 32, borderRadius: R.full, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
-  breakTitle: { color: ink(0.7), fontSize: 12 },
-  breakSub: { marginTop: 4, color: ink(0.6), fontSize: 12 },
+  breakIcon: { height: 32, width: 32, borderRadius: R.full, backgroundColor: w(0.08), alignItems: 'center', justifyContent: 'center' },
+  breakTitle: { color: w(0.7), fontSize: 12 },
+  breakSub: { marginTop: 4, color: w(0.5), fontSize: 12 },
 
   aiCard: {
     flexDirection: 'row',
@@ -397,23 +401,21 @@ const styles = StyleSheet.create({
     gap: 12,
     borderRadius: R.xl,
     borderWidth: 1,
-    borderColor: 'rgba(32,71,230,0.4)',
+    borderColor: 'rgba(32,71,230,0.5)',
     borderStyle: 'dashed',
-    backgroundColor: '#e8ecff',
+    backgroundColor: w(0.05),
     padding: 16,
   },
   aiIcon: { height: 32, width: 32, borderRadius: R.full, backgroundColor: C.surface, alignItems: 'center', justifyContent: 'center' },
-  aiTitle: { color: C.surface, fontSize: 14, fontWeight: '500' },
-  aiSub: { marginTop: 4, color: ink(0.6), fontSize: 12 },
-  acceptPill: { borderRadius: R.full, backgroundColor: C.surface, paddingHorizontal: 8, paddingVertical: 4 },
-  acceptTxt: { color: '#fff', fontSize: 12 },
+  aiTitle: { color: '#fff', fontSize: 14, fontWeight: '500' },
+  aiSub: { marginTop: 4, color: w(0.55), fontSize: 12 },
+  acceptPill: { borderRadius: R.full, backgroundColor: C.lime, paddingHorizontal: 8, paddingVertical: 4 },
+  acceptTxt: { color: C.surface, fontSize: 12, fontWeight: '500' },
 
-  /* ── compact: the dark rail variant ── */
-  compactBody: {},
-  rowDark: { borderTopColor: w(0.08) },
-  rowBodyDark: { padding: 10 },
+  /* ── compact: the dense, gutterless rail variant ── */
+  rowCompact: { padding: 10 },
 
-  freeRowDark: {
+  freeRowCompact: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -424,11 +426,9 @@ const styles = StyleSheet.create({
     backgroundColor: w(0.03),
     padding: 10,
   },
-  freeIconDark: { height: 26, width: 26, borderRadius: R.full, backgroundColor: w(0.08), alignItems: 'center', justifyContent: 'center' },
-  freeTxtDark: { color: w(0.55), fontSize: 12 },
-  freeRangeDark: { marginLeft: 'auto', color: w(0.4), fontSize: 12 },
+  freeIconCompact: { height: 26, width: 26, borderRadius: R.full, backgroundColor: w(0.08), alignItems: 'center', justifyContent: 'center' },
 
-  card2Dark: {
+  card2Compact: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -438,12 +438,12 @@ const styles = StyleSheet.create({
     backgroundColor: w(0.04),
     padding: 10,
   },
-  card2DarkTop: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  card2TitleDark: { flex: 1, color: '#fff', fontSize: 13, lineHeight: 18, fontWeight: '500' },
-  card2MetaDark: { marginTop: 3, color: w(0.45), fontSize: 11 },
+  card2CompactTop: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  card2TitleCompact: { flex: 1, color: '#fff', fontSize: 13, lineHeight: 18, fontWeight: '500' },
+  card2MetaCompact: { marginTop: 3, color: w(0.45), fontSize: 11 },
   catDot: { height: 7, width: 7, borderRadius: 4 },
 
-  breakCardDark: {
+  breakCardCompact: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -454,10 +454,10 @@ const styles = StyleSheet.create({
     backgroundColor: w(0.03),
     padding: 10,
   },
-  breakIconDark: { height: 28, width: 28, borderRadius: R.full, backgroundColor: w(0.06), alignItems: 'center', justifyContent: 'center' },
-  breakTitleDark: { flex: 1, color: w(0.7), fontSize: 12 },
+  breakIconCompact: { height: 28, width: 28, borderRadius: R.full, backgroundColor: w(0.06), alignItems: 'center', justifyContent: 'center' },
+  breakTitleCompact: { flex: 1, color: w(0.7), fontSize: 12 },
 
-  aiCardDark: {
+  aiCardCompact: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -468,11 +468,8 @@ const styles = StyleSheet.create({
     backgroundColor: w(0.05),
     padding: 10,
   },
-  aiIconDark: { height: 28, width: 28, borderRadius: R.full, backgroundColor: C.surface, alignItems: 'center', justifyContent: 'center' },
-  aiTitleDark: { color: '#fff', fontSize: 13, fontWeight: '500' },
-  aiSubDark: { marginTop: 3, color: w(0.5), fontSize: 11 },
-  acceptPillDark: { borderRadius: R.full, backgroundColor: C.lime, paddingHorizontal: 8, paddingVertical: 4 },
-  acceptTxtDark: { color: C.surface, fontSize: 11, fontWeight: '500' },
+  aiTitleCompact: { color: '#fff', fontSize: 13, fontWeight: '500' },
+  aiSubCompact: { marginTop: 3, color: w(0.5), fontSize: 11 },
 
   emptyBody: { alignItems: 'center', paddingHorizontal: 24, paddingVertical: 48, backgroundColor: C.surface },
   emptyIcon: {

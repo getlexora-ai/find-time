@@ -66,12 +66,18 @@ fixture are ported exactly so the board mockups line up.
 - **Sticky agenda date header** is rendered as a normal block (RN nested-scroll sticky is
   unreliable). Everything else — anchored popover vs. bottom sheet, centred modal vs.
   sheet, the 280ms nav skeleton, the marquee, `prefers-reduced-motion` — matches.
-- **Day view agenda placement** deviates from the mockup, by request. The mockup stacks the
-  dark time grid and the light agenda in one column. Here: `≥1280` puts the time grid alone
-  in the left column and moves the agenda into the right rail beside "AI insight" /
-  "Protected", where it renders `<Agenda compact />` — a dark (`recessed`) stripped variant:
-  time · title · category spine and the "free — 45m" gap rows; notes + the meta row are left
-  to the event-detail popover. Below `1280` the full-width light agenda is unchanged.
+- **The agenda is dark**, deviating from spec §7.3's "one light reading surface", by
+  request: an empty day already rendered on `#121212`, so a populated one on `#f4f4f4`
+  looked inconsistent. Body lifts with the theme (`recessed`); "Protected" blue is
+  lightened to `C.protectedOnDark` and "Overlaps" uses `C.orange` (not the on-light
+  variants).
+- **Day view agenda placement** also deviates, by request. The mockup stacks the dark time
+  grid and the agenda in one column. Here `≥1280` puts the time grid alone in the left
+  column and moves the agenda into the right rail beside "AI insight" / "Protected", where
+  it renders `<Agenda compact />` — same dark palette, stripped and gutterless: title ·
+  category spine and the "free — 45m" gap rows; notes + the meta row are left to the
+  event-detail popover. Below `1280` the full-width agenda (with gutter + full detail) is
+  used, on phone and below the time grid on narrow desktop.
 - `app.json` web output switched `static` → `single` (SPA): this is an interactive app
   with no SSR/SEO need, and it removes the static-render hydration mismatch.
 

@@ -35,6 +35,8 @@ export const C = {
   limeHover: '#d7ff33',
   orange: '#ff4400',
   orangeOnLight: '#cc3600',
+  /** "Protected" blue, lightened so it reads on the dark agenda (was #2047e6 on white). */
+  protectedOnDark: '#6b86ff',
   hairline: 'rgba(255,255,255,0.10)',
   scrim: 'rgba(7,18,63,0.70)',
 } as const;
