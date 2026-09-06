@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { Icon } from "@/components/ui/Icon";
 import { Button } from "@/components/ui/Button";
+import { Wordmark } from "@/components/brand/Wordmark";
 
 const links = [
   { href: "/how-it-works", label: "How it works" },
@@ -11,13 +11,8 @@ const links = [
 export function MarketingNav() {
   return (
     <nav className="flex items-center justify-between px-6 py-5 sm:px-10">
-      <Link href="/" className="flex items-center gap-2">
-        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-lime text-ink shadow-lime-glow">
-          <Icon name="solar:clock-circle-linear" size={16} />
-        </span>
-        <span className="font-mono text-sm font-semibold uppercase tracking-wider text-white">
-          Find Time
-        </span>
+      <Link href="/" className="flex items-center" aria-label="Find Time — home">
+        <Wordmark className="h-7 w-auto text-white" />
       </Link>
       <div className="hidden items-center gap-8 md:flex">
         {links.map((l) => (

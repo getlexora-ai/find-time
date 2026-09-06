@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { TelemetryRow } from "@/components/motif/AxisMarkers";
+import { Wordmark } from "@/components/brand/Wordmark";
 
 const columns = [
   {
@@ -33,7 +34,7 @@ export function MarketingFooter() {
     <footer className="border-t border-white/10 px-6 py-14 sm:px-10">
       <div className="mx-auto flex max-w-5xl flex-col gap-10 md:flex-row md:justify-between">
         <div>
-          <p className="font-mono text-sm font-semibold uppercase tracking-wider text-white">Find Time</p>
+          <Wordmark className="h-6 w-auto text-white" />
           <p className="mt-2 max-w-xs font-mono text-xs text-white/45">
             AI that plans your calendar in advance, from your inbox and your to-dos.
           </p>

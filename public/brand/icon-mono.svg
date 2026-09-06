@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="ft-icon-mono-title">
+  <title id="ft-icon-mono-title">Find Time</title>
+  <!--
+    TORCH MONO icon, one-color lime #CCFF00 on transparent, no tile.
+    Same construction as icon.svg — F glyph + clock-colon dots + one L-reticle.
+  -->
+  <g fill="#CCFF00">
+    <path d="M60 60h46v6H66v40h-6z"/>
+    <path transform="translate(93 112) scale(4)" d="M12 0H54V12H18V30H48V42H18V66L12 72H6V6Z"/>
+    <circle cx="367" cy="200" r="28"/>
+    <circle cx="367" cy="312" r="28"/>
+  </g>
+</svg>

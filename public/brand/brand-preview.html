@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Find Time — brand board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --blue: #2047e6;
+    --blue-950: #07123f;
+    --lime: #ccff00;
+    --ink: #121212;
+    --paper: #f4f4f4;
+    --periwinkle: #c8c8ff;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.6;
+    color: #fff;
+    background: var(--blue);
+    background-image:
+      radial-gradient(rgba(255, 255, 255, 0.14) 1px, transparent 1px),
+      linear-gradient(135deg, rgba(9, 26, 102, 0.35), rgba(32, 71, 230, 0));
+    background-size: 20px 20px, 100% 100%;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 64px 32px 120px; }
+
+  header { margin-bottom: 56px; }
+  .eyebrow {
+    font-size: 10px;
+    letter-spacing: 0.18rem;
+    text-transform: uppercase;
+    color: var(--lime);
+    margin: 0 0 12px;
+  }
+  h1 {
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0 0 16px;
+    text-transform: uppercase;
+  }
+  header p { max-width: 62ch; color: rgba(255, 255, 255, 0.62); margin: 0; }
+  header p + p { margin-top: 10px; }
+
+  section { margin-top: 56px; }
+  h2 {
+    font-size: 10px;
+    letter-spacing: 0.16rem;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.55);
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    padding-top: 14px;
+    margin: 0 0 24px;
+  }
+
+  /* reticle-framed panel */
+  .panel {
+    position: relative;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 40px;
+  }
+  .panel::before, .panel::after {
+    content: "";
+    position: absolute;
+    width: 18px; height: 18px;
+    border: 2px solid var(--lime);
+  }
+  .panel::before { top: 12px; left: 12px; border-right: 0; border-bottom: 0; }
+  .panel::after { bottom: 12px; right: 12px; border-left: 0; border-top: 0; }
+
+  .grid { display: grid; gap: 20px; }
+  .cols-2 { grid-template-columns: repeat(2, 1fr); }
+  .cols-3 { grid-template-columns: repeat(3, 1fr); }
+  @media (max-width: 720px) { .cols-2, .cols-3 { grid-template-columns: 1fr; } }
+
+  .swatch {
+    border-radius: 16px;
+    padding: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 132px;
+  }
+  .on-blue { background: var(--blue); border: 1px solid rgba(255,255,255,0.14); }
+  .on-ink { background: var(--ink); }
+  .on-paper { background: var(--paper); }
+  .swatch img { display: block; }
+
+  .caption {
+    font-size: 10px;
+    letter-spacing: 0.08rem;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.4);
+    margin-top: 10px;
+  }
+
+  .sizes { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 32px; }
+  .size-item { text-align: center; }
+  .size-item img { display: block; margin: 0 auto 8px; }
+
+  .badges { display: flex; flex-wrap: wrap; gap: 28px; align-items: center; }
+  .badges img { display: block; border-radius: 16px; }
+
+  .glyphset { display: flex; flex-wrap: wrap; gap: 14px; }
+  .glyph {
+    width: 84px; height: 84px;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+  }
+  .glyph svg { width: 48px; height: 48px; }
+  .glyph span {
+    position: absolute; transform: translateY(34px);
+    font-size: 9px; color: rgba(255,255,255,0.4);
+  }
+
+  ul.notes { margin: 0; padding-left: 18px; color: rgba(255, 255, 255, 0.7); }
+  ul.notes li { margin-bottom: 8px; }
+  ul.notes b { color: #fff; }
+
+  .clearspace {
+    display: inline-block;
+    padding: 40px;
+    border: 1px dashed rgba(204, 255, 0, 0.5);
+    border-radius: 12px;
+    background: rgba(204, 255, 0, 0.04);
+  }
+  .clearspace img { display: block; }
+
+  code { background: rgba(255,255,255,0.1); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Find Time · Brand board · Torch Genesis Broadcast</p>
+    <h1>TORCH MONO</h1>
+    <p>
+      A bespoke geometric monospace alphabet drawn as SVG paths on a 6px grid —
+      cap height 72, advance 60, stem 12 — with a signature 1-unit 45&deg; chamfer
+      cut into every glyph's extreme top-left and bottom-right corner. It is the
+      instrument-panel type of the product, redrawn as a wordmark rather than a
+      font set on <code>&lt;text&gt;</code>.
+    </p>
+    <p>
+      The lockup is <b>FIND:TIME</b>. The colon is two lime dots — a digital-clock
+      time separator that also echoes the StatusDot / traffic-light motif. Lime
+      L-reticles lock onto <b>TIME</b>: the system has <i>found</i> an open slot and
+      is blocking it. White glyphs on the electric-blue field; one-colour variants
+      for every other surface.
+    </p>
+  </header>
+
+  <section>
+    <h2>Primary lockup — on the blue field</h2>
+    <div class="panel">
+      <div class="swatch on-blue" style="min-height:180px">
+        <img src="logo-primary.svg" width="520" alt="Find Time primary logo" />
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>One-colour variants</h2>
+    <div class="grid cols-3">
+      <div>
+        <div class="swatch on-blue"><img src="logo-primary-white.svg" width="260" alt="white variant" /></div>
+        <div class="caption">white · on blue / photography</div>
+      </div>
+      <div>
+        <div class="swatch on-ink"><img src="logo-primary-lime.svg" width="260" alt="lime variant" /></div>
+        <div class="caption">lime · on ink</div>
+      </div>
+      <div>
+        <div class="swatch on-paper"><img src="logo-primary-ink.svg" width="260" alt="ink variant" /></div>
+        <div class="caption">ink · on paper</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Size ramp — down to 16px cap</h2>
+    <div class="panel">
+      <div class="swatch on-blue" style="min-height:auto; justify-content:flex-start">
+        <div class="sizes">
+          <div class="size-item"><img src="logo-primary.svg" height="48" alt="" /><div class="caption">48</div></div>
+          <div class="size-item"><img src="logo-primary.svg" height="32" alt="" /><div class="caption">32</div></div>
+          <div class="size-item"><img src="logo-primary.svg" height="24" alt="" /><div class="caption">24</div></div>
+          <div class="size-item"><img src="logo-primary.svg" height="20" alt="" /><div class="caption">20</div></div>
+          <div class="size-item"><img src="logo-primary.svg" height="16" alt="" /><div class="caption">16</div></div>
+        </div>
+      </div>
+    </div>
+    <p style="color:rgba(255,255,255,0.6); margin-top:14px">
+      Below ~20px cap the chamfers and the reticle gap start to fill in — use the
+      icon mark instead of the horizontal lockup at those sizes.
+    </p>
+  </section>
+
+  <section>
+    <h2>On surface</h2>
+    <div class="grid cols-3">
+      <div>
+        <div class="swatch" style="background:#2047e6"><img src="logo-primary.svg" width="240" alt="" /></div>
+        <div class="caption">#2047E6 · blue</div>
+      </div>
+      <div>
+        <div class="swatch" style="background:#121212"><img src="logo-primary-lime.svg" width="240" alt="" /></div>
+        <div class="caption">#121212 · ink</div>
+      </div>
+      <div>
+        <div class="swatch" style="background:#f4f4f4"><img src="logo-primary-ink.svg" width="240" alt="" /></div>
+        <div class="caption">#F4F4F4 · paper</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Stacked badge &amp; app icon</h2>
+    <div class="panel">
+      <div class="badges">
+        <div><img src="logo-stacked.svg" width="200" alt="stacked badge" /><div class="caption">logo-stacked · 512</div></div>
+        <div><img src="icon.svg" width="128" alt="app icon" /><div class="caption">icon · tile</div></div>
+        <div><img src="icon.svg" width="64" alt="" /><div class="caption">64</div></div>
+        <div><img src="icon.svg" width="32" alt="" /><div class="caption">32</div></div>
+        <div><img src="icon.svg" width="16" alt="" /><div class="caption">16</div></div>
+        <div class="swatch on-ink" style="min-height:auto;padding:16px"><img src="icon-mono.svg" width="72" alt="icon mono" /></div>
+      </div>
+    </div>
+    <p style="color:rgba(255,255,255,0.6); margin-top:14px">
+      The icon distils the wordmark to its first glyph — the chamfered <b>F</b> —
+      plus the lime clock-colon and a diagonal reticle pair. It holds as a shape
+      at 16px.
+    </p>
+  </section>
+
+  <section>
+    <h2>The alphabet drawn so far</h2>
+    <div class="glyphset">
+      <!-- glyphs inlined from logo-primary.svg defs, 60x72 advance box -->
+      <div class="glyph"><svg viewBox="0 0 60 72" fill="#ccff00"><path d="M12 0H54V12H18V30H48V42H18V66L12 72H6V6Z"/></svg></div>
+      <div class="glyph"><svg viewBox="0 0 60 72" fill="#ccff00"><path d="M18 0H48V12H36V60H48V66L42 72H12V60H24V12H12V6Z"/></svg></div>
+      <div class="glyph"><svg viewBox="0 0 60 72" fill="#ccff00"><path d="M12 0H18L42 48V0H54V66L48 72H42L18 24V72H6V6Z"/></svg></div>
+      <div class="glyph"><svg viewBox="0 0 60 72" fill="#ccff00"><path fill-rule="evenodd" d="M12 0H36L54 18V54L36 72H6V6ZM18 12V60H30L42 48V24L30 12Z"/></svg></div>
+      <div class="glyph"><svg viewBox="0 0 60 72" fill="#ccff00"><path d="M12 0H54V12H36V66L30 72H24V12H6V6Z"/></svg></div>
+      <div class="glyph"><svg viewBox="0 0 60 72" fill="#ccff00"><path d="M12 0H18L30 36L42 0H54V66L48 72H42V36L30 72L18 36V72H6V6Z"/></svg></div>
+      <div class="glyph"><svg viewBox="0 0 60 72" fill="#ccff00"><path d="M12 0H54V12H18V30H48V42H18V60H54V66L48 72H6V6Z"/></svg></div>
+    </div>
+    <p style="color:rgba(255,255,255,0.55); margin-top:14px">
+      F · I · N · D · T · M · E — enough for the lockup. Extend the set by keeping
+      the four numbers (60 / 72 / 12 / 6) and the two chamfers.
+    </p>
+  </section>
+
+  <section>
+    <h2>Clear space &amp; minimum size</h2>
+    <div class="grid cols-2">
+      <div>
+        <span class="clearspace"><img src="logo-primary.svg" width="300" alt="" /></span>
+        <div class="caption">clear space = one cap height (the F) on every side</div>
+      </div>
+      <div class="panel" style="padding:28px">
+        <ul class="notes">
+          <li><b>Min width — horizontal lockup:</b> 96px. Below that, switch to the icon.</li>
+          <li><b>Min size — icon:</b> 16px.</li>
+          <li><b>Colon &amp; reticles</b> are always lime <code>#CCFF00</code>, never recoloured, except in the one-colour variants where the whole mark collapses to a single ink.</li>
+          <li><b>Do not</b> outline the glyphs, add a drop shadow, re-space the letters, or place the white lockup on a light ground.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Why this mark</h2>
+    <p style="color:rgba(255,255,255,0.72); max-width:68ch">
+      Find Time is a scheduling instrument, so the logo is built like one: a fixed
+      monospace grid, hard geometry, a single repeated cut. The chamfer reads as a
+      bevelled panel edge — the broadcast-console language of the product surface.
+      The colon does double duty as a clock separator and a status light, and the
+      reticles are the same L-shaped lime brackets the app uses to frame anything
+      it has locked onto. The wordmark is not decoration applied to the product;
+      it is the product's own drawing system at display size.
+    </p>
+  </section>
+
+</div>
+</body>
+</html>

@@ -28,6 +28,24 @@ export function EventDetailPopover({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const cardRef = React.useRef<HTMLDivElement>(null);
+  const previouslyFocused = React.useRef<HTMLElement | null>(null);
+
+  React.useEffect(() => {
+    if (!event) return;
+    previouslyFocused.current = document.activeElement as HTMLElement | null;
+    cardRef.current?.focus();
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      previouslyFocused.current?.focus();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event]);
+
   if (!event || !anchorRect) return null;
   const style = CATEGORY_STYLES[event.category];
 
@@ -40,7 +58,12 @@ export function EventDetailPopover({
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
       <div
-        className="fixed z-50 rounded-card border border-white/10 bg-ink p-4 shadow-panel"
+        ref={cardRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${event.title} details`}
+        tabIndex={-1}
+        className="fixed z-50 rounded-card border border-white/10 bg-ink p-4 shadow-panel outline-none"
         style={{ top, left, width }}
       >
         <div className="flex items-start justify-between gap-2">

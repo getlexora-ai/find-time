@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 556 120" width="556" height="120" role="img" aria-labelledby="ft-primary-title">
+  <title id="ft-primary-title">Find Time</title>
+  <!--
+    TORCH MONO — the Find Time custom alphabet.
+    Grid unit u = 6.  Cap height 72 (12u).  Advance width 60 (10u).
+    Glyph body 48 (8u) with 6 (1u) side bearings.  Stem / bar weight 12 (2u).
+    Glyph origin = top-left of its advance cell; baseline sits at y = 72.
+    Signature detail: a 1u (6) 45-degree chamfer cut into each glyph's extreme
+    top-left and bottom-right corner. Extend the alphabet by keeping those
+    four numbers (60 / 72 / 12 / 6) and the two chamfers.
+  -->
+  <defs>
+    <path id="ft-F" d="M12 0H54V12H18V30H48V42H18V66L12 72H6V6Z"/>
+    <path id="ft-I" d="M18 0H48V12H36V60H48V66L42 72H12V60H24V12H12V6Z"/>
+    <path id="ft-N" d="M12 0H18L42 48V0H54V66L48 72H42L18 24V72H6V6Z"/>
+    <path id="ft-D" fill-rule="evenodd" d="M12 0H36L54 18V54L36 72H6V6ZM18 12V60H30L42 48V24L30 12Z"/>
+    <path id="ft-T" d="M12 0H54V12H36V66L30 72H24V12H6V6Z"/>
+    <path id="ft-M" d="M12 0H18L30 36L42 0H54V66L48 72H42V36L30 72L18 36V72H6V6Z"/>
+    <path id="ft-E" d="M12 0H54V12H18V30H48V42H18V60H54V66L48 72H6V6Z"/>
+    <g id="ft-colon"><circle cx="30" cy="22" r="7"/><circle cx="30" cy="50" r="7"/></g>
+  </defs>
+  <g fill="#FFFFFF">
+    <use href="#ft-F" x="0" y="24"/>
+    <use href="#ft-I" x="60" y="24"/>
+    <use href="#ft-N" x="120" y="24"/>
+    <use href="#ft-D" x="180" y="24"/>
+    <use href="#ft-T" x="300" y="24"/>
+    <use href="#ft-I" x="360" y="24"/>
+    <use href="#ft-M" x="420" y="24"/>
+    <use href="#ft-E" x="480" y="24"/>
+  </g>
+  <g fill="#CCFF00">
+    <use href="#ft-colon" x="240" y="24"/>
+    <path d="M290 10h30v6h-24v24h-6z"/>
+    <path d="M550 10h-30v6h24v24h6z"/>
+    <path d="M290 110h30v-6h-24v-24h-6z"/>
+    <path d="M550 110h-30v-6h24v-24h6z"/>
+  </g>
+</svg>

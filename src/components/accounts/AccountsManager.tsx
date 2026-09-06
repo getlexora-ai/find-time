@@ -11,7 +11,8 @@ import { PROVIDER_META, pickMockEmail } from "@/components/accounts/providerMeta
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { SkeletonBlock } from "@/components/ui/SkeletonBlock";
-import type { AccountProvider } from "@/lib/types";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import type { AccountProvider, ConnectedAccount } from "@/lib/types";
 
 const CONNECTABLE_PROVIDERS = Object.keys(PROVIDER_META) as AccountProvider[];
 
@@ -22,6 +23,7 @@ export function AccountsManager() {
   const [connecting, setConnecting] = React.useState<AccountProvider | null>(null);
   const [showGrid, setShowGrid] = React.useState(false);
   const [showImapForm, setShowImapForm] = React.useState(false);
+  const [pendingDisconnect, setPendingDisconnect] = React.useState<ConnectedAccount | null>(null);
 
   const accounts = React.useMemo(() => data?.accounts ?? [], [data]);
 
@@ -72,10 +74,7 @@ export function AccountsManager() {
               account={account}
               onSyncNow={() => syncNow(account.id)}
               onReconnect={() => reconnect(account.id)}
-              onDisconnect={() => {
-                disconnect(account.id);
-                push({ message: `Disconnected ${account.email}`, variant: "alert" });
-              }}
+              onDisconnect={() => setPendingDisconnect(account)}
             />
           ))}
         </div>
@@ -133,6 +132,25 @@ export function AccountsManager() {
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={pendingDisconnect !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDisconnect(null);
+        }}
+        title="Disconnect account"
+        message={
+          pendingDisconnect
+            ? `${pendingDisconnect.email} will stop syncing and its events/tasks will no longer update. You can reconnect it later.`
+            : ""
+        }
+        confirmLabel="Disconnect"
+        onConfirm={() => {
+          if (!pendingDisconnect) return;
+          disconnect(pendingDisconnect.id);
+          push({ message: `Disconnected ${pendingDisconnect.email}`, variant: "alert" });
+        }}
+      />
     </div>
   );
 }

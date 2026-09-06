@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="ft-icon-title">
+  <title id="ft-icon-title">Find Time</title>
+  <!--
+    TORCH MONO icon — the F glyph (with its signature 1u 45-degree chamfer on the
+    extreme top-left and bottom-right corner) beside the two lime clock-colon dots,
+    locked by a matching diagonal pair of lime L-reticles.
+    Grid unit u = 6.  Cap height 72.  Stem / bar weight 12.  Chamfer 6.
+    The F path is lifted verbatim from logo-primary.svg and scaled 4x.
+    Extend the mark by keeping the numbers 60 / 72 / 12 / 6 and the two chamfers.
+  -->
+  <defs>
+    <linearGradient id="ft-icon-field" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07123F" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#2047E6" stop-opacity="0"/>
+    </linearGradient>
+    <pattern id="ft-icon-dots" width="32" height="32" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="2" fill="#FFFFFF" fill-opacity=".12"/>
+    </pattern>
+  </defs>
+
+  <rect width="512" height="512" rx="96" fill="#2047E6"/>
+  <rect width="512" height="512" rx="96" fill="url(#ft-icon-dots)"/>
+  <rect width="512" height="512" rx="96" fill="url(#ft-icon-field)"/>
+
+  <g fill="#CCFF00">
+    <path d="M60 60h46v6H66v40h-6z"/>
+    <path d="M452 452h-46v-6h40v-40h6z"/>
+  </g>
+
+  <path fill="#FFFFFF" transform="translate(93 112) scale(4)" d="M12 0H54V12H18V30H48V42H18V66L12 72H6V6Z"/>
+
+  <g fill="#CCFF00">
+    <circle cx="367" cy="200" r="28"/>
+    <circle cx="367" cy="312" r="28"/>
+  </g>
+</svg>

@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="ft-stacked-title">
+  <title id="ft-stacked-title">Find Time</title>
+  <!--
+    TORCH MONO — the Find Time custom alphabet.
+    Grid unit u = 6.  Cap height 72 (12u).  Advance width 60 (10u).
+    Glyph body 48 (8u) with 6 (1u) side bearings.  Stem / bar weight 12 (2u).
+    Glyph origin = top-left of its advance cell; baseline sits at y = 72.
+    Signature detail: a 1u (6) 45-degree chamfer cut into each glyph's extreme
+    top-left and bottom-right corner.
+    FIND is set at 0.4x with +40 units of letterspacing (advance 100 in glyph
+    space); TIME is set at 1.2x on the plain 60-unit advance.
+  -->
+  <defs>
+    <path id="ft-F" d="M12 0H54V12H18V30H48V42H18V66L12 72H6V6Z"/>
+    <path id="ft-I" d="M18 0H48V12H36V60H48V66L42 72H12V60H24V12H12V6Z"/>
+    <path id="ft-N" d="M12 0H18L42 48V0H54V66L48 72H42L18 24V72H6V6Z"/>
+    <path id="ft-D" fill-rule="evenodd" d="M12 0H36L54 18V54L36 72H6V6ZM18 12V60H30L42 48V24L30 12Z"/>
+    <path id="ft-T" d="M12 0H54V12H36V66L30 72H24V12H6V6Z"/>
+    <path id="ft-M" d="M12 0H18L30 36L42 0H54V66L48 72H42V36L30 72L18 36V72H6V6Z"/>
+    <path id="ft-E" d="M12 0H54V12H18V30H48V42H18V60H54V66L48 72H6V6Z"/>
+    <linearGradient id="ft-field" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07123F" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#2047E6" stop-opacity="0"/>
+    </linearGradient>
+    <pattern id="ft-dots" width="32" height="32" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="2" fill="#FFFFFF" fill-opacity=".12"/>
+    </pattern>
+  </defs>
+
+  <rect width="512" height="512" rx="40" fill="#2047E6"/>
+  <rect width="512" height="512" rx="40" fill="url(#ft-dots)"/>
+  <rect width="512" height="512" rx="40" fill="url(#ft-field)"/>
+
+  <rect x="36" y="36" width="440" height="440" rx="8" fill="none" stroke="#FFFFFF" stroke-opacity=".10" stroke-width="2"/>
+  <g fill="#CCFF00">
+    <path d="M36 36h40v5H41v35h-5z"/>
+    <path d="M476 36h-40v5h35v35h5z"/>
+    <path d="M36 476h40v-5H41v-35h-5z"/>
+    <path d="M476 476h-40v-5h35v-35h5z"/>
+  </g>
+
+  <g fill="#FFFFFF" transform="translate(184 152) scale(0.4)">
+    <use href="#ft-F" x="0"/>
+    <use href="#ft-I" x="100"/>
+    <use href="#ft-N" x="200"/>
+    <use href="#ft-D" x="300"/>
+  </g>
+  <g fill="#CCFF00">
+    <circle cx="159" cy="166" r="5"/>
+    <circle cx="353" cy="166" r="5"/>
+  </g>
+
+  <g fill="#FFFFFF" transform="translate(112 230) scale(1.2)">
+    <use href="#ft-T" x="0"/>
+    <use href="#ft-I" x="60"/>
+    <use href="#ft-M" x="120"/>
+    <use href="#ft-E" x="180"/>
+  </g>
+
+  <g>
+    <rect x="187" y="340" width="68" height="8" fill="#CCFF00"/>
+    <rect x="119" y="348" width="274" height="2" fill="#FFFFFF" fill-opacity=".18"/>
+    <g fill="#FFFFFF" fill-opacity=".22">
+      <rect x="119" y="348" width="2" height="10"/>
+      <rect x="187" y="348" width="2" height="10"/>
+      <rect x="255" y="348" width="2" height="10"/>
+      <rect x="323" y="348" width="2" height="10"/>
+      <rect x="391" y="348" width="2" height="10"/>
+    </g>
+  </g>
+</svg>
