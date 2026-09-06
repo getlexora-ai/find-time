@@ -9,8 +9,8 @@ const COPY =
 
 /** Telemetry ticker. translateX at ~-0.35px/frame, resets at half the scroll
  *  width (calendar.html `animateMarquee`). Keeps moving under reduced-motion by
- *  design (spec §5). */
-export function Marquee() {
+ *  design (spec §5). `copy` overrides the calendar string for the landing page. */
+export function Marquee({ copy = COPY }: { copy?: string }) {
   const { theme } = useCalTheme();
   const [x] = useState(() => new Animated.Value(0));
   const [spanW, setSpanW] = useState(0);
@@ -35,18 +35,18 @@ export function Marquee() {
     <View style={[styles.bar, CHROME_BLUR, { backgroundColor: theme.chrome }]}>
       <Animated.View style={[styles.track, { transform: [{ translateX: x }] }]}>
         <View onLayout={(e) => setSpanW(e.nativeEvent.layout.width)}>
-          <Span />
+          <Span copy={copy} />
         </View>
-        <Span />
+        <Span copy={copy} />
       </Animated.View>
     </View>
   );
 }
 
-function Span() {
+function Span({ copy }: { copy: string }) {
   return (
     <Animated.Text numberOfLines={1} style={styles.span}>
-      {COPY + '   '}
+      {copy + '   '}
     </Animated.Text>
   );
 }
