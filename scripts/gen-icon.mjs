@@ -155,12 +155,30 @@ console.log(`straightened: ${RAW_D.length} chars / 224 curves  ->  ${straightD.l
 mkdirSync(p('assets/logo'), { recursive: true });
 const svg = (fill) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><path fill-rule="evenodd" fill="${fill}" d="${straightD}"/></svg>`;
+const LIME = '#ccff00';
 const masters = {
   'mark.svg': svg('currentColor'),
   'mark-white.svg': svg(WHITE),
   'mark-ink.svg': svg(INK),
+  'mark-lime.svg': svg(LIME),
 };
 for (const [name, body] of Object.entries(masters)) writeFileSync(p('assets/logo', name), body + '\n');
+
+// ── named colourways from combos.html "Set 1 · O — hex aperture" ────────────
+// tile = rounded-rect ground (border-radius:26 on 120) + mark at 66% (.tile svg{width:66%})
+const tile = (bg, markFill) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">` +
+  `<rect width="120" height="120" rx="26" fill="${bg}"/>` +
+  `<g transform="translate(20.4 20.4) scale(0.66)"><path fill-rule="evenodd" fill="${markFill}" d="${straightD}"/></g></svg>`;
+const colourways = {
+  // caption in combos.html                     mark      ground
+  'hex-white-on-blue.svg': tile(GROUND, WHITE), //  app icon · white on blue
+  'hex-ink-on-lime.svg': tile(LIME, INK), //        app icon · ink on lime
+  'hex-white-on-ink.svg': tile(INK, WHITE), //      64 / 32 / 16 px cell · dark surface
+  'hex-lime-on-ink.svg': tile(INK, LIME), //        horizontal lockup · ink
+};
+for (const [name, body] of Object.entries(colourways)) writeFileSync(p('assets/logo', name), body + '\n');
+console.log(`colourways: ${Object.keys(colourways).join(', ')}`);
 
 // mark centred + scaled inside the 120 box; optional ground behind it
 const markSvg = (markFill, scale, bg) => {
