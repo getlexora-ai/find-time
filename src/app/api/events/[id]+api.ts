@@ -1,8 +1,6 @@
 import { isConfigured } from '@/server/db';
+import { currentUserId } from '@/server/auth/session';
 import { deleteEvent, updateEvent, type EventInput } from '@/server/events-repo';
-
-// TODO(auth): replace with the real session user once auth lands.
-const USER_ID = 'u1';
 
 function guard(): Response | null {
   if (!isConfigured()) {
@@ -16,7 +14,7 @@ export async function PATCH(request: Request, { id }: Record<string, string>): P
   if (blocked) return blocked;
   try {
     const patch = (await request.json()) as Partial<EventInput>;
-    const event = await updateEvent(USER_ID, id, patch);
+    const event = await updateEvent(currentUserId(request), id, patch);
     if (!event) return Response.json({ error: 'Not found.' }, { status: 404 });
     return Response.json({ event });
   } catch (err) {
@@ -25,11 +23,11 @@ export async function PATCH(request: Request, { id }: Record<string, string>): P
   }
 }
 
-export async function DELETE(_request: Request, { id }: Record<string, string>): Promise<Response> {
+export async function DELETE(request: Request, { id }: Record<string, string>): Promise<Response> {
   const blocked = guard();
   if (blocked) return blocked;
   try {
-    const ok = await deleteEvent(USER_ID, id);
+    const ok = await deleteEvent(currentUserId(request), id);
     if (!ok) return Response.json({ error: 'Not found.' }, { status: 404 });
     return Response.json({ ok: true });
   } catch (err) {

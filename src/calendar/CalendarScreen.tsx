@@ -3,6 +3,7 @@ import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { byDate, useCalEvents } from './cal-store';
+import { syncNow, useAccounts } from './account-store';
 import { addDays, addMonths, fromIso, iso, isoWeek, MO, sameDay, startOfWeek, wdIndex, WD_LONG } from './cal-date';
 import { AiPanel } from './components/AiPanel';
 import { ComposeSheet } from './components/ComposeSheet';
@@ -31,6 +32,21 @@ export function CalendarScreen() {
   const events = useCalEvents();
   const toast = useToast();
   const { width, isDesktop, isWide, isPhone } = useResponsive();
+  const { signedIn } = useAccounts();
+
+  // Pull Google Calendar on mount (throttled in the store) and once we're signed in.
+  useEffect(() => {
+    if (signedIn) void syncNow();
+  }, [signedIn]);
+
+  // Toast the outcome of the OAuth round-trip (?connect=ok|error on /app).
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const p = new URLSearchParams(window.location.search).get('connect');
+    if (!p) return;
+    toast(p === 'ok' ? 'Google Calendar connected' : 'Could not connect Google Calendar');
+    window.history.replaceState(null, '', window.location.pathname);
+  }, [toast]);
 
   const [state, setState] = useState<CalState>(() => ({
     view: width < DESKTOP_BP ? 'week' : 'month',

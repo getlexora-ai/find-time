@@ -3,6 +3,8 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { Icon, type IconName } from '../Icon';
 import { CATS, CAT_KEYS, C, R, w } from '../tokens';
 import type { CalEvent } from '../types';
+import { useAccounts, signOut } from '../account-store';
+import { GoogleCalendars } from './GoogleCalendars';
 import { MiniMonth } from './MiniMonth';
 import { useCalTheme } from '../theme-context';
 import { Press, Txt } from '../ui';
@@ -26,6 +28,7 @@ export function Sidebar({
 }) {
   const { theme } = useCalTheme();
   const toast = useToast();
+  const { signedIn, user } = useAccounts();
 
   return (
     <View style={[styles.aside, { backgroundColor: theme.rail, borderRightColor: w(0.1) }]}>
@@ -63,9 +66,11 @@ export function Sidebar({
 
         <MiniMonth selected={selected} events={events} onPick={onPick} />
 
+        <GoogleCalendars />
+
         <View style={styles.section}>
           <View style={styles.sectionHead}>
-            <Txt style={styles.sectionTitle}>Calendars</Txt>
+            <Txt style={styles.sectionTitle}>Categories</Txt>
             <Icon name="eye" size={16} color={w(0.4)} />
           </View>
           {CAT_KEYS.map((k) => (
@@ -92,19 +97,36 @@ export function Sidebar({
           <Txt style={styles.focusNote}>72% of this week&apos;s deep work is booked.</Txt>
         </View>
 
-        <Press hoverBg={w(0.1)} style={styles.user}>
+        <Press
+          hoverBg={w(0.1)}
+          style={styles.user}
+          onPress={() => {
+            if (!signedIn) return;
+            toast('Signing out');
+            void signOut();
+          }}>
           <View style={styles.avatar}>
-            <Txt style={styles.avatarTxt}>AM</Txt>
+            <Txt style={styles.avatarTxt}>{initials(signedIn ? user?.name : 'Alex Morgan')}</Txt>
           </View>
           <View style={styles.userMeta}>
-            <Txt style={styles.userName}>Alex Morgan</Txt>
-            <Txt style={styles.userSub}>Pro workspace</Txt>
+            <Txt style={styles.userName} numberOfLines={1}>
+              {signedIn ? user?.name || user?.email || 'Signed in' : 'Alex Morgan'}
+            </Txt>
+            <Txt style={styles.userSub} numberOfLines={1}>
+              {signedIn ? 'Sign out' : 'Pro workspace'}
+            </Txt>
           </View>
-          <Icon name="dots" size={18} color={w(0.45)} />
+          <Icon name={signedIn ? 'close' : 'dots'} size={signedIn ? 14 : 18} color={w(0.45)} />
         </Press>
       </ScrollView>
     </View>
   );
+}
+
+function initials(name: string | null | undefined): string {
+  const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '·';
+  return (parts[0][0] + (parts[1]?.[0] ?? '')).toUpperCase();
 }
 
 const styles = StyleSheet.create({

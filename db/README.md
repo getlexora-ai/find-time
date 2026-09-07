@@ -13,7 +13,9 @@ Calendar-specific design: [../docs/db/calendar-schema.md](../docs/db/calendar-sc
 | `004_ai.sql` | `ai_sessions`, `ai_messages`, `plan_drafts`, `ai_suggestions` |
 | `005_signals_notifications.sql` | `email_signals`, `notifications` |
 | `006_cross_refs.sql` | circular FKs, added last |
-| `schema.sql` | **generated** — `001`–`006` concatenated; what a fresh DB gets |
+| `007_expo_calendar_compat.sql` | `calendar_events.project_label` (RN calendar carries `project` as free text) |
+| `010_oauth_tokens.sql` | `oauth_tokens` — AES-256-GCM-encrypted Google tokens (src/server/crypto.ts) |
+| `schema.sql` | **generated** — `001`–`007` concatenated; what a fresh DB gets. **Run `010` after it.** |
 
 Each file is idempotent (`create table if not exists`, `do $$ … exception when duplicate_object`), so re-running one is safe.
 
@@ -28,9 +30,10 @@ export DATABASE_URL_UNPOOLED='postgresql://...direct-host.neon.tech/find_time?ss
 
 # fresh database:
 psql "$DATABASE_URL_UNPOOLED" -v ON_ERROR_STOP=1 -f db/schema.sql
+psql "$DATABASE_URL_UNPOOLED" -v ON_ERROR_STOP=1 -f db/010_oauth_tokens.sql
 
 # or file by file, in order:
-for f in db/00[1-6]_*.sql; do psql "$DATABASE_URL_UNPOOLED" -v ON_ERROR_STOP=1 -f "$f"; done
+for f in db/00[1-7]_*.sql db/010_*.sql; do psql "$DATABASE_URL_UNPOOLED" -v ON_ERROR_STOP=1 -f "$f"; done
 ```
 
 `NOTICE: … does not exist, skipping` on the first run is the `drop trigger if exists`

@@ -30,3 +30,30 @@ export type EventInput = {
   projectLabel?: string | null;
   notes?: string | null;
 };
+
+/** GET /api/calendar/accounts — Google connections for the "Calendars" panel. */
+export type ApiCalendar = {
+  id: string;
+  providerCalendarId: string;
+  name: string;
+  color: string;
+  isPrimary: boolean;
+  readEnabled: boolean;
+};
+
+export type ApiAccount = {
+  id: string;
+  email: string;
+  displayName: string;
+  accentColor: string;
+  syncStatus: string;
+  syncError: string | null;
+  lastSyncAt: string | null;
+  calendars: ApiCalendar[];
+};
+
+export type AccountsResponse = {
+  signedIn: boolean;
+  user: { id: string; name: string; email: string } | null;
+  accounts: ApiAccount[];
+};
