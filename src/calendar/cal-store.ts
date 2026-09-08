@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 
+import type { FindTimeProposal } from '@/lib/api-types';
+
 import { toCalEvent, toEventInput } from './api-adapter';
 import { toMin } from './cal-date';
 import { seedEvents } from './seed';
@@ -193,47 +195,28 @@ export function toggleProtected(id: number) {
   updateEvent(id, { kind: cur.kind === 'focus' ? 'event' : 'focus' });
 }
 
-// ponytail: applyFindTime / resolveWedClash are the mocked demo CTAs from
-// calendar.html — local-cache only, not persisted. A real scheduler call
-// (/api/ai/plan + draft apply) replaces them later.
+const API_CAT_TO_CAT: Record<string, CatKey> = {
+  'deep-work': 'deep',
+  design: 'design',
+  research: 'research',
+  meeting: 'sync',
+  admin: 'admin',
+};
 
-/** The mocked Find-time "apply" — moves two flexible blocks, adds one protected
- *  deep-work block. Local only. */
-export function applyFindTime() {
-  const sr = events.find((e) => e.title === 'Stakeholder review');
-  const dc = events.find((e) => e.title === 'Draft launch checklist');
-  events = events.map((e) => {
-    if (sr && e.id === sr.id) return { ...e, date: '2026-09-07', start: '16:00', end: '17:00' };
-    if (dc && e.id === dc.id) return { ...e, date: '2026-09-11', start: '09:30', end: '10:30' };
-    return e;
-  });
-  if (!events.some((e) => e.title === 'Deep work · onboarding spec')) {
-    events = [
-      ...events,
-      {
-        id: tempSeq--,
-        date: '2026-09-10',
-        start: '10:00',
-        end: '12:00',
-        title: 'Deep work · onboarding spec',
-        cat: 'deep',
-        project: 'Mobile launch',
-        kind: 'focus',
-        notes: 'Two clean hours found by Find time.',
-      },
-    ];
+/** Apply the AI "Find time" proposals from POST /api/ai/find-time: create each
+ *  as an AI-kind block (dashed lime). Goes through the normal `createEvent`
+ *  path, so each one is persisted to /api/events. Returns how many were added. */
+export function applyProposals(proposals: FindTimeProposal[]): number {
+  for (const p of proposals) {
+    createEvent({
+      date: p.startISO.slice(0, 10),
+      start: p.startISO.slice(11, 16),
+      end: p.endISO.slice(11, 16),
+      title: p.title,
+      cat: API_CAT_TO_CAT[p.category] ?? 'deep',
+      kind: 'ai',
+    });
   }
-  emit();
+  return proposals.length;
 }
 
-/** The day-view insight card action — resolve the Wed 11:00 clash. Local only. */
-export function resolveWedClash() {
-  events = events.map((e) => {
-    if (e.title === 'Roadmap review with Maya')
-      return { ...e, date: '2026-09-10', start: '14:00', end: '15:00', conflict: false };
-    if (e.title === 'Product team sync' && e.date === '2026-09-09')
-      return { ...e, conflict: false };
-    return e;
-  });
-  emit();
-}

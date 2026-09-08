@@ -1,24 +1,38 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
-import { applyFindTime } from '../cal-store';
+import type { FindTimeResponse } from '@/lib/api-types';
+
+import { applyProposals } from '../cal-store';
 import { Icon } from '../Icon';
 import { useCalTheme } from '../theme-context';
 import { C, R, rgba, w } from '../tokens';
 import { MONO, Press, Txt } from '../ui';
 import { useResponsive } from '../useResponsive';
 
+const BASE = process.env.EXPO_PUBLIC_API_URL ?? '';
+
 const CHIPS = [
-  { label: '2h deep work Thursday', fill: 'Make room for 2h deep work on Thursday' },
-  { label: 'Protect my mornings', fill: 'Protect 09:00–11:00 every weekday for focused work' },
-  { label: "Fix Wednesday's clash", fill: 'Fix the clash on Wednesday at 11:00' },
+  { label: '2h deep work Thursday', fill: 'Make room for 2h of deep work on Thursday' },
+  { label: 'Protect my mornings', fill: 'Block 90 minutes for focused work every weekday morning' },
+  { label: 'Three review slots', fill: 'Find three 45-minute review slots this week' },
 ];
+
+const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function fmtSlot(startISO: string, endISO: string) {
+  const d = new Date(startISO);
+  return `${DOW[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]} · ${startISO.slice(
+    11,
+    16,
+  )}–${endISO.slice(11, 16)}`;
+}
 
 type Phase = 'idle' | 'analysing' | 'result';
 
-/** Find time — right drawer ≥1024px, bottom sheet below (spec §2.13). The
- *  propose→apply is mocked behind `applyFindTime()` (HANDOFF.md C3 scope note;
- *  included here so the toolbar's primary CTA is not a dead end). */
+/** Find time — right drawer ≥1024px, bottom sheet below (spec §2.13). Calls
+ *  POST /api/ai/find-time (Claude parse + deterministic placer), renders the
+ *  proposed blocks, and creates them via `applyProposals` on Add. */
 export function AiPanel({
   prefill,
   onClose,
@@ -27,7 +41,7 @@ export function AiPanel({
 }: {
   prefill?: string;
   onClose: () => void;
-  onApplied: () => void;
+  onApplied: (firstISO?: string, count?: number) => void;
   toast: (m: string) => void;
 }) {
   const { theme } = useCalTheme();
@@ -35,23 +49,34 @@ export function AiPanel({
   // `prefill` only changes via a fresh mount (parent passes key={prefill}).
   const [text, setText] = useState(prefill ?? '');
   const [phase, setPhase] = useState<Phase>('idle');
+  const [result, setResult] = useState<FindTimeResponse | null>(null);
   const [listening, setListening] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(
-    () => () => {
-      if (timer.current != null) clearTimeout(timer.current);
-    },
-    [],
-  );
-
-  function run() {
+  async function run() {
+    if (phase === 'analysing') return;
     if (!text.trim()) {
       toast('Tell Find time what to make room for');
       return;
     }
     setPhase('analysing');
-    timer.current = setTimeout(() => setPhase('result'), 1300);
+    try {
+      const res = await fetch(`${BASE}/api/ai/find-time`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ prompt: text.trim() }),
+      });
+      const data = (await res.json().catch(() => ({}))) as FindTimeResponse & { error?: string };
+      if (!res.ok) {
+        toast(data.error ?? 'Find time hit a snag. Try again.');
+        setPhase('idle');
+        return;
+      }
+      setResult(data);
+      setPhase('result');
+    } catch {
+      toast('Could not reach Find time. Check your connection.');
+      setPhase('idle');
+    }
   }
 
   return (
@@ -154,54 +179,74 @@ export function AiPanel({
               </View>
             )}
 
-            {phase === 'result' && (
+            {phase === 'result' && result && (
               <View style={styles.result}>
                 <View style={styles.resultHead}>
                   <View style={styles.eyebrowRow}>
                     <Icon name="stars" size={18} color={C.lime} />
-                    <Txt style={styles.resultHeadTxt}>Time found</Txt>
+                    <Txt style={styles.resultHeadTxt}>
+                      {result.proposals.length ? 'Time found' : 'No slot'}
+                    </Txt>
                   </View>
-                  <View style={styles.resultBadge}>
-                    <Txt style={styles.resultBadgeTxt}>3 changes · 0 conflicts</Txt>
-                  </View>
+                  {result.proposals.length > 0 && (
+                    <View style={styles.resultBadge}>
+                      <Txt style={styles.resultBadgeTxt}>
+                        {result.proposals.length} block{result.proposals.length > 1 ? 's' : ''} · 0 conflicts
+                      </Txt>
+                    </View>
+                  )}
                 </View>
                 <View style={{ padding: 16, gap: 8 }}>
-                  <View style={styles.addRow}>
-                    <View style={styles.addIcon}>
-                      <Icon name="add" size={16} color={C.surface} />
+                  {result.proposals.map((p, i) => (
+                    <View key={`${p.startISO}-${i}`} style={styles.addRow}>
+                      <View style={styles.addIcon}>
+                        <Icon name="add" size={16} color={C.surface} />
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Txt style={styles.moveTitle}>{p.title}</Txt>
+                        <Txt style={styles.addSub}>{fmtSlot(p.startISO, p.endISO)}</Txt>
+                      </View>
                     </View>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Txt style={styles.moveTitle}>Deep work · onboarding spec</Txt>
-                      <Txt style={styles.addSub}>New · Thu 10 Sep, 10:00–12:00 · protected</Txt>
-                    </View>
-                  </View>
-                  <MoveRow title="Stakeholder review" from="Thu 10:00" to="Mon 16:00" tone="#ffd600" />
-                  <MoveRow title="Draft launch checklist" from="Thu 13:00" to="Fri 09:30" tone="#ff7040" />
-                  <Txt style={styles.rationale}>
-                    Your Wednesday focus block and Thursday&apos;s usability test were left untouched. Both moved items are
-                    flexible and have no attendees outside the team.
-                  </Txt>
+                  ))}
+                  <Txt style={styles.rationale}>{result.rationale}</Txt>
                 </View>
                 <View style={styles.resultBtns}>
-                  <Press
-                    onPress={() => {
-                      applyFindTime();
-                      onApplied();
-                      onClose();
-                    }}
-                    hoverBg={C.limeHover}
-                    style={styles.applyBtn}>
-                    <Txt style={styles.applyTxt}>Apply 3 changes</Txt>
-                  </Press>
-                  <Press
-                    onPress={() => {
-                      setPhase('idle');
-                      toast('Suggestion dismissed');
-                    }}
-                    hoverBg={w(0.1)}
-                    style={styles.dismissBtn}>
-                    <Txt style={styles.dismissTxt}>Dismiss</Txt>
-                  </Press>
+                  {result.proposals.length > 0 ? (
+                    <>
+                      <Press
+                        onPress={() => {
+                          const n = applyProposals(result.proposals);
+                          onApplied(result.proposals[0]?.startISO, n);
+                          onClose();
+                        }}
+                        hoverBg={C.limeHover}
+                        style={styles.applyBtn}>
+                        <Txt style={styles.applyTxt}>
+                          Add {result.proposals.length} block{result.proposals.length > 1 ? 's' : ''}
+                        </Txt>
+                      </Press>
+                      <Press
+                        onPress={() => {
+                          setPhase('idle');
+                          setResult(null);
+                          toast('Suggestion dismissed');
+                        }}
+                        hoverBg={w(0.1)}
+                        style={styles.dismissBtn}>
+                        <Txt style={styles.dismissTxt}>Dismiss</Txt>
+                      </Press>
+                    </>
+                  ) : (
+                    <Press
+                      onPress={() => {
+                        setPhase('idle');
+                        setResult(null);
+                      }}
+                      hoverBg={w(0.1)}
+                      style={styles.dismissBtn}>
+                      <Txt style={styles.dismissTxt}>Try again</Txt>
+                    </Press>
+                  )}
                 </View>
               </View>
             )}
@@ -209,25 +254,6 @@ export function AiPanel({
         </Pressable>
       </Pressable>
     </Modal>
-  );
-}
-
-function MoveRow({ title, from, to, tone }: { title: string; from: string; to: string; tone: string }) {
-  return (
-    <View style={styles.moveRow}>
-      <View style={[styles.moveIcon, { backgroundColor: rgba(tone, 0.18) }]}>
-        <Icon name="transfer" size={16} color={tone} />
-      </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Txt style={styles.moveTitle}>{title}</Txt>
-        <View style={styles.moveMeta}>
-          <Txt style={styles.moveFrom}>{from}</Txt>
-          {/* calendar.html moveRow() uses the plain arrow, not the nav chevron */}
-          <Icon name="arrow-forward" size={13} color={w(0.4)} />
-          <Txt style={styles.moveTo}>{to}</Txt>
-        </View>
-      </View>
-    </View>
   );
 }
 
@@ -287,12 +313,7 @@ const styles = StyleSheet.create({
   addRow: { flexDirection: 'row', gap: 12, borderRadius: R.xl, borderWidth: 1, borderColor: 'rgba(204,255,0,0.4)', backgroundColor: 'rgba(204,255,0,0.1)', padding: 12 },
   addIcon: { height: 28, width: 28, borderRadius: R.lg, backgroundColor: C.lime, alignItems: 'center', justifyContent: 'center' },
   addSub: { marginTop: 4, color: C.lime, fontSize: 12 },
-  moveRow: { flexDirection: 'row', gap: 12, borderRadius: R.xl, borderWidth: 1, borderColor: w(0.1), backgroundColor: w(0.05), padding: 12 },
-  moveIcon: { height: 28, width: 28, borderRadius: R.lg, alignItems: 'center', justifyContent: 'center' },
   moveTitle: { color: '#fff', fontSize: 12 },
-  moveMeta: { marginTop: 4, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  moveFrom: { color: w(0.4), fontSize: 12, textDecorationLine: 'line-through' },
-  moveTo: { color: C.lime, fontSize: 12 },
   rationale: { paddingTop: 4, color: w(0.5), fontSize: 12, lineHeight: 18 },
   resultBtns: { flexDirection: 'row', gap: 8, borderTopWidth: 1, borderTopColor: 'rgba(204,255,0,0.2)', padding: 16 },
   applyBtn: { flex: 1, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: R.lg, backgroundColor: C.lime },

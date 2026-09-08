@@ -1,5 +1,7 @@
+import { type Href, Redirect } from 'expo-router';
 import { View } from 'react-native';
 
+import { useAccounts } from '@/calendar/account-store';
 import { CalendarScreen } from '@/calendar/CalendarScreen';
 import { useMounted } from '@/design/useMounted';
 
@@ -14,9 +16,16 @@ import { useMounted } from '@/design/useMounted';
  * with nothing for a crawler to read — so it renders a plain coloured box on the
  * server and mounts for real on the client. The landing page, which is the one
  * surface that actually needs SSR'd markup, is not gated.
+ *
+ * Also gated on a session: the account store fetches `/api/calendar/accounts`
+ * (which reports `signedIn`) on load; no session → redirect to `/login`.
  */
 export default function CalendarRoute() {
   const mounted = useMounted();
-  if (!mounted) return <View style={{ flex: 1, backgroundColor: '#2047e6' }} />;
+  const { loading, signedIn } = useAccounts();
+  if (!mounted || loading) return <View style={{ flex: 1, backgroundColor: '#2047e6' }} />;
+  // '/login' is a valid route; cast covers the stale typed-routes cache before
+  // the next `expo export` regenerates .expo/types.
+  if (!signedIn) return <Redirect href={'/login' as Href} />;
   return <CalendarScreen />;
 }

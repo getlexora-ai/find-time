@@ -78,7 +78,7 @@ export function connect(): void {
 
 export async function signOut(): Promise<void> {
   try {
-    await fetch(`${BASE}/api/auth/google/logout`, { method: 'POST' });
+    await fetch(`${BASE}/api/auth/logout`, { method: 'POST' });
   } catch {
     /* ignore */
   }

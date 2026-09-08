@@ -44,6 +44,7 @@ create table if not exists users (
   timezone                text not null default 'Europe/Berlin',
   locale                  text not null default 'en',
   clock_12h               boolean not null default false,
+  password_hash           text,                      -- null for Google-only users (db/011)
   onboarding_completed_at timestamptz,
   created_at              timestamptz not null default now(),
   updated_at              timestamptz not null default now()

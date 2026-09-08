@@ -8,6 +8,8 @@ import '../global.css';
  *
  *   `index` → the marketing landing page on web (`index.web.tsx`), and a bare
  *             redirect to `/app` on native (`index.tsx`).
+ *   `login` → email/password + Google sign in. `/app` redirects here when there
+ *             is no session.
  *   `app`   → the calendar, which owns its own providers in `app/_layout.tsx`.
  *
  * The calendar's `CalendarThemeProvider` / `ToastProvider` deliberately do *not*
@@ -19,6 +21,7 @@ export default function RootLayout() {
     <>
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#2047e6' } }}>
         <Stack.Screen name="index" />
+        <Stack.Screen name="login" />
         <Stack.Screen name="app" />
       </Stack>
       <StatusBar style="light" />

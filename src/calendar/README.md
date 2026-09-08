@@ -97,6 +97,8 @@ fixture are ported exactly so the board mockups line up.
 
 ## Not built (C3, only if asked — HANDOFF.md §6)
 
-Drag-to-create on the week grid. `AiPanel` ships the mocked propose→apply
-(`applyFindTime()` in `cal-store.ts`) so the primary CTA isn't a dead end, but the
-pan-to-draw ghost is not implemented.
+Drag-to-create on the week grid (pan-to-draw ghost) is not implemented.
+
+`AiPanel` is wired to the real `POST /api/ai/find-time` (Claude parse +
+deterministic placer); Apply creates the proposed blocks via `applyProposals()`
+in `cal-store.ts`. See `HANDOFF-mvp.md`.

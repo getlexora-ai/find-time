@@ -271,14 +271,13 @@ export function CalendarScreen() {
           key={ai.prefill ?? 'blank'}
           prefill={ai.prefill}
           onClose={() => setAi(null)}
-          onApplied={() => {
-            setState((s) => ({
-              ...s,
-              view: 'week',
-              cursor: new Date(2026, 8, 10),
-              selected: new Date(2026, 8, 10),
-            }));
-            toast('3 changes applied · 0 conflicts');
+          onApplied={(firstISO, count) => {
+            if (firstISO) {
+              const d = new Date(firstISO);
+              const day = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+              setState((s) => ({ ...s, view: 'week', cursor: day, selected: day }));
+            }
+            toast(count ? `${count} block${count > 1 ? 's' : ''} added to your calendar` : 'Nothing to add');
           }}
           toast={toast}
         />
