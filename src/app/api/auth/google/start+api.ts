@@ -1,15 +1,24 @@
-import { randomUUID } from 'node:crypto';
-
+import { requireUserId, unauthorized } from '@/server/auth/clerk';
+import { makeOAuthState } from '@/server/auth/session';
 import { authUrl, oauthConfigured } from '@/server/google/oauth';
-import { stateSetCookie } from '@/server/auth/session';
+import { enforceRateLimit } from '@/server/rate-limit';
 
 /**
- * GET /api/auth/google/start — kick off "Sign in with Google".
+ * POST /api/auth/google/start — begin a Google Calendar connect for the
+ * signed-in Clerk user.
  *
- * Sets a short-lived `ft_oauth_state` cookie (CSRF) and 302s to Google's consent
- * screen. The browser comes back to /api/auth/google/callback.
+ * Google no longer logs anyone in; this only grants `calendar.readonly`. Returns
+ * `{ url }` for the client to redirect to, and sets a short-lived
+ * `ft_oauth_state` nonce cookie. The signed `state` carries the Clerk user id so
+ * the callback knows who owns the new connection.
  */
-export async function GET(request: Request): Promise<Response> {
+export async function POST(request: Request): Promise<Response> {
+  const userId = await requireUserId(request);
+  if (!userId) return unauthorized();
+
+  const limited = await enforceRateLimit(request, 'google-connect', { kind: 'user', userId });
+  if (limited) return limited;
+
   if (!oauthConfigured()) {
     return Response.json(
       { error: 'Google OAuth is not configured (GOOGLE_CLIENT_ID / _SECRET / _REDIRECT_URI).' },
@@ -17,8 +26,8 @@ export async function GET(request: Request): Promise<Response> {
     );
   }
 
-  const state = randomUUID();
-  const headers = new Headers({ Location: authUrl(state) });
-  headers.append('Set-Cookie', stateSetCookie(request, state));
-  return new Response(null, { status: 302, headers });
+  const { state, cookie } = makeOAuthState(request, userId);
+  const headers = new Headers({ 'Content-Type': 'application/json' });
+  headers.append('Set-Cookie', cookie);
+  return new Response(JSON.stringify({ url: authUrl(state) }), { status: 200, headers });
 }

@@ -45,7 +45,13 @@ export function WaitlistForm({ source = 'waitlist_section' }: { source?: string 
       setMessage(res.status === 'already' ? WAITLIST.successAlready : WAITLIST.success);
     } else {
       setState('error');
-      setMessage(res.error === 'invalid_email' ? WAITLIST.errorInvalid : WAITLIST.errorServer);
+      setMessage(
+        res.error === 'invalid_email'
+          ? WAITLIST.errorInvalid
+          : res.error === 'rate_limited'
+            ? WAITLIST.errorRateLimited
+            : WAITLIST.errorServer,
+      );
     }
   };
 

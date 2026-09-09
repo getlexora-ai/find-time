@@ -1,13 +1,13 @@
 import { normalizeEmail, validateEmail, type WaitlistResponse } from '@/signup/waitlist';
+import { enforceRateLimit, requestIpHash } from '@/server/rate-limit';
 import { addToWaitlist } from '@/server/waitlist-store';
 
 /**
  * POST /api/waitlist — email capture for the landing page.
  *
  * Runs server-side (expo-router API route, needs `web.output: "server"` — already
- * set). No auth, no CORS block (same-origin web form). Body cap + honeypot are the
- * only spam defences for now; rate-limiting and a confirmation email come with the
- * host/vendor decisions (plan §6, §10 Q1/Q8).
+ * set). No auth, no CORS block (same-origin web form). Defences: 4 KB body cap,
+ * honeypot field, and a per-IP fixed-window rate limit (src/server/rate-limit.ts).
  */
 export async function POST(req: Request): Promise<Response> {
   let body: { email?: unknown; company?: unknown; source?: unknown };
@@ -24,14 +24,18 @@ export async function POST(req: Request): Promise<Response> {
     return json({ ok: true, status: 'added' }, 200);
   }
 
+  const limited = await enforceRateLimit(req, 'waitlist', { kind: 'ip' });
+  if (limited) return limited;
+
   if (typeof body.email !== 'string' || !validateEmail(body.email)) {
     return json({ ok: false, error: 'invalid_email' }, 400);
   }
 
   try {
-    const status = addToWaitlist(
+    const status = await addToWaitlist(
       normalizeEmail(body.email),
       typeof body.source === 'string' ? body.source.slice(0, 40) : undefined,
+      requestIpHash(req),
     );
     return json({ ok: true, status }, 201);
   } catch {

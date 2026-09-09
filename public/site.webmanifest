@@ -1,0 +1,12 @@
+{
+  "name": "Find Time",
+  "short_name": "Find Time",
+  "description": "Organize your day in seconds, prioritize what matters, and find time for anything with AI-assisted planning.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#2047e6",
+  "theme_color": "#2047e6",
+  "icons": [
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}

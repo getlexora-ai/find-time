@@ -47,6 +47,7 @@ export async function joinWaitlist(body: WaitlistRequest): Promise<WaitlistRespo
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
+    if (res.status === 429) return { ok: false, error: 'rate_limited' };
     const data = (await res.json()) as WaitlistResponse;
     return data;
   } catch {

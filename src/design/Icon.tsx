@@ -36,5 +36,19 @@ function xmlFor(name: IconName, size: number) {
 }
 
 export function Icon({ name, size = 16, color = 'currentColor' }: Props) {
-  return <SvgXml xml={xmlFor(name, size)} width={size} height={size} color={color} />;
+  // Every glyph in this app is decorative: the accessible name comes from the
+  // adjacent <Txt> or the wrapping <Press aria-label>, never the icon itself.
+  // Hide it from the a11y tree so screen readers don't announce "image".
+  return (
+    <SvgXml
+      xml={xmlFor(name, size)}
+      width={size}
+      height={size}
+      color={color}
+      aria-hidden
+      focusable={false}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    />
+  );
 }

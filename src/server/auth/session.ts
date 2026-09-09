@@ -1,32 +1,31 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 
-/** Constant-time string compare (kept local so this module has no local runtime deps). */
+/**
+ * Google OAuth CSRF state. Clerk owns real sessions now (src/server/auth/clerk.ts);
+ * all that survives here is the short-lived `state` for the calendar-connect
+ * redirect, which the browser cannot carry an Authorization header through.
+ *
+ * The `state` value is `<clerkUserId>.<nonce>.<sig>`, with the matching bare
+ * `<nonce>` set as an httpOnly cookie. The callback checks the signature and
+ * that the nonce round-tripped, then trusts `<clerkUserId>` as the account owner.
+ *
+ * Server-only.
+ */
+
+export const OAUTH_STATE_COOKIE = 'ft_oauth_state';
+
+const TEN_MIN = 60 * 10;
+
+/** Constant-time string compare. */
 function safeEqual(a: string, b: string): boolean {
   const ab = Buffer.from(a);
   const bb = Buffer.from(b);
   return ab.length === bb.length && timingSafeEqual(ab, bb);
 }
 
-/**
- * Session = an httpOnly cookie whose value IS the user id, signed with
- * `SESSION_SECRET` (HMAC-SHA256). This is the model `docs/db/data-layer.md`
- * already specifies ("`ft_session` is an httpOnly cookie whose value is the user
- * id"). "Sign in with Google" sets it; `currentUserId` reads it and falls back
- * to the demo user so the logged-out calendar keeps working on seed data.
- *
- * Server-only.
- */
-
-export const SESSION_COOKIE = 'ft_session';
-export const OAUTH_STATE_COOKIE = 'ft_oauth_state';
-export const DEMO_USER_ID = 'u1';
-
-const YEAR = 60 * 60 * 24 * 365;
-const TEN_MIN = 60 * 10;
-
 function secret(): string {
   const s = process.env.SESSION_SECRET;
-  if (!s) throw new Error('SESSION_SECRET is not set — cannot sign sessions.');
+  if (!s) throw new Error('SESSION_SECRET is not set — cannot sign the OAuth state.');
   return s;
 }
 
@@ -47,54 +46,47 @@ export function parseCookies(req: Request): Record<string, string> {
   return out;
 }
 
-/** The signed-in user id, or the demo user when there is no valid session. */
-export function currentUserId(req: Request): string {
-  const raw = parseCookies(req)[SESSION_COOKIE];
-  if (!raw) return DEMO_USER_ID;
-  const dot = raw.lastIndexOf('.');
-  if (dot === -1) return DEMO_USER_ID;
-  const value = raw.slice(0, dot);
-  const sig = raw.slice(dot + 1);
-  try {
-    return value && safeEqual(sig, sign(value)) ? value : DEMO_USER_ID;
-  } catch {
-    return DEMO_USER_ID;
-  }
-}
-
-export function isSignedIn(req: Request): boolean {
-  return currentUserId(req) !== DEMO_USER_ID;
-}
-
 function attrs(maxAge: number, secure: boolean): string {
-  return [
-    'Path=/',
-    'HttpOnly',
-    'SameSite=Lax',
-    `Max-Age=${maxAge}`,
-    secure ? 'Secure' : '',
-  ]
+  return ['Path=/', 'HttpOnly', 'SameSite=Lax', `Max-Age=${maxAge}`, secure ? 'Secure' : '']
     .filter(Boolean)
     .join('; ');
 }
 
-/** True unless the request is plain-http localhost (dev). */
+/**
+ * Only mark cookies `Secure` on a genuine https request. `x-forwarded-proto`
+ * covers a prod proxy (Railway); the URL protocol covers a direct request.
+ */
 function wantsSecure(req: Request): boolean {
-  const url = new URL(req.url);
-  return url.protocol === 'https:' || (url.hostname !== 'localhost' && url.hostname !== '127.0.0.1');
+  const fwd = req.headers.get('x-forwarded-proto');
+  const proto = fwd ? fwd.split(',')[0].trim() : new URL(req.url).protocol.replace(':', '');
+  return proto === 'https';
 }
 
-export function sessionSetCookie(req: Request, userId: string): string {
-  const value = `${userId}.${sign(userId)}`;
-  return `${SESSION_COOKIE}=${encodeURIComponent(value)}; ${attrs(YEAR, wantsSecure(req))}`;
+/** Build the `state` param + its cookie for a connect started by `userId`. */
+export function makeOAuthState(req: Request, userId: string): { state: string; cookie: string } {
+  const nonce = randomUUID();
+  const payload = `${userId}.${nonce}`;
+  return {
+    state: `${payload}.${sign(payload)}`,
+    cookie: `${OAUTH_STATE_COOKIE}=${encodeURIComponent(nonce)}; ${attrs(TEN_MIN, wantsSecure(req))}`,
+  };
 }
 
-export function sessionClearCookie(req: Request): string {
-  return `${SESSION_COOKIE}=; ${attrs(0, wantsSecure(req))}`;
-}
-
-export function stateSetCookie(req: Request, state: string): string {
-  return `${OAUTH_STATE_COOKIE}=${encodeURIComponent(state)}; ${attrs(TEN_MIN, wantsSecure(req))}`;
+/** Verify a returned `state` against its cookie. Returns the owner id or null. */
+export function readOAuthState(req: Request, state: string | null): string | null {
+  if (!state) return null;
+  const parts = state.split('.');
+  if (parts.length !== 3) return null;
+  const [userId, nonce, sig] = parts;
+  const cookieNonce = parseCookies(req)[OAUTH_STATE_COOKIE];
+  if (!userId || !nonce || !cookieNonce) return null;
+  try {
+    if (!safeEqual(sig, sign(`${userId}.${nonce}`))) return null;
+    if (!safeEqual(nonce, cookieNonce)) return null;
+    return userId;
+  } catch {
+    return null;
+  }
 }
 
 export function stateClearCookie(req: Request): string {

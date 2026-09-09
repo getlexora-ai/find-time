@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /$
+Allow: /privacy
+Allow: /terms
+Disallow: /app
+Disallow: /login
+Disallow: /api/
+
+Sitemap: https://findtime.ai/sitemap.xml

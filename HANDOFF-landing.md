@@ -189,3 +189,35 @@ grid and footer: eyebrow, `JOIN THE WAITLIST`, one email field + `REQUEST ACCESS
   use of the same prop form; harmless, not migrated to `style.pointerEvents` /
   `boxShadow` this pass.
 - M2+ blocked on the 14 questions in the plan (§10).
+
+## 8. German-learning walkthrough (added after M1, at the user's request)
+
+**Not in landing.html** — a sanctioned deviation. The user asked for the mock
+dashboard to demonstrate the product: a user asks AI to plan German learning and
+the sessions land on the calendar.
+
+| File | What |
+|---|---|
+| `src/landing/useDemoSequence.ts` | Owns the timeline. Snapshot is `REWOUND` at rest (SSR + first client render); `onEnterViewport` — wired to the hero `onLayout` — plays it forward once to `DONE` and stops. `started` ref guards re-entry. |
+| `src/landing/copy.ts` | `SCHEDULE[0]` re-themed `Spanish practice` → `German practice`. New `SCHEDULE_AI` (2 lime rows: Vocabulary drill 14:15, Speaking practice 16:00). New `AiResponseState` type + `DEMO` (`prompt`, `aiRows`). `PHONE.askValue` / `responseBody` / `answeredBody` / `changes` re-themed to the German flow. |
+| `src/landing/components/MockPlannerCard.tsx` | New `aiPlaced?: number` prop (default = all rows). Renders `SCHEDULE_AI.slice(0, aiPlaced)`; each `AiScheduleRow` fades + slides in on mount. |
+| `src/landing/components/MockPhoneCard.tsx` | New optional `demo` prop. When present the card is driven — prompt value + response state come from the sequence, the input is `editable={false}`, the send button pulses on `sendPulse`. Manual ask path is kept for when `demo` is absent. Added a `placeholder` on the ask input so the no-JS frame still shows the request. |
+| `src/landing/LandingScreen.tsx` | `useDemoSequence()`; hero `onLayout` merged (`onHeroLayout`); `aiPlaced` + `demo` passed to the two cards. |
+
+**Beats** (~5.3s): type the request (~42ms/char) → send pulse → `thinking`
+(1.2s) → `answered` → row 1 slides in → row 2 slides in → rest.
+
+**Reduced motion**: `onEnterViewport` snaps straight to `DONE`, no timers, no
+row animation. The reduced→finished jump happens in the layout callback (post
+-hydration), not in render, so SSR and first client render stay identical.
+
+**Trigger**: `onLayout`, not an IntersectionObserver — for an above-the-fold
+hero it fires ~immediately. `ponytail:` note in the hook; swap in an IO on the
+hero ref if it must wait for a real scroll.
+
+**Verified**: `tsc --noEmit` · `expo lint` green. `npx expo export --platform
+web` green — `/` SSR still 87 KB, contains `German practice` / `Deep work` /
+`Admin batch`, and correctly omits the two `German · …` rows (client-only).
+
+**Not done**: not eyeballed in a browser this pass; no breakpoint sweep of the
+taller schedule column against the widgets; no replay control (plays once).

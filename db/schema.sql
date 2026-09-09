@@ -33,24 +33,24 @@ $$ language plpgsql;
 
 
 -- ── users ───────────────────────────────────────────────────────────────────
--- Identity only. Connected mailboxes/calendars are a SEPARATE system
--- (connected_accounts) — PLAN.md §3.1: conflating them means adding account #2
--- overwrites the session.
+-- Identity only, and a thin mirror of Clerk (db/012): `id` is the Clerk user id
+-- (`user_...`), `email` / `name` are backfilled lazily on first authed request.
+-- Connected mailboxes/calendars are a SEPARATE system (connected_accounts).
 create table if not exists users (
-  id                      text primary key,          -- "u1" for the demo user
+  id                      text primary key,          -- Clerk user id ("user_...")
   email                   text not null,
   name                    text not null default '',
   avatar_color            text not null default 'lime',
   timezone                text not null default 'Europe/Berlin',
   locale                  text not null default 'en',
   clock_12h               boolean not null default false,
-  password_hash           text,                      -- null for Google-only users (db/011)
   onboarding_completed_at timestamptz,
   created_at              timestamptz not null default now(),
   updated_at              timestamptz not null default now()
 );
 
-create unique index if not exists users_email_idx on users (lower(email));
+-- Non-unique: Clerk owns email uniqueness; the lazy upsert must not fail on a clash.
+create index if not exists users_email_idx on users (lower(email));
 
 drop trigger if exists users_updated_at on users;
 create trigger users_updated_at before update on users
@@ -829,3 +829,24 @@ exception when duplicate_object then null; end $$;
 --   psql "$DATABASE_URL_UNPOOLED" -v ON_ERROR_STOP=1 -f db/007_expo_calendar_compat.sql
 
 alter table calendar_events add column if not exists project_label text;
+-- find_time — 001 waitlist: landing-page email capture (db/001_waitlist.sql).
+-- Folded in here so a fresh DB gets it; the standalone file still applies too.
+-- Requires PostgreSQL 13+ (gen_random_uuid) and the citext extension.
+
+create extension if not exists citext;
+
+create table if not exists waitlist (
+  id            uuid primary key default gen_random_uuid(),
+  email         citext not null unique,
+  status        text not null default 'pending'
+                check (status in ('pending', 'confirmed', 'unsubscribed', 'bounced')),
+  confirm_token uuid default gen_random_uuid(),
+  confirmed_at  timestamptz,
+  source        text,           -- 'waitlist_section' | 'hero' | 'header' | ...
+  ip_hash       text,           -- salted sha256; never a raw IP (src/server/rate-limit.ts)
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+create index if not exists waitlist_status_idx  on waitlist (status);
+create index if not exists waitlist_created_idx on waitlist (created_at desc);

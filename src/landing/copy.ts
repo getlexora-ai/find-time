@@ -75,7 +75,7 @@ export type ScheduleItem = {
 
 export const SCHEDULE: ScheduleItem[] = [
   {
-    title: 'Spanish practice',
+    title: 'German practice',
     meta: '08:00–08:35 · High energy',
     duration: '35M',
     icon: 'book',
@@ -109,6 +109,40 @@ export const SCHEDULE_AFTER_RECOVERY: ScheduleItem[] = [
   },
 ];
 
+/**
+ * The AI-placed German-study blocks the landing walkthrough animates into the
+ * planner (see `useDemoSequence`). Sanctioned deviation from landing.html — the
+ * user asked for a German-learning demo on the dashboard mock. See
+ * HANDOFF-landing.md.
+ */
+export const SCHEDULE_AI: ScheduleItem[] = [
+  {
+    title: 'German · Vocabulary drill',
+    meta: '14:15–14:45 · Spaced repetition',
+    duration: '30M',
+    icon: 'book',
+    tile: '#ccff00',
+    accent: true,
+  },
+  {
+    title: 'German · Speaking practice',
+    meta: '16:00–16:30 · Out loud, low stakes',
+    duration: '30M',
+    icon: 'chat',
+    tile: '#ccff00',
+    accent: true,
+  },
+];
+
+/** AI-response block state, shared by the phone mock and `useDemoSequence`. */
+export type AiResponseState = 'default' | 'thinking' | 'answered';
+
+/** The landing dashboard walkthrough (`useDemoSequence`). Not in landing.html. */
+export const DEMO = {
+  prompt: 'Plan my German learning this week',
+  aiRows: SCHEDULE_AI.length,
+} as const;
+
 export const PHONE = {
   statusTime: '9:41',
   eyebrow: 'AI PRIORITY ENGINE',
@@ -117,19 +151,19 @@ export const PHONE = {
   plannedLabel: '5H 50M PLANNED',
   freeLabel: '1H 40M FREE',
   askLabel: 'ASK FIND TIME',
-  askValue: 'Make room for 30 min of Spanish',
+  askValue: 'Plan my German learning this week',
   askAccessibilityLabel: 'Ask Find Time',
   submitLabel: 'Submit request',
   responseTitle: 'TIME FOUND',
   responseBody:
-    'I moved email review to your admin batch and reserved 08:00–08:35 for Spanish, when your energy is strongest.',
+    'I moved email review to your admin batch and kept 08:00–08:35 for German, when your energy is strongest.',
   /** The canned reply the mock "ask" flow swaps in (landing.html `askAI`). */
   thinkingTitle: 'ANALYZING CALENDAR',
   thinkingBody: 'Checking priorities, energy, and flexible blocks…',
   answeredTitle: 'TIME FOUND',
   answeredBody:
-    'I reserved 16:10–16:40 and moved two flexible tasks into your admin batch. Your focus blocks remain protected.',
-  changes: '4 CHANGES · 0 CONFLICTS',
+    'I added two German blocks — a vocabulary drill at 14:15 and speaking practice at 16:00 — spaced from your 08:00 session and clear of your focus time.',
+  changes: '2 CHANGES · 0 CONFLICTS',
   apply: 'APPLY PLAN',
   applied: 'APPLIED ✓',
 } as const;
@@ -224,8 +258,30 @@ export const WAITLIST = {
   successAlready: 'You’re already on the list — hang tight.',
   errorInvalid: 'That doesn’t look like an email address.',
   errorServer: 'Something went wrong. Try again in a moment.',
+  errorRateLimited: 'Too many attempts. Give it a few minutes and try again.',
+  /** shown under the form; the two link labels map to /privacy and /terms */
+  consent: 'By joining you accept our',
+  consentPrivacy: 'Privacy Policy',
+  consentAnd: 'and',
+  consentTerms: 'Terms',
   /** honeypot field label — visually hidden, never shown */
   honeypotLabel: 'Company (leave blank)',
+} as const;
+
+/**
+ * Cookie notice (issue #4). Notice-only while the site sets *only* strictly
+ * necessary cookies (Clerk auth). Turn `OPTIONAL_COOKIES` on in
+ * `components/CookieConsent.tsx` when analytics or any non-essential cookie
+ * lands, and this becomes an accept / decline choice.
+ */
+export const COOKIES = {
+  lead: 'Cookies.',
+  body:
+    'Find Time uses only cookies needed for the site to work — sign-in and security. ' +
+    'No tracking or advertising cookies. See the',
+  privacyLink: 'privacy policy',
+  dismiss: 'Got it',
+  dismissLabel: 'Dismiss cookie notice',
 } as const;
 
 /**

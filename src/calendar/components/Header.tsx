@@ -6,6 +6,7 @@ import { useCalTheme } from '../theme-context';
 import { C, R, w } from '../tokens';
 import { CHROME_BLUR, Press, Txt } from '../ui';
 import { useResponsive } from '../useResponsive';
+import { AccountButton } from './AccountButton';
 import { useToast } from './Toast';
 
 /** Sticky top bar. bg is the theme "chrome" colour (calendar.html `ft-chrome`). */
@@ -86,6 +87,9 @@ export function Header({
             <Txt style={styles.aiTxt}>Plan with AI</Txt>
           </Press>
         )}
+
+        {/* Desktop puts the account control in the sidebar; here it covers mobile. */}
+        {!isDesktop && <AccountButton />}
       </View>
     </View>
   );

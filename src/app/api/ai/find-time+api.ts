@@ -1,8 +1,9 @@
 import type { FindTimeProposal, FindTimeResponse } from '@/lib/api-types';
-import { currentUserId, DEMO_USER_ID } from '@/server/auth/session';
+import { requireUserId, unauthorized } from '@/server/auth/clerk';
 import { aiConfigured, extractWithTool } from '@/server/ai/anthropic';
 import { findFreeSlots } from '@/server/ai/find-time';
 import { isConfigured } from '@/server/db';
+import { enforceRateLimit } from '@/server/rate-limit';
 import { listEvents } from '@/server/events-repo';
 
 /**
@@ -86,10 +87,11 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: 'AI is not configured (ANTHROPIC_API_KEY missing).' }, { status: 503 });
   }
 
-  const userId = currentUserId(request);
-  if (userId === DEMO_USER_ID) {
-    return Response.json({ error: 'Sign in to use Find time.' }, { status: 401 });
-  }
+  const userId = await requireUserId(request);
+  if (!userId) return unauthorized();
+
+  const limited = await enforceRateLimit(request, 'ai-find-time', { kind: 'user', userId });
+  if (limited) return limited;
 
   let prompt = '';
   try {

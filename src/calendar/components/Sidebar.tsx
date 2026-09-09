@@ -3,7 +3,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { Icon, type IconName } from '../Icon';
 import { CATS, CAT_KEYS, C, R, w } from '../tokens';
 import type { CalEvent } from '../types';
-import { useAccounts, signOut } from '../account-store';
+import { AccountButton } from './AccountButton';
 import { GoogleCalendars } from './GoogleCalendars';
 import { MiniMonth } from './MiniMonth';
 import { useCalTheme } from '../theme-context';
@@ -28,7 +28,6 @@ export function Sidebar({
 }) {
   const { theme } = useCalTheme();
   const toast = useToast();
-  const { signedIn, user } = useAccounts();
 
   return (
     <View style={[styles.aside, { backgroundColor: theme.rail, borderRightColor: w(0.1) }]}>
@@ -97,36 +96,12 @@ export function Sidebar({
           <Txt style={styles.focusNote}>72% of this week&apos;s deep work is booked.</Txt>
         </View>
 
-        <Press
-          hoverBg={w(0.1)}
-          style={styles.user}
-          onPress={() => {
-            if (!signedIn) return;
-            toast('Signing out');
-            void signOut();
-          }}>
-          <View style={styles.avatar}>
-            <Txt style={styles.avatarTxt}>{initials(signedIn ? user?.name : 'Alex Morgan')}</Txt>
-          </View>
-          <View style={styles.userMeta}>
-            <Txt style={styles.userName} numberOfLines={1}>
-              {signedIn ? user?.name || user?.email || 'Signed in' : 'Alex Morgan'}
-            </Txt>
-            <Txt style={styles.userSub} numberOfLines={1}>
-              {signedIn ? 'Sign out' : 'Pro workspace'}
-            </Txt>
-          </View>
-          <Icon name={signedIn ? 'close' : 'dots'} size={signedIn ? 14 : 18} color={w(0.45)} />
-        </Press>
+        <View style={styles.user}>
+          <AccountButton showName />
+        </View>
       </ScrollView>
     </View>
   );
-}
-
-function initials(name: string | null | undefined): string {
-  const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '·';
-  return (parts[0][0] + (parts[1]?.[0] ?? '')).toUpperCase();
 }
 
 const styles = StyleSheet.create({
@@ -184,10 +159,5 @@ const styles = StyleSheet.create({
   bar: { height: 6, borderRadius: R.full, backgroundColor: w(0.1), overflow: 'hidden' },
   barFill: { height: '100%', width: '72%', borderRadius: R.full, backgroundColor: C.lime },
   focusNote: { marginTop: 12, color: w(0.4), fontSize: 12, lineHeight: 18 },
-  user: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: R.lg, paddingHorizontal: 8, paddingVertical: 8, marginTop: 16 },
-  avatar: { height: 32, width: 32, borderRadius: R.full, backgroundColor: '#c8c8ff', alignItems: 'center', justifyContent: 'center' },
-  avatarTxt: { color: C.surface, fontSize: 12, fontWeight: '500' },
-  userMeta: { flex: 1, minWidth: 0 },
-  userName: { color: '#fff', fontSize: 12 },
-  userSub: { color: w(0.4), fontSize: 12 },
+  user: { paddingHorizontal: 8, paddingVertical: 8, marginTop: 16 },
 });
