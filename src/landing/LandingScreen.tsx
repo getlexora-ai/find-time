@@ -1,20 +1,21 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { type LayoutChangeEvent, ScrollView, StyleSheet, View } from 'react-native';
+import { Link } from 'expo-router';
 
 import { Frame } from '@/calendar/components/Frame';
 import { Marquee } from '@/calendar/components/Marquee';
 import { ToastProvider } from '@/calendar/components/Toast';
 import { CalendarThemeProvider } from '@/calendar/theme-context';
 import { w } from '@/design/tokens';
-import { Press, Txt } from '@/design/ui';
+import { Txt } from '@/design/ui';
 import { useResponsive } from '@/design/useResponsive';
 
 import { FOOTER, MARQUEE, TELEMETRY } from './copy';
 import { RAMP } from './ramp';
 import { useAnchors } from './useAnchors';
 import { useDemoSequence } from './useDemoSequence';
+import { CookieConsent } from './components/CookieConsent';
 import { FeatureGrid } from './components/FeatureGrid';
-import { FloatingWidgets } from './components/FloatingWidgets';
 import { Hero } from './components/Hero';
 import { LandingHeader } from './components/LandingHeader';
 import { MockPhoneCard } from './components/MockPhoneCard';
@@ -30,7 +31,15 @@ import { WaitlistSection } from './components/WaitlistSection';
  * the German-learning walkthrough (`useDemoSequence`) that plays once when the
  * hero first lays out — the phone types the request and the planner grows the
  * AI-placed rows.
+ *
+ * `FloatingWidgets` (drag + Animated + PanResponder, purely decorative and
+ * off-screen on phone) is `React.lazy`'d so its chunk isn't in the `/` first
+ * load. Everything above the fold stays eager.
  */
+const FloatingWidgets = lazy(() =>
+  import('./components/FloatingWidgets').then((m) => ({ default: m.FloatingWidgets })),
+);
+
 export function LandingScreen() {
   return (
     <CalendarThemeProvider forceTheme="electric">
@@ -56,6 +65,9 @@ function Body() {
     register('features')(e);
     register('focus')(e);
   };
+  // The mock planner's "ADD TASK" looks actionable but is a preview — send the
+  // click to the one real CTA so nothing on the hero dead-ends (#9).
+  const toWaitlist = () => scrollTo('waitlist');
 
   return (
     <View style={styles.root}>
@@ -63,12 +75,12 @@ function Body() {
       <Marquee copy={MARQUEE} />
 
       <ScrollView ref={scrollRef} contentContainerStyle={[styles.content, { paddingHorizontal: pad }]}>
-        <LandingHeader onNav={scrollTo} onCta={() => scrollTo('waitlist')} />
+        <LandingHeader onNav={scrollTo} onCta={toWaitlist} />
 
         <View
           onLayout={onHeroLayout}
           style={[styles.hero, { minHeight: isDesktop ? 960 : 940, paddingTop: isDesktop ? 64 : 40 }]}>
-          <Hero onPrimary={() => scrollTo('waitlist')} onSecondary={() => scrollTo('planner')} />
+          <Hero onPrimary={toWaitlist} onSecondary={() => scrollTo('planner')} />
 
           {is2xl && (
             <View style={styles.telemetry} pointerEvents="none">
@@ -82,7 +94,7 @@ function Body() {
 
           <View style={[styles.cards, isDesktop ? styles.cardsDesktop : styles.cardsStacked]}>
             <View style={isDesktop ? { flex: 1.2 } : undefined}>
-              <MockPlannerCard onAddTask={noop} onRegenerate={() => setCapacity(72)} aiPlaced={demo.placed} />
+              <MockPlannerCard onAddTask={toWaitlist} onRegenerate={() => setCapacity(72)} aiPlaced={demo.placed} />
             </View>
             <View style={isDesktop ? styles.phoneSlot : undefined}>
               <MockPhoneCard
@@ -96,7 +108,9 @@ function Body() {
             </View>
           </View>
 
-          <FloatingWidgets />
+          <Suspense fallback={null}>
+            <FloatingWidgets />
+          </Suspense>
         </View>
 
         <View onLayout={onFeaturesLayout} style={styles.features}>
@@ -112,19 +126,19 @@ function Body() {
           <Txt style={styles.footerTagline}>{FOOTER.tagline}</Txt>
           <View style={styles.footerLinks}>
             {FOOTER.links.map((l) => (
-              <Press key={l.href} onPress={noop} accessibilityRole="link">
-                <Txt style={styles.footerLink}>{l.label}</Txt>
-              </Press>
+              <Link key={l.href} href={l.href} style={styles.footerLink}>
+                {l.label}
+              </Link>
             ))}
           </View>
           <Txt style={styles.footerCopy}>{FOOTER.copyright}</Txt>
         </View>
       </ScrollView>
+
+      <CookieConsent />
     </View>
   );
 }
-
-const noop = () => {};
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
@@ -165,6 +179,11 @@ const styles = StyleSheet.create({
   footerBrand: { color: '#fff', fontSize: 14, fontWeight: '500', letterSpacing: -0.3 },
   footerTagline: { color: RAMP.onBlueMuted, fontSize: 12, letterSpacing: 1 },
   footerLinks: { flexDirection: 'row', gap: 24, marginTop: 8 },
-  footerLink: { color: RAMP.onBlueMuted, fontSize: 12, letterSpacing: 1 },
+  footerLink: {
+    color: RAMP.onBlueMuted,
+    fontSize: 12,
+    letterSpacing: 1,
+    fontFamily: 'monospace',
+  },
   footerCopy: { color: RAMP.onBlueFaint, fontSize: 12, marginTop: 8 },
 });

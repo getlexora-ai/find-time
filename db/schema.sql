@@ -829,3 +829,24 @@ exception when duplicate_object then null; end $$;
 --   psql "$DATABASE_URL_UNPOOLED" -v ON_ERROR_STOP=1 -f db/007_expo_calendar_compat.sql
 
 alter table calendar_events add column if not exists project_label text;
+-- find_time — 001 waitlist: landing-page email capture (db/001_waitlist.sql).
+-- Folded in here so a fresh DB gets it; the standalone file still applies too.
+-- Requires PostgreSQL 13+ (gen_random_uuid) and the citext extension.
+
+create extension if not exists citext;
+
+create table if not exists waitlist (
+  id            uuid primary key default gen_random_uuid(),
+  email         citext not null unique,
+  status        text not null default 'pending'
+                check (status in ('pending', 'confirmed', 'unsubscribed', 'bounced')),
+  confirm_token uuid default gen_random_uuid(),
+  confirmed_at  timestamptz,
+  source        text,           -- 'waitlist_section' | 'hero' | 'header' | ...
+  ip_hash       text,           -- salted sha256; never a raw IP (src/server/rate-limit.ts)
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+create index if not exists waitlist_status_idx  on waitlist (status);
+create index if not exists waitlist_created_idx on waitlist (created_at desc);

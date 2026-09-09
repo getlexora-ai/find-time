@@ -1,15 +1,15 @@
 /**
  * Waitlist persistence.
  *
- * ponytail: in-memory Map, process-lifetime only. Entries are lost on restart and
- * not shared across server instances. This is enough to exercise the whole
- * flow (form → validate → honeypot → store → success/error UI) with no database,
- * exactly as plan §6.5 describes ("leave DATABASE_URL unset → in-memory driver").
+ * Neon-backed when DATABASE_URL is set (the running config everywhere else), with
+ * the original in-memory Map kept as the no-database fallback (plan §6.5). Branch
+ * on env — don't delete either path.
  *
- * Swap for real persistence when the host + DB are chosen (plan §10 Q1): replace
- * the three functions below with queries against `db/001_waitlist.sql`. Signatures
- * stay the same, so `+api.ts` doesn't change.
+ * Table: `db/001_waitlist.sql` (also folded into `db/schema.sql`). `+api.ts` only
+ * touches the three functions here; they're async now.
  */
+
+import { isConfigured, query } from '@/server/db';
 
 export type WaitlistEntry = {
   email: string;
@@ -17,20 +17,39 @@ export type WaitlistEntry = {
   createdAt: string;
 };
 
-const store = new Map<string, WaitlistEntry>();
+const memory = new Map<string, WaitlistEntry>();
 
 /** Returns 'added' for a new email, 'already' if it was seen before. */
-export function addToWaitlist(email: string, source?: string): 'added' | 'already' {
-  if (store.has(email)) return 'already';
-  store.set(email, { email, source, createdAt: new Date().toISOString() });
+export async function addToWaitlist(
+  email: string,
+  source?: string,
+  ipHash?: string,
+): Promise<'added' | 'already'> {
+  if (isConfigured()) {
+    // `email` is citext unique — the conflict target is the column itself.
+    const rows = await query(
+      `insert into waitlist (email, source, ip_hash) values ($1, $2, $3)
+       on conflict (email) do nothing
+       returning email`,
+      [email, source ?? null, ipHash ?? null],
+    );
+    return rows.length > 0 ? 'added' : 'already';
+  }
+
+  if (memory.has(email)) return 'already';
+  memory.set(email, { email, source, createdAt: new Date().toISOString() });
   return 'added';
 }
 
-export function waitlistCount(): number {
-  return store.size;
+export async function waitlistCount(): Promise<number> {
+  if (isConfigured()) {
+    const rows = await query<{ n: string }>('select count(*)::text as n from waitlist');
+    return Number(rows[0]?.n ?? 0);
+  }
+  return memory.size;
 }
 
-/** Test/debug only. */
+/** Test/debug only — clears the in-memory driver. */
 export function _resetWaitlist(): void {
-  store.clear();
+  memory.clear();
 }

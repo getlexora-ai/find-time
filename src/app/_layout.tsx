@@ -39,6 +39,8 @@ export default function RootLayout() {
         <Stack.Screen name="index" />
         <Stack.Screen name="login" />
         <Stack.Screen name="app" />
+        <Stack.Screen name="privacy" />
+        <Stack.Screen name="terms" />
       </Stack>
       <StatusBar style="light" />
     </ClerkProvider>

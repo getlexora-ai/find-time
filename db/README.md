@@ -8,6 +8,7 @@ Calendar-specific design: [../docs/db/calendar-schema.md](../docs/db/calendar-sc
 | File | Tables |
 |---|---|
 | `001_core.sql` | `users`, `scheduler_profiles`, `notification_prefs`, `constraints`, `connected_accounts`, `calendars` |
+| `001_waitlist.sql` | `waitlist` — landing-page email capture (also folded into `schema.sql`) |
 | `002_projects_tasks.sql` | `projects`, `tasks` |
 | `003_calendar_events.sql` | `calendar_events`, `calendar_event_reminders`, `reminder_dispatches`, `calendar_sync_state` |
 | `004_ai.sql` | `ai_sessions`, `ai_messages`, `plan_drafts`, `ai_suggestions` |
@@ -15,7 +16,8 @@ Calendar-specific design: [../docs/db/calendar-schema.md](../docs/db/calendar-sc
 | `006_cross_refs.sql` | circular FKs, added last |
 | `007_expo_calendar_compat.sql` | `calendar_events.project_label` (RN calendar carries `project` as free text) |
 | `010_oauth_tokens.sql` | `oauth_tokens` — AES-256-GCM-encrypted Google tokens (src/server/crypto.ts) |
-| `schema.sql` | **generated** — `001`–`007` concatenated; what a fresh DB gets. **Run `010` after it.** |
+| `013_rate_limits.sql` | `rate_limits`, `rate_limit_blocks` — public-API fixed-window limiter (src/server/rate-limit.ts) |
+| `schema.sql` | **generated** — `001`–`007` + `001_waitlist` concatenated; what a fresh DB gets. **Run `010` and `013` after it.** |
 
 Each file is idempotent (`create table if not exists`, `do $$ … exception when duplicate_object`), so re-running one is safe.
 
@@ -31,9 +33,10 @@ export DATABASE_URL_UNPOOLED='postgresql://...direct-host.neon.tech/find_time?ss
 # fresh database:
 psql "$DATABASE_URL_UNPOOLED" -v ON_ERROR_STOP=1 -f db/schema.sql
 psql "$DATABASE_URL_UNPOOLED" -v ON_ERROR_STOP=1 -f db/010_oauth_tokens.sql
+psql "$DATABASE_URL_UNPOOLED" -v ON_ERROR_STOP=1 -f db/013_rate_limits.sql
 
 # or file by file, in order:
-for f in db/00[1-7]_*.sql db/010_*.sql; do psql "$DATABASE_URL_UNPOOLED" -v ON_ERROR_STOP=1 -f "$f"; done
+for f in db/00[1-7]_*.sql db/010_*.sql db/013_*.sql; do psql "$DATABASE_URL_UNPOOLED" -v ON_ERROR_STOP=1 -f "$f"; done
 ```
 
 `NOTICE: … does not exist, skipping` on the first run is the `drop trigger if exists`

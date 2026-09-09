@@ -1,6 +1,7 @@
 import { useAuth } from '@clerk/clerk-expo';
 import { SignIn, SignUp } from '@clerk/clerk-expo/web';
 import { Redirect } from 'expo-router';
+import Head from 'expo-router/head';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -21,6 +22,10 @@ export default function LoginWeb() {
 
   return (
     <View style={styles.root}>
+      <Head>
+        <title>Sign in — Find Time</title>
+        <meta name="robots" content="noindex" />
+      </Head>
       <Txt style={styles.brand}>Find Time</Txt>
       {mode === 'sign-in' ? (
         <SignIn routing="virtual" forceRedirectUrl="/app" />

@@ -1,6 +1,7 @@
 import { requireUserId, unauthorized } from '@/server/auth/clerk';
 import { makeOAuthState } from '@/server/auth/session';
 import { authUrl, oauthConfigured } from '@/server/google/oauth';
+import { enforceRateLimit } from '@/server/rate-limit';
 
 /**
  * POST /api/auth/google/start — begin a Google Calendar connect for the
@@ -14,6 +15,9 @@ import { authUrl, oauthConfigured } from '@/server/google/oauth';
 export async function POST(request: Request): Promise<Response> {
   const userId = await requireUserId(request);
   if (!userId) return unauthorized();
+
+  const limited = await enforceRateLimit(request, 'google-connect', { kind: 'user', userId });
+  if (limited) return limited;
 
   if (!oauthConfigured()) {
     return Response.json(

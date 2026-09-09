@@ -1,4 +1,5 @@
 import { StyleSheet, View } from 'react-native';
+import { Link } from 'expo-router';
 
 import { C, R, rgba, w } from '@/design/tokens';
 import { Txt } from '@/design/ui';
@@ -28,6 +29,17 @@ export function WaitlistSection() {
       <View style={{ marginTop: 20, alignItems: 'flex-start' }}>
         <WaitlistForm source="waitlist_section" />
       </View>
+      <Txt style={styles.consent}>
+        {WAITLIST.consent}{' '}
+        <Link href="/privacy" style={styles.consentLink}>
+          {WAITLIST.consentPrivacy}
+        </Link>{' '}
+        {WAITLIST.consentAnd}{' '}
+        <Link href="/terms" style={styles.consentLink}>
+          {WAITLIST.consentTerms}
+        </Link>
+        .
+      </Txt>
     </View>
   );
 }
@@ -59,4 +71,6 @@ const styles = StyleSheet.create({
   eyebrowTxt: { color: C.lime, letterSpacing: 2, fontSize: 12 },
   title: { color: '#fff', fontSize: 24, lineHeight: 28, fontWeight: '500', letterSpacing: -0.5 },
   body: { marginTop: 12, maxWidth: 520, color: RAMP.onPanel, fontSize: 13, lineHeight: 21 },
+  consent: { marginTop: 14, color: w(0.5), fontSize: 11, lineHeight: 16 },
+  consentLink: { color: w(0.7), fontSize: 11, fontFamily: 'monospace' },
 });

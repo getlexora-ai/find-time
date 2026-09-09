@@ -258,8 +258,30 @@ export const WAITLIST = {
   successAlready: 'You’re already on the list — hang tight.',
   errorInvalid: 'That doesn’t look like an email address.',
   errorServer: 'Something went wrong. Try again in a moment.',
+  errorRateLimited: 'Too many attempts. Give it a few minutes and try again.',
+  /** shown under the form; the two link labels map to /privacy and /terms */
+  consent: 'By joining you accept our',
+  consentPrivacy: 'Privacy Policy',
+  consentAnd: 'and',
+  consentTerms: 'Terms',
   /** honeypot field label — visually hidden, never shown */
   honeypotLabel: 'Company (leave blank)',
+} as const;
+
+/**
+ * Cookie notice (issue #4). Notice-only while the site sets *only* strictly
+ * necessary cookies (Clerk auth). Turn `OPTIONAL_COOKIES` on in
+ * `components/CookieConsent.tsx` when analytics or any non-essential cookie
+ * lands, and this becomes an accept / decline choice.
+ */
+export const COOKIES = {
+  lead: 'Cookies.',
+  body:
+    'Find Time uses only cookies needed for the site to work — sign-in and security. ' +
+    'No tracking or advertising cookies. See the',
+  privacyLink: 'privacy policy',
+  dismiss: 'Got it',
+  dismissLabel: 'Dismiss cookie notice',
 } as const;
 
 /**
