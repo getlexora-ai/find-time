@@ -18,15 +18,18 @@ import {
  * Find Time do not push back (yet).
  */
 export function GoogleCalendars() {
-  const { loading, signedIn, accounts, syncing } = useAccounts();
+  const { loading, accounts, syncing } = useAccounts();
   const toast = useToast();
   const isWeb = Platform.OS === 'web';
+  // Key the connect CTA off "no Google account connected", not "no session" —
+  // an email/password user is `signedIn` but still has to connect Google here.
+  const connected = accounts.length > 0;
 
   return (
     <View style={styles.section}>
       <View style={styles.head}>
         <Txt style={styles.title}>Calendars</Txt>
-        {signedIn && (
+        {connected && (
           <Press
             hoverBg={w(0.1)}
             style={styles.iconBtn}
@@ -41,7 +44,7 @@ export function GoogleCalendars() {
 
       {loading ? (
         <Txt style={styles.muted}>Loading…</Txt>
-      ) : !signedIn ? (
+      ) : !connected ? (
         isWeb ? (
           <Press
             hoverBg={w(0.1)}

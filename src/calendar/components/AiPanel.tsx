@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import type { FindTimeResponse } from '@/lib/api-types';
+import { apiFetch } from '@/lib/api';
 
 import { applyProposals } from '../cal-store';
 import { Icon } from '../Icon';
@@ -9,8 +10,6 @@ import { useCalTheme } from '../theme-context';
 import { C, R, rgba, w } from '../tokens';
 import { MONO, Press, Txt } from '../ui';
 import { useResponsive } from '../useResponsive';
-
-const BASE = process.env.EXPO_PUBLIC_API_URL ?? '';
 
 const CHIPS = [
   { label: '2h deep work Thursday', fill: 'Make room for 2h of deep work on Thursday' },
@@ -60,7 +59,7 @@ export function AiPanel({
     }
     setPhase('analysing');
     try {
-      const res = await fetch(`${BASE}/api/ai/find-time`, {
+      const res = await apiFetch(`/api/ai/find-time`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ prompt: text.trim() }),

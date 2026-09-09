@@ -4,8 +4,8 @@ import { decrypt, encrypt } from '../crypto';
 /**
  * Google OAuth 2.0 (authorization-code flow) — no SDK, just `fetch`.
  *
- * The same flow does double duty: `openid email profile` establishes the app
- * login (`users` row + `ft_session`), `calendar.readonly` grants the pull sync.
+ * Calendar-connect only — Clerk owns login now. `calendar.readonly` grants the
+ * pull sync; the `openid email profile` scopes just name the connected account.
  * Tokens are stored AES-256-GCM-encrypted in `oauth_tokens` (db/010).
  *
  * Server-only — imported by the auth routes and src/server/google/sync.ts.

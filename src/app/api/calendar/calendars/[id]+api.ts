@@ -1,5 +1,5 @@
+import { requireUserId, unauthorized } from '@/server/auth/clerk';
 import { isConfigured } from '@/server/db';
-import { currentUserId, DEMO_USER_ID } from '@/server/auth/session';
 import { setCalendarReadEnabled } from '@/server/accounts-repo';
 
 /**
@@ -11,10 +11,8 @@ export async function PATCH(request: Request, { id }: Record<string, string>): P
   if (!isConfigured()) {
     return Response.json({ error: 'Database not configured.' }, { status: 503 });
   }
-  const userId = currentUserId(request);
-  if (userId === DEMO_USER_ID) {
-    return Response.json({ error: 'Not signed in.' }, { status: 401 });
-  }
+  const userId = await requireUserId(request);
+  if (!userId) return unauthorized();
   let readEnabled: unknown;
   try {
     ({ readEnabled } = (await request.json()) as { readEnabled?: unknown });

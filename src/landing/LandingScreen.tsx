@@ -12,6 +12,7 @@ import { useResponsive } from '@/design/useResponsive';
 import { FOOTER, MARQUEE, TELEMETRY } from './copy';
 import { RAMP } from './ramp';
 import { useAnchors } from './useAnchors';
+import { useDemoSequence } from './useDemoSequence';
 import { FeatureGrid } from './components/FeatureGrid';
 import { FloatingWidgets } from './components/FloatingWidgets';
 import { Hero } from './components/Hero';
@@ -25,7 +26,10 @@ import { WaitlistSection } from './components/WaitlistSection';
  * ground; `Frame` and `Marquee` sit outside the `ScrollView` as static siblings
  * (landing.html has them `position: fixed` — RN can't, and the visible delta is
  * nil since both hug an edge). The mock cards' interactions are self-contained
- * except capacity, which the planner's regenerate drops on the phone card.
+ * except capacity, which the planner's regenerate drops on the phone card, and
+ * the German-learning walkthrough (`useDemoSequence`) that plays once when the
+ * hero first lays out — the phone types the request and the planner grows the
+ * AI-placed rows.
  */
 export function LandingScreen() {
   return (
@@ -41,8 +45,13 @@ function Body() {
   const { width, isDesktop, is2xl } = useResponsive();
   const { scrollRef, register, scrollTo } = useAnchors();
   const [capacity, setCapacity] = useState(78);
+  const demo = useDemoSequence();
 
   const pad = width >= 640 ? 40 : 24;
+  const onHeroLayout = (e: LayoutChangeEvent) => {
+    register('planner')(e);
+    demo.onEnterViewport();
+  };
   const onFeaturesLayout = (e: LayoutChangeEvent) => {
     register('features')(e);
     register('focus')(e);
@@ -57,7 +66,7 @@ function Body() {
         <LandingHeader onNav={scrollTo} onCta={() => scrollTo('waitlist')} />
 
         <View
-          onLayout={register('planner')}
+          onLayout={onHeroLayout}
           style={[styles.hero, { minHeight: isDesktop ? 960 : 940, paddingTop: isDesktop ? 64 : 40 }]}>
           <Hero onPrimary={() => scrollTo('waitlist')} onSecondary={() => scrollTo('planner')} />
 
@@ -73,10 +82,17 @@ function Body() {
 
           <View style={[styles.cards, isDesktop ? styles.cardsDesktop : styles.cardsStacked]}>
             <View style={isDesktop ? { flex: 1.2 } : undefined}>
-              <MockPlannerCard onAddTask={noop} onRegenerate={() => setCapacity(72)} />
+              <MockPlannerCard onAddTask={noop} onRegenerate={() => setCapacity(72)} aiPlaced={demo.placed} />
             </View>
             <View style={isDesktop ? styles.phoneSlot : undefined}>
-              <MockPhoneCard capacity={capacity} />
+              <MockPhoneCard
+                capacity={capacity}
+                demo={{
+                  typedPrompt: demo.typedPrompt,
+                  responseState: demo.responseState,
+                  sendPulse: demo.sendPulse,
+                }}
+              />
             </View>
           </View>
 

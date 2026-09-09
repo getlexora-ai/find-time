@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
 
 import { useToast } from '@/calendar/components/Toast';
@@ -7,7 +7,7 @@ import { C, R, rgba, w } from '@/design/tokens';
 import { Press, Txt } from '@/design/ui';
 import { useReducedMotion } from '@/design/useReducedMotion';
 
-import { PLANNER, SCHEDULE, SCHEDULE_AFTER_RECOVERY, TOASTS, type ScheduleItem } from '../copy';
+import { PLANNER, SCHEDULE, SCHEDULE_AFTER_RECOVERY, SCHEDULE_AI, TOASTS, type ScheduleItem } from '../copy';
 import { RAMP } from '../ramp';
 
 /**
@@ -16,13 +16,19 @@ import { RAMP } from '../ramp';
  * buffer/add-task footer. `regenerate` and `ADD TASK` are the only live controls;
  * regenerate also drops the phone card's capacity via `onRegenerate` (landing.html
  * wires `#regenerate` to `#capacityBar`).
+ *
+ * `aiPlaced` (0..SCHEDULE_AI.length) is driven by `useDemoSequence`: as the
+ * landing walkthrough runs, the AI-placed German rows mount and slide in one by
+ * one. Defaults to all rows shown, so the card is complete without the demo.
  */
 export function MockPlannerCard({
   onAddTask,
   onRegenerate,
+  aiPlaced = SCHEDULE_AI.length,
 }: {
   onAddTask: () => void;
   onRegenerate: () => void;
+  aiPlaced?: number;
 }) {
   const toast = useToast();
   const reduced = useReducedMotion();
@@ -104,6 +110,10 @@ export function MockPlannerCard({
           {SCHEDULE_AFTER_RECOVERY.map((item) => (
             <ScheduleRow key={item.title} item={item} />
           ))}
+
+          {SCHEDULE_AI.slice(0, Math.max(0, aiPlaced)).map((item) => (
+            <AiScheduleRow key={item.title} item={item} reduced={reduced} />
+          ))}
         </View>
       </View>
 
@@ -146,6 +156,30 @@ function ScheduleRow({ item }: { item: ScheduleItem }) {
         <Txt style={{ fontSize: 12, color: accent ? C.lime : w(0.6) }}>{item.duration}</Txt>
       </View>
     </Press>
+  );
+}
+
+/** An AI-placed row that slides + fades in on mount (`useDemoSequence` mounts
+ *  these one at a time as the walkthrough runs). Reduced motion → straight in. */
+function AiScheduleRow({ item, reduced }: { item: ScheduleItem; reduced: boolean }) {
+  const [anim] = useState(() => new Animated.Value(reduced ? 1 : 0));
+  useEffect(() => {
+    if (reduced) return;
+    Animated.timing(anim, {
+      toValue: 1,
+      duration: 420,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [anim, reduced]);
+  return (
+    <Animated.View
+      style={{
+        opacity: anim,
+        transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }],
+      }}>
+      <ScheduleRow item={item} />
+    </Animated.View>
   );
 }
 

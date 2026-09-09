@@ -1,5 +1,5 @@
+import { requireUserId, unauthorized } from '@/server/auth/clerk';
 import { isConfigured } from '@/server/db';
-import { currentUserId } from '@/server/auth/session';
 import { deleteEvent, updateEvent, type EventInput } from '@/server/events-repo';
 
 function guard(): Response | null {
@@ -12,9 +12,11 @@ function guard(): Response | null {
 export async function PATCH(request: Request, { id }: Record<string, string>): Promise<Response> {
   const blocked = guard();
   if (blocked) return blocked;
+  const userId = await requireUserId(request);
+  if (!userId) return unauthorized();
   try {
     const patch = (await request.json()) as Partial<EventInput>;
-    const event = await updateEvent(currentUserId(request), id, patch);
+    const event = await updateEvent(userId, id, patch);
     if (!event) return Response.json({ error: 'Not found.' }, { status: 404 });
     return Response.json({ event });
   } catch (err) {
@@ -26,8 +28,10 @@ export async function PATCH(request: Request, { id }: Record<string, string>): P
 export async function DELETE(request: Request, { id }: Record<string, string>): Promise<Response> {
   const blocked = guard();
   if (blocked) return blocked;
+  const userId = await requireUserId(request);
+  if (!userId) return unauthorized();
   try {
-    const ok = await deleteEvent(currentUserId(request), id);
+    const ok = await deleteEvent(userId, id);
     if (!ok) return Response.json({ error: 'Not found.' }, { status: 404 });
     return Response.json({ ok: true });
   } catch (err) {

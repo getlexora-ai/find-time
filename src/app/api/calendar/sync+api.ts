@@ -1,5 +1,5 @@
+import { requireUserId, unauthorized } from '@/server/auth/clerk';
 import { isConfigured } from '@/server/db';
-import { currentUserId, DEMO_USER_ID } from '@/server/auth/session';
 import { listAccountsWithCalendars } from '@/server/accounts-repo';
 import { syncAccount } from '@/server/google/sync';
 
@@ -14,10 +14,8 @@ export async function POST(request: Request): Promise<Response> {
   if (!isConfigured()) {
     return Response.json({ error: 'Database not configured.' }, { status: 503 });
   }
-  const userId = currentUserId(request);
-  if (userId === DEMO_USER_ID) {
-    return Response.json({ error: 'Not signed in.' }, { status: 401 });
-  }
+  const userId = await requireUserId(request);
+  if (!userId) return unauthorized();
 
   const force = new URL(request.url).searchParams.get('force') === '1';
   const accounts = await listAccountsWithCalendars(userId);

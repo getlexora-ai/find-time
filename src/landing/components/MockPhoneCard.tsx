@@ -8,31 +8,39 @@ import { C, ink, LANDING, R } from '@/design/tokens';
 import { MONO, Press, Txt } from '@/design/ui';
 import { useReducedMotion } from '@/design/useReducedMotion';
 
-import { PHONE, TOASTS } from '../copy';
+import { type AiResponseState, PHONE, TOASTS } from '../copy';
 import { RAMP } from '../ramp';
 
-type ResponseState = 'default' | 'thinking' | 'answered';
-
-const RESPONSE_COPY: Record<ResponseState, { title: string; body: string }> = {
+const RESPONSE_COPY: Record<AiResponseState, { title: string; body: string }> = {
   default: { title: PHONE.responseTitle, body: PHONE.responseBody },
   thinking: { title: PHONE.thinkingTitle, body: PHONE.thinkingBody },
   answered: { title: PHONE.answeredTitle, body: PHONE.answeredBody },
 };
 
+/** When present, `useDemoSequence` drives the card: the prompt is typed in, the
+ *  response state is stepped, and the send button pulses on `sendPulse`. The
+ *  manual ask path is used only when this is absent. */
+type DemoDrive = { typedPrompt: string; responseState: AiResponseState; sendPulse: boolean };
+
 /**
  * The light `#f4f4f4` phone mock: status bar + notch, a decorative crosshair
  * overlay (landing.html's stacked CSS gradients, ported as one small SVG), the
  * capacity panel, the "ASK FIND TIME" input, the AI response block, and the
- * APPLY PLAN footer. `capacity` is driven by the planner card's regenerate.
+ * APPLY PLAN footer. `capacity` is driven by the planner card's regenerate;
+ * `demo` (optional) hands control to the landing walkthrough.
  */
-export function MockPhoneCard({ capacity }: { capacity: number }) {
+export function MockPhoneCard({ capacity, demo }: { capacity: number; demo?: DemoDrive }) {
   const toast = useToast();
   const reduced = useReducedMotion();
-  const [prompt, setPrompt] = useState<string>(PHONE.askValue);
-  const [response, setResponse] = useState<ResponseState>('default');
+  const [localPrompt, setLocalPrompt] = useState<string>(PHONE.askValue);
+  const [localResponse, setLocalResponse] = useState<AiResponseState>('default');
   const [applied, setApplied] = useState(false);
   const [barW] = useState(() => new Animated.Value(capacity));
+  const [sendPulse] = useState(() => new Animated.Value(0));
   const askTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const prompt = demo ? demo.typedPrompt : localPrompt;
+  const response = demo ? demo.responseState : localResponse;
 
   useEffect(() => {
     Animated.timing(barW, {
@@ -46,12 +54,22 @@ export function MockPhoneCard({ capacity }: { capacity: number }) {
     if (askTimer.current != null) clearTimeout(askTimer.current);
   }, []);
 
+  // walkthrough: pulse the send button as the typed request "submits".
+  useEffect(() => {
+    if (!demo?.sendPulse || reduced) return;
+    sendPulse.setValue(0);
+    Animated.sequence([
+      Animated.timing(sendPulse, { toValue: 1, duration: 110, useNativeDriver: true }),
+      Animated.timing(sendPulse, { toValue: 0, duration: 170, useNativeDriver: true }),
+    ]).start();
+  }, [demo?.sendPulse, reduced, sendPulse]);
+
   const ask = () => {
-    if (!prompt.trim()) return;
-    setResponse('thinking');
+    if (demo || !prompt.trim()) return;
+    setLocalResponse('thinking');
     if (askTimer.current != null) clearTimeout(askTimer.current);
     askTimer.current = setTimeout(() => {
-      setResponse('answered');
+      setLocalResponse('answered');
       toast(TOASTS.askAnswered);
     }, 1100);
   };
@@ -64,6 +82,7 @@ export function MockPhoneCard({ capacity }: { capacity: number }) {
 
   const r = RESPONSE_COPY[response];
   const width = barW.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] });
+  const sendScale = sendPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 0.86] });
 
   return (
     <View style={styles.card}>
@@ -115,20 +134,24 @@ export function MockPhoneCard({ capacity }: { capacity: number }) {
         <View style={styles.inputRow}>
           <TextInput
             value={prompt}
-            onChangeText={setPrompt}
+            onChangeText={demo ? undefined : setLocalPrompt}
             onSubmitEditing={ask}
+            editable={!demo}
             aria-label={PHONE.askAccessibilityLabel}
+            placeholder={PHONE.askValue}
             placeholderTextColor={ink(0.35)}
             style={styles.input}
           />
-          <Press
-            onPress={ask}
-            accessibilityRole="button"
-            aria-label={PHONE.submitLabel}
-            hoverTransform={{ scale: 1.05 }}
-            style={styles.send}>
-            <Icon name="arrow-forward" size={18} color={C.surface} />
-          </Press>
+          <Animated.View style={{ transform: [{ scale: sendScale }] }}>
+            <Press
+              onPress={ask}
+              accessibilityRole="button"
+              aria-label={PHONE.submitLabel}
+              hoverTransform={{ scale: 1.05 }}
+              style={styles.send}>
+              <Icon name="arrow-forward" size={18} color={C.surface} />
+            </Press>
+          </Animated.View>
         </View>
       </View>
 

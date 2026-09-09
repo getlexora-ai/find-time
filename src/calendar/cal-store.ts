@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 
 import type { FindTimeProposal } from '@/lib/api-types';
+import { apiFetch } from '@/lib/api';
 
 import { toCalEvent, toEventInput } from './api-adapter';
 import { toMin } from './cal-date';
@@ -20,7 +21,6 @@ import type { CalEvent } from './types';
  *         network in the background, re-fetch to reconcile on failure.
  */
 
-const BASE = process.env.EXPO_PUBLIC_API_URL ?? '';
 const CACHE_KEY = 'ft-cal-events-v1';
 
 let events: CalEvent[] = seedEvents();
@@ -60,7 +60,7 @@ export const byDate = (list: CalEvent[], d: string) =>
 // ── network ────────────────────────────────────────────────────────────────
 
 async function fetchList(): Promise<CalEvent[]> {
-  const res = await fetch(`${BASE}/api/events`);
+  const res = await apiFetch(`/api/events`);
   if (!res.ok) throw new Error(`GET /api/events ${res.status}`);
   const { events: rows } = (await res.json()) as {
     events: Parameters<typeof toCalEvent>[0][];
@@ -127,7 +127,7 @@ export function createEvent(input: NewEvent): CalEvent {
 
   void (async () => {
     try {
-      const res = await fetch(`${BASE}/api/events`, {
+      const res = await apiFetch(`/api/events`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(toEventInput(temp)),
@@ -158,7 +158,7 @@ export function updateEvent(id: number, patch: Partial<CalEvent>) {
 
   void (async () => {
     try {
-      const res = await fetch(`${BASE}/api/events/${serverId}`, {
+      const res = await apiFetch(`/api/events/${serverId}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(toEventInput(patch)),
@@ -179,7 +179,7 @@ export function deleteEvent(id: number) {
 
   void (async () => {
     try {
-      const res = await fetch(`${BASE}/api/events/${serverId}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/events/${serverId}`, { method: 'DELETE' });
       if (!res.ok) throw new Error(`DELETE /api/events ${res.status}`);
       idMap.delete(id);
     } catch {
