@@ -3,6 +3,7 @@ import { requireUserId, unauthorized } from '@/server/auth/clerk';
 import { aiConfigured, extractWithTool } from '@/server/ai/anthropic';
 import { findFreeSlots } from '@/server/ai/find-time';
 import { isConfigured } from '@/server/db';
+import { enforceRateLimit } from '@/server/rate-limit';
 import { listEvents } from '@/server/events-repo';
 
 /**
@@ -88,6 +89,9 @@ export async function POST(request: Request): Promise<Response> {
 
   const userId = await requireUserId(request);
   if (!userId) return unauthorized();
+
+  const limited = await enforceRateLimit(request, 'ai-find-time', { kind: 'user', userId });
+  if (limited) return limited;
 
   let prompt = '';
   try {
