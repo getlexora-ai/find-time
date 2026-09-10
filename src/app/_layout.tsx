@@ -15,6 +15,7 @@ import '../global.css';
  *             redirect to `/app` on native (`index.tsx`).
  *   `login` → Clerk sign in / sign up. `/app` redirects here when signed out.
  *   `app`   → the calendar, which owns its own providers in `app/_layout.tsx`.
+ *   `waitlist` → the early-access page the landing CTAs point to (web-only).
  *
  * `ClerkProvider` wraps everything (auth state is global); `AuthBridge` hands the
  * session-token getter to `src/lib/api.ts` so non-React fetch code can attach it.
@@ -41,6 +42,7 @@ export default function RootLayout() {
         <Stack.Screen name="app" />
         <Stack.Screen name="privacy" />
         <Stack.Screen name="terms" />
+        <Stack.Screen name="waitlist" />
       </Stack>
       <StatusBar style="light" />
     </ClerkProvider>

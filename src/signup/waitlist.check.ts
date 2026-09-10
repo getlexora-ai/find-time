@@ -3,7 +3,7 @@
  * No framework, no node imports: `npx tsx src/signup/waitlist.check.ts`.
  * Fold into a `test` script when a runner is picked (plan §10 Q13).
  */
-import { normalizeEmail, validateEmail } from './waitlist';
+import { clampText, NAME_MAX, normalizeEmail, validateEmail } from './waitlist';
 
 let failures = 0;
 function eq(actual: unknown, expected: unknown, msg: string) {
@@ -21,6 +21,10 @@ for (const e of invalid) eq(validateEmail(e), false, `invalid: ${JSON.stringify(
 
 eq(normalizeEmail('  Jane.Doe@Example.COM '), 'jane.doe@example.com', 'normalize trims + lowercases');
 eq(validateEmail('a'.repeat(250) + '@x.com'), false, 'over 254 chars rejected');
+
+eq(clampText('   ', NAME_MAX), undefined, 'clampText: blank → undefined');
+eq(clampText('  Ada Lovelace  ', NAME_MAX), 'Ada Lovelace', 'clampText: trims');
+eq(clampText('x'.repeat(200), NAME_MAX)?.length, NAME_MAX, 'clampText: caps at max');
 
 if (failures) throw new Error(`waitlist.check: ${failures} failure(s)`);
 console.log('waitlist.check: ok');

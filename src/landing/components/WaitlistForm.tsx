@@ -4,7 +4,7 @@ import { StyleSheet, TextInput, View } from 'react-native';
 import { Icon } from '@/design/Icon';
 import { C, R, rgba, w } from '@/design/tokens';
 import { MONO, Press, Txt } from '@/design/ui';
-import { joinWaitlist, validateEmail } from '@/signup/waitlist';
+import { clampText, joinWaitlist, NAME_MAX, REASON_MAX, validateEmail } from '@/signup/waitlist';
 
 import { WAITLIST } from '../copy';
 import { RAMP } from '../ramp';
@@ -19,8 +19,17 @@ type State = 'idle' | 'submitting' | 'success' | 'error';
  * `display:none`, so it stays out of the a11y tree without tipping off scripted
  * fills.
  */
-export function WaitlistForm({ source = 'waitlist_section' }: { source?: string }) {
+export function WaitlistForm({
+  source = 'waitlist_section',
+  detailed = false,
+}: {
+  source?: string;
+  /** the /waitlist page: stack the fields and reveal the optional name + "why" */
+  detailed?: boolean;
+}) {
   const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
+  const [reason, setReason] = useState('');
   const [company, setCompany] = useState(''); // honeypot
   const [state, setState] = useState<State>('idle');
   const [message, setMessage] = useState('');
@@ -39,7 +48,13 @@ export function WaitlistForm({ source = 'waitlist_section' }: { source?: string 
     submittedAt.current = now;
 
     setState('submitting');
-    const res = await joinWaitlist({ email, company, source });
+    const res = await joinWaitlist({
+      email,
+      company,
+      source,
+      name: detailed ? clampText(name, NAME_MAX) : undefined,
+      reason: detailed ? clampText(reason, REASON_MAX) : undefined,
+    });
     if (res.ok) {
       setState('success');
       setMessage(res.status === 'already' ? WAITLIST.successAlready : WAITLIST.success);
@@ -67,8 +82,49 @@ export function WaitlistForm({ source = 'waitlist_section' }: { source?: string 
   const busy = state === 'submitting';
 
   return (
-    <View style={styles.wrap}>
-      <View style={styles.row}>
+    <View style={[styles.wrap, detailed ? styles.wrapWide : null]}>
+      {detailed && (
+        <>
+          <View style={styles.field}>
+            <Txt style={styles.fieldLabel}>
+              {WAITLIST.nameLabel} <Txt style={styles.optional}>· {WAITLIST.optional}</Txt>
+            </Txt>
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              editable={!busy}
+              placeholder={WAITLIST.namePlaceholder}
+              placeholderTextColor={w(0.4)}
+              autoCapitalize="words"
+              autoCorrect={false}
+              maxLength={NAME_MAX}
+              aria-label={WAITLIST.nameLabel}
+              style={styles.input}
+            />
+          </View>
+
+          <View style={styles.field}>
+            <Txt style={styles.fieldLabel}>
+              {WAITLIST.reasonLabel} <Txt style={styles.optional}>· {WAITLIST.optional}</Txt>
+            </Txt>
+            <TextInput
+              value={reason}
+              onChangeText={setReason}
+              editable={!busy}
+              placeholder={WAITLIST.reasonPlaceholder}
+              placeholderTextColor={w(0.4)}
+              multiline
+              numberOfLines={4}
+              maxLength={REASON_MAX}
+              textAlignVertical="top"
+              aria-label={WAITLIST.reasonLabel}
+              style={[styles.input, styles.textarea]}
+            />
+          </View>
+        </>
+      )}
+
+      <View style={[styles.row, detailed ? styles.rowStacked : null]}>
         <TextInput
           value={email}
           onChangeText={(t) => {
@@ -103,7 +159,11 @@ export function WaitlistForm({ source = 'waitlist_section' }: { source?: string 
           aria-busy={busy}
           hoverBg={C.limeHover}
           hoverTransform={{ translateY: -2 }}
-          style={[styles.submit, busy ? { opacity: 0.7 } : null]}>
+          style={[
+            styles.submit,
+            detailed ? styles.submitStacked : null,
+            busy ? { opacity: 0.7 } : null,
+          ]}>
           <Txt style={styles.submitTxt}>{busy ? WAITLIST.submitting : WAITLIST.submit}</Txt>
           {!busy && <Icon name="arrow-right-up" size={16} color={C.surface} />}
         </Press>
@@ -121,7 +181,13 @@ export function WaitlistForm({ source = 'waitlist_section' }: { source?: string 
 
 const styles = StyleSheet.create({
   wrap: { width: '100%', maxWidth: 460, gap: 10 },
+  wrapWide: { maxWidth: 520, gap: 16 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, alignItems: 'center' },
+  rowStacked: { flexDirection: 'column', alignItems: 'stretch' },
+  field: { gap: 6 },
+  fieldLabel: { color: w(0.7), fontSize: 11, letterSpacing: 1 },
+  optional: { color: w(0.4), fontSize: 10, letterSpacing: 1 },
+  textarea: { minHeight: 96, paddingVertical: 12 },
   input: {
     flexGrow: 1,
     flexBasis: 240,
@@ -154,7 +220,9 @@ const styles = StyleSheet.create({
     backgroundColor: C.lime,
     paddingHorizontal: 18,
     justifyContent: 'center',
+    // detailed layout: `submitStacked` widens this below
   },
+  submitStacked: { alignSelf: 'stretch', marginTop: 4 },
   submitTxt: { color: C.surface, fontSize: 12, fontWeight: '500', letterSpacing: 0.5 },
   errorRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   errorTxt: { color: C.orange, fontSize: 12 },

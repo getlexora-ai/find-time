@@ -14,30 +14,43 @@ import { isConfigured, query } from '@/server/db';
 export type WaitlistEntry = {
   email: string;
   source?: string;
+  name?: string;
+  reason?: string;
   createdAt: string;
+};
+
+export type WaitlistInput = {
+  email: string;
+  source?: string;
+  ipHash?: string;
+  /** optional, from the /waitlist page */
+  name?: string;
+  reason?: string;
 };
 
 const memory = new Map<string, WaitlistEntry>();
 
 /** Returns 'added' for a new email, 'already' if it was seen before. */
-export async function addToWaitlist(
-  email: string,
-  source?: string,
-  ipHash?: string,
-): Promise<'added' | 'already'> {
+export async function addToWaitlist({
+  email,
+  source,
+  ipHash,
+  name,
+  reason,
+}: WaitlistInput): Promise<'added' | 'already'> {
   if (isConfigured()) {
     // `email` is citext unique — the conflict target is the column itself.
     const rows = await query(
-      `insert into waitlist (email, source, ip_hash) values ($1, $2, $3)
+      `insert into waitlist (email, source, ip_hash, name, reason) values ($1, $2, $3, $4, $5)
        on conflict (email) do nothing
        returning email`,
-      [email, source ?? null, ipHash ?? null],
+      [email, source ?? null, ipHash ?? null, name ?? null, reason ?? null],
     );
     return rows.length > 0 ? 'added' : 'already';
   }
 
   if (memory.has(email)) return 'already';
-  memory.set(email, { email, source, createdAt: new Date().toISOString() });
+  memory.set(email, { email, source, name, reason, createdAt: new Date().toISOString() });
   return 'added';
 }
 

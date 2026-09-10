@@ -1,4 +1,11 @@
-import { normalizeEmail, validateEmail, type WaitlistResponse } from '@/signup/waitlist';
+import {
+  clampText,
+  NAME_MAX,
+  normalizeEmail,
+  REASON_MAX,
+  validateEmail,
+  type WaitlistResponse,
+} from '@/signup/waitlist';
 import { enforceRateLimit, requestIpHash } from '@/server/rate-limit';
 import { addToWaitlist } from '@/server/waitlist-store';
 
@@ -10,7 +17,13 @@ import { addToWaitlist } from '@/server/waitlist-store';
  * honeypot field, and a per-IP fixed-window rate limit (src/server/rate-limit.ts).
  */
 export async function POST(req: Request): Promise<Response> {
-  let body: { email?: unknown; company?: unknown; source?: unknown };
+  let body: {
+    email?: unknown;
+    company?: unknown;
+    source?: unknown;
+    name?: unknown;
+    reason?: unknown;
+  };
   try {
     const text = await req.text();
     if (text.length > 4096) return json({ ok: false, error: 'server_error' }, 413);
@@ -32,11 +45,13 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   try {
-    const status = await addToWaitlist(
-      normalizeEmail(body.email),
-      typeof body.source === 'string' ? body.source.slice(0, 40) : undefined,
-      requestIpHash(req),
-    );
+    const status = await addToWaitlist({
+      email: normalizeEmail(body.email),
+      source: typeof body.source === 'string' ? body.source.slice(0, 40) : undefined,
+      ipHash: requestIpHash(req),
+      name: typeof body.name === 'string' ? clampText(body.name, NAME_MAX) : undefined,
+      reason: typeof body.reason === 'string' ? clampText(body.reason, REASON_MAX) : undefined,
+    });
     return json({ ok: true, status }, 201);
   } catch {
     return json({ ok: false, error: 'server_error' }, 500);

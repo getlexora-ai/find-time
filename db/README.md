@@ -17,7 +17,8 @@ Calendar-specific design: [../docs/db/calendar-schema.md](../docs/db/calendar-sc
 | `007_expo_calendar_compat.sql` | `calendar_events.project_label` (RN calendar carries `project` as free text) |
 | `010_oauth_tokens.sql` | `oauth_tokens` — AES-256-GCM-encrypted Google tokens (src/server/crypto.ts) |
 | `013_rate_limits.sql` | `rate_limits`, `rate_limit_blocks` — public-API fixed-window limiter (src/server/rate-limit.ts) |
-| `schema.sql` | **generated** — `001`–`007` + `001_waitlist` concatenated; what a fresh DB gets. **Run `010` and `013` after it.** |
+| `014_waitlist_details.sql` | `waitlist.name`, `waitlist.reason` — optional fields from the `/waitlist` page (also folded into `schema.sql`) |
+| `schema.sql` | **generated** — `001`–`007` + `001_waitlist` (incl. the `014` columns) concatenated; what a fresh DB gets. **Run `010` and `013` after it.** |
 
 Each file is idempotent (`create table if not exists`, `do $$ … exception when duplicate_object`), so re-running one is safe.
 

@@ -2,6 +2,7 @@ User-agent: *
 Allow: /$
 Allow: /privacy
 Allow: /terms
+Allow: /waitlist
 Disallow: /app
 Disallow: /login
 Disallow: /api/

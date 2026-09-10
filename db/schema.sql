@@ -842,8 +842,10 @@ create table if not exists waitlist (
                 check (status in ('pending', 'confirmed', 'unsubscribed', 'bounced')),
   confirm_token uuid default gen_random_uuid(),
   confirmed_at  timestamptz,
-  source        text,           -- 'waitlist_section' | 'hero' | 'header' | ...
+  source        text,           -- 'waitlist_section' | 'waitlist_page' | 'hero' | ...
   ip_hash       text,           -- salted sha256; never a raw IP (src/server/rate-limit.ts)
+  name          text,           -- optional, from the /waitlist page (db/014)
+  reason        text,           -- optional "why", from the /waitlist page (db/014)
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
 );

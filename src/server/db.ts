@@ -27,8 +27,15 @@ function makePool(): Pool {
   });
 }
 
-// Reused across hot reloads in dev so Metro doesn't leak a pool per edit.
-export const pool: Pool = globalThis.__ftPool ?? (globalThis.__ftPool = makePool());
+/**
+ * The pool is created lazily on the first query, not at import — importing this
+ * module only to call `isConfigured()` (every `+api.ts` route does) must not
+ * throw when DATABASE_URL is unset. Reused across Metro hot reloads via the
+ * global so an edit doesn't leak a pool.
+ */
+function db(): Pool {
+  return (globalThis.__ftPool ??= makePool());
+}
 
 export function isConfigured(): boolean {
   return Boolean(process.env.DATABASE_URL);
@@ -38,7 +45,7 @@ export async function query<T extends Record<string, unknown> = Record<string, u
   text: string,
   params?: unknown[],
 ): Promise<T[]> {
-  const res = await pool.query(text, params as never);
+  const res = await db().query(text, params as never);
   return res.rows as T[];
 }
 
@@ -52,7 +59,7 @@ export async function queryOne<T extends Record<string, unknown> = Record<string
 
 /** BEGIN/COMMIT/ROLLBACK with guaranteed release. */
 export async function tx<T>(fn: (c: PoolClient) => Promise<T>): Promise<T> {
-  const client = await pool.connect();
+  const client = await db().connect();
   try {
     await client.query('BEGIN');
     const out = await fn(client);

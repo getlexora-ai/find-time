@@ -26,7 +26,7 @@ export const HEADER = {
     { label: 'HOW IT WORKS', anchor: 'features' },
     { label: 'FOCUS', anchor: 'focus' },
   ],
-  cta: 'START PLANNING',
+  cta: 'WAITLIST',
 } as const;
 
 export const HERO = {
@@ -34,7 +34,7 @@ export const HERO = {
   headlineTop: 'FIND TIME FOR',
   headlineAccent: 'WHAT MATTERS.',
   body: 'See your entire day in one place. Plan from the web dashboard, make quick updates in the mobile app, and let AI protect your focus across both.',
-  primaryCta: 'PLAN MY DAY',
+  primaryCta: 'JOIN THE WAITLIST',
   secondaryCta: 'SEE 40 SEC DEMO',
 } as const;
 
@@ -254,6 +254,18 @@ export const WAITLIST = {
   emailLabel: 'Email address',
   submit: 'REQUEST ACCESS',
   submitting: 'SENDING…',
+  /** the dedicated /waitlist page (WaitlistScreen) */
+  pageTitle: 'JOIN THE WAITLIST',
+  pageBody:
+    'Find Time is in private beta and we invite people in small batches. Add your email to hold a place. The two questions below are optional — they just help us decide who to invite next.',
+  metaDescription:
+    'Request early access to Find Time — the AI day planner that finds time for what matters. Private beta.',
+  optional: 'OPTIONAL',
+  nameLabel: 'Your name',
+  namePlaceholder: 'Ada Lovelace',
+  reasonLabel: 'Why do you want to use Find Time?',
+  reasonPlaceholder: 'What does your week look like right now?',
+  back: '← FIND TIME',
   success: 'You’re on the list. We’ll be in touch.',
   successAlready: 'You’re already on the list — hang tight.',
   errorInvalid: 'That doesn’t look like an email address.',

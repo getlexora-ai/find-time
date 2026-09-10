@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { type LayoutChangeEvent, ScrollView, StyleSheet, View } from 'react-native';
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 
 import { Frame } from '@/calendar/components/Frame';
 import { Marquee } from '@/calendar/components/Marquee';
@@ -51,6 +51,7 @@ export function LandingScreen() {
 function Body() {
   const { width, isDesktop, is2xl } = useResponsive();
   const { scrollRef, register, scrollTo } = useAnchors();
+  const router = useRouter();
 
   const pad = width >= 640 ? 40 : 24;
   const onHeroLayout = (e: LayoutChangeEvent) => {
@@ -60,7 +61,7 @@ function Body() {
     register('features')(e);
     register('focus')(e);
   };
-  const toWaitlist = () => scrollTo('waitlist');
+  const toWaitlist = () => router.push('/waitlist');
 
   return (
     <View style={styles.root}>
@@ -98,9 +99,7 @@ function Body() {
           <FeatureGrid />
         </View>
 
-        <View onLayout={register('waitlist')}>
-          <WaitlistSection />
-        </View>
+        <WaitlistSection />
 
         <View style={styles.footer}>
           <Txt style={styles.footerBrand}>{FOOTER.brand}</Txt>

@@ -12,7 +12,23 @@ export type WaitlistRequest = {
   company?: string;
   /** where on the page the submit came from, for later segmentation */
   source?: string;
+  /** optional, from the /waitlist page; omit for the email-only landing form */
+  name?: string;
+  /** optional free text — "why do you want to use Find Time" */
+  reason?: string;
 };
+
+/** Length caps for the two optional /waitlist fields. Enforced client- and
+ *  server-side by clampText; the DB column has no check constraint (an over-long
+ *  paste should truncate, not 500). */
+export const NAME_MAX = 120;
+export const REASON_MAX = 2000;
+
+/** Trim, cap to `max`, and collapse an empty/blank optional field to undefined. */
+export function clampText(raw: string | undefined, max: number): string | undefined {
+  const v = (raw ?? '').trim().slice(0, max);
+  return v === '' ? undefined : v;
+}
 
 export type WaitlistResponse =
   | { ok: true; status: 'added' | 'already' }
