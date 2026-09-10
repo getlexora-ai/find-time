@@ -47,8 +47,6 @@ export function Icon({ name, size = 16, color = 'currentColor' }: Props) {
       color={color}
       aria-hidden
       focusable={false}
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
     />
   );
 }

@@ -92,8 +92,6 @@ export function WaitlistForm({ source = 'waitlist_section' }: { source?: string 
           value={company}
           onChangeText={setCompany}
           aria-hidden
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants"
           autoComplete="off"
           style={styles.honeypot}
         />
