@@ -74,6 +74,20 @@ const MAP = {
   target: 'target-linear',
   users: 'users-group-rounded-linear',
   wifi: 'wi-fi-router-minimalistic-linear',
+
+  // ── productivity-agent landing: connectors + off-limits (HANDOFF-landing.md §10)
+  browser: 'window-frame-linear',
+  card: 'card-linear',
+  checklist: 'checklist-minimalistic-linear',
+  cloud: 'cloud-linear',
+  contacts: 'user-id-linear',
+  forbidden: 'forbidden-circle-linear',
+  hashtag: 'hashtag-linear',
+  key: 'key-linear',
+  notebook: 'notebook-linear',
+  user: 'user-rounded-linear',
+  video: 'videocamera-record-linear',
+  wallet: 'wallet-linear',
 };
 
 /** Follow Iconify aliases to a concrete icon. Transforms are not supported — none

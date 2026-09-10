@@ -272,3 +272,37 @@ client bundle.
 
 **Not done:** only the hero was eyeballed. Below-the-fold sections, the
 375 / 640 / 1024 widths, tap-to-follow in Boundary, and native were not viewed.
+
+## 10. Productivity-agent repositioning (branch `agent-landing`, 2026-09-11)
+
+User feedback on §9: it's a **productivity** agent, not a personal one. Drop
+payments/accounts; don't show how it's built (token swap, `users` table, rules,
+limits, roadmap); show what it can do, which connectors it has, and — by diagram,
+not prose — that no text leaves the ecosystem and it never touches wallets or
+contacts.
+
+**Page order:** hero + connector hub → Connections screen → what it can do
+(flowcharts + walkthrough video) → ecosystem diagram → waitlist.
+
+| Section | File | What |
+|---|---|---|
+| Hero aside | `components/ConnectorHub.tsx` | Find Time core wired to 8 connectors on a ring; "never connects: wallets, contacts" strip. Fixed 460 canvas (SVG wires + View nodes) scaled to the card width, so it never reflows. |
+| Connectors | `components/Connectors.tsx` | A Connections-screen preview: 8 tools with working switches (email/Slack/calendar on at rest), plus an off-limits row (wallets, contacts, passwords, payment cards) with no switch. 2-col ≥900. |
+| What it can do | `components/Workflows.tsx` | Tabbed flowcharts (schedule / inbox / research / follow-up): your ask → 4 connector steps → result. A tab press replays the chain step by step (instant under reduced motion; fully lit at rest for SSR). `DemoVideo` beneath as "live in beta". |
+| Privacy | `components/Ecosystem.tsx` | Tools ⇄ Find Time ⇄ you inside a dashed boundary; ✕ badges on the boundary edge cut routes to ad networks / data brokers / model training / other companies; never-connected items hang off a broken line. Title + diagram + legend only. |
+| Copy | `copy.ts` | META/MARQUEE/HEADER/HERO/TELEMETRY/FOOTER rewritten; CONNECTORS, HUB, WORKFLOWS, ECOSYSTEM added; AGENT_LOG, CAPABILITIES, BOUNDARY, STORAGE, RULES, LIMITS, ROADMAP removed. WAITLIST title/meta/reason placeholder updated. |
+| Anchors | `useAnchors.ts` | `top · connectors · workflows · privacy · waitlist`. |
+| Icons | `scripts/gen-solar-icons.mjs` | +12 Solar glyphs: browser, card, checklist, cloud, contacts, forbidden, hashtag, key, notebook, user, video, wallet (regenerated `solar-icons.ts`). |
+
+**Deleted:** AgentLog, Boundary, Capabilities, Storage, Rules, Limits, Roadmap
+(in git history at `a0407df`).
+
+**Claims to back before launch:** "no text leaves your ecosystem" and "model
+training" as a blocked exit rely on a zero-retention agreement with the model
+provider (roadmap memory item 12). Only Google Calendar is live today; the
+Connections screen is labelled a preview.
+
+**Verified:** `tsc --noEmit` · `expo lint` green; `expo export --platform web`
+green, SSR contains every new headline and no payment copy. Viewed in Chrome at
+1440 and 400 via `expo serve`: all sections, the switch toggles and the tab
+replay; no console errors.

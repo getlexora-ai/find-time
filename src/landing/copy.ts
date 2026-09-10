@@ -2,384 +2,221 @@
  * Every string on the landing page, so a copy change never has to touch layout.
  *
  * The page was first a verbatim port of design/from_user/landing.html (an AI day
- * planner). On 2026-09-11 it was repositioned for the personal-agent pivot — an
- * agent for email, calendar, tasks and accounts whose model never sees your
- * secrets. META / MARQUEE / HEADER / HERO / TELEMETRY / FOOTER and everything from
- * AGENT_LOG to ROADMAP are that copy (HANDOFF-landing.md §9). PLANNER, SCHEDULE*,
- * DEMO, PHONE, WIDGETS, MODAL and TOASTS are still the landing.html copy; they back
- * the mock components that are kept in the tree but no longer mounted.
+ * planner). It now sells Find Time as a productivity agent that works across your
+ * tools — email, Slack, calendar, cloud drive, browser, docs, tasks, meetings —
+ * keeps your work inside them, and never connects to wallets, contacts, passwords
+ * or cards (HANDOFF-landing.md §10). META / MARQUEE / HEADER / HERO / TELEMETRY /
+ * FOOTER and CONNECTORS … ECOSYSTEM are that copy. PLANNER, SCHEDULE*, DEMO, PHONE,
+ * WIDGETS, MODAL and TOASTS are still the landing.html copy; they back the mock
+ * components that are kept in the tree but no longer mounted.
  *
- * Claims are written to match the roadmap: what Phase 1 ships today is stated as
- * fact; the boundary and storage design are labelled as Phase 2 spec.
+ * The page shows what the agent does, not how it is built: no pipeline, no
+ * storage schema, no roadmap.
  */
 
 import type { IconName } from '@/design/Icon';
 
 export const META = {
-  title: 'Find Time — the personal agent that never sees your secrets',
+  title: 'Find Time — the productivity agent for your email, Slack, calendar and drive',
   description:
-    'Find Time handles your email, calendar, tasks and accounts. Names, numbers and wallet addresses are swapped for placeholders before the model sees them, and nothing leaves without your approval. Private beta.',
+    'Find Time works across your email, Slack, calendar, cloud drive and browser to get the busywork done. Your work never leaves your ecosystem, and it never touches your wallet or contacts. Private beta.',
 } as const;
 
 export const MARQUEE =
-  'ANSWERS YOUR EMAIL // PLANS YOUR WEEK // PAYS THE INVOICE // CLEARS YOUR INBOX // BOOKS THE MEETING // NEVER SEES YOUR SECRETS //';
+  'CLEARS YOUR INBOX // ANSWERS SLACK // BOOKS THE MEETING // FILES THE DOC // RESEARCHES THE WEB // YOUR WORK NEVER LEAVES //';
 
 export const HEADER = {
   brand: 'FIND TIME',
   homeLabel: 'Find Time home',
   nav: [
-    { label: 'WHAT IT DOES', anchor: 'capabilities' },
-    { label: 'THE BOUNDARY', anchor: 'boundary' },
-    { label: 'ROADMAP', anchor: 'roadmap' },
+    { label: 'CONNECTORS', anchor: 'connectors' },
+    { label: 'WHAT IT DOES', anchor: 'workflows' },
+    { label: 'PRIVACY', anchor: 'privacy' },
   ],
   cta: 'WAITLIST',
 } as const;
 
 export const HERO = {
-  eyebrow: 'PERSONAL AGENT / WEB + APP / PRIVATE BY DESIGN',
-  headlineTop: 'IT DOES THE WORK.',
-  headlineAccent: 'IT NEVER SEES YOUR SECRETS.',
-  body: 'Find Time answers your email, plans your week, chases your tasks and keeps your accounts in order. Your phone number, your wallet and your passwords stay on your side of a line the model never crosses.',
+  eyebrow: 'PRODUCTIVITY AGENT / WEB + APP / PRIVATE BY DESIGN',
+  headlineTop: 'IT DOES THE BUSYWORK.',
+  headlineAccent: 'YOUR WORK NEVER LEAVES.',
+  body: 'Find Time is a productivity agent that works across your email, Slack, calendar, cloud drive and browser. Say what you need and it gets done. Everything stays inside your own tools, and it never touches your wallet or your contacts.',
   primaryCta: 'JOIN THE WAITLIST',
-  secondaryCta: 'SEE HOW IT’S BUILT',
-  /** The three zeros the product is built around. */
+  secondaryCta: 'SEE THE CONNECTORS',
   stats: [
-    { value: '00', label: 'SECRETS SENT TO THE MODEL' },
-    { value: '00', label: 'DOUBLE-BOOKINGS' },
-    { value: '00', label: 'PAYMENTS WITHOUT YOU' },
+    { value: '08', label: 'TOOLS IT WORKS ACROSS' },
+    { value: '00', label: 'WORDS LEAVE YOUR ECOSYSTEM' },
+    { value: '00', label: 'WALLETS OR CONTACTS TOUCHED' },
   ],
 } as const;
 
 /** The `2xl`-only left aside. Ambient telemetry — no interaction. */
 export const TELEMETRY = [
-  'ACT.04',
-  'HELD.01',
-  'TOKENS.03',
-  'VAULT.LOCKED',
-  'MODEL.BLIND',
-  'EGRESS.CLEAR',
-  'CONFLICTS.00',
-  'UTC.09:21',
+  'EMAIL.ON',
+  'SLACK.ON',
+  'CAL.ON',
+  'DRIVE.ON',
+  'WEB.ON',
+  'WALLET.OFF',
+  'CONTACTS.OFF',
+  'EGRESS.00',
   'STATUS.RUNNING',
 ] as const;
 
-export type AgentLogRow = {
-  time: string;
-  kind: string;
-  text: string;
-  /** a placeholder shown in place of a real value, rendered lime */
-  token?: string;
-  /** the row that waits for the visitor's approval */
-  held?: boolean;
+export type ConnectorKey = 'email' | 'slack' | 'calendar' | 'cloud' | 'browser' | 'docs' | 'tasks' | 'meetings';
+
+export type Connector = {
+  key: ConnectorKey;
+  icon: IconName;
+  /** short enough to sit in a hub node */
+  name: string;
+  apps: string;
+  can: string;
+  /** switched on in the Connections preview at rest */
+  on: boolean;
 };
 
-/** The hero's example agent activity (components/AgentLog.tsx). Example data. */
-export const AGENT_LOG = {
-  label: 'Example agent activity log',
-  title: 'AGENT LOG / THU 11 SEP',
-  status: 'RUNNING',
-  rows: [
-    { time: '09:12', kind: 'EMAIL', text: 'Replied to Maya: Thursday works, and sent two free slots from your calendar' },
-    { time: '09:14', kind: 'CALENDAR', text: 'Moved deep work to 14:00–16:00 to make room. 0 conflicts' },
-    { time: '09:20', kind: 'ACCOUNTS', text: 'Pay invoice #2231 to Studio Nord, €480.00 from', token: '<IBAN_1>', held: true },
-    { time: '09:21', kind: 'TASKS', text: 'Added “Renew passport” for Friday, before the post office closes' },
-  ] as AgentLogRow[],
-  done: 'DONE',
-  held: 'HELD FOR YOU',
-  paid: 'PAID',
-  approve: 'APPROVE & PAY',
-  review: 'REVIEW',
-  reviewClose: 'HIDE',
-  reviewBody:
-    'Pays Studio Nord €480.00. Your IBAN is filled in by the vault after you approve. The model only ever saw <IBAN_1>.',
-  footActions: '4 ACTIONS',
-  footWaiting: (n: number) => `${n} WAITING ON YOU`,
-  footSecrets: '0 SECRETS SENT TO MODEL',
-} as const;
+/** Something the agent can never be connected to. */
+export type Blocked = { icon: IconName; name: string };
 
-export const CAPABILITIES = {
-  eyebrow: 'WHAT IT DOES',
-  title: 'ONE AGENT FOR THE ADMIN OF BEING A PERSON.',
-  body: 'Tell it what you need in a sentence. It works across your inbox, calendar, tasks and accounts, and checks with you before anything leaves your hands.',
-  askLabel: 'CHECKS WITH YOU',
-  items: [
-    {
-      icon: 'letter' as IconName,
-      tag: 'INBOX',
-      title: 'EMAIL',
-      points: ['Sorts overnight mail into what needs you', 'Drafts replies in your voice', 'Follows up when nobody answers'],
-      ask: 'Before sending to anyone new, or anything with an attachment.',
-    },
-    {
-      icon: 'calendar-mark' as IconName,
-      tag: 'CALENDAR',
-      title: 'TIME',
-      points: ['Finds slots that never double-book', 'Protects focus and recovery time', 'Agrees meeting times over email'],
-      ask: 'Before moving anything someone else is invited to.',
-    },
-    {
-      icon: 'lock' as IconName,
-      tag: 'ACCOUNTS',
-      title: 'MONEY & LOGINS',
-      points: ['Pays bills you have approved before', 'Flags renewals and price rises', 'Cancels subscriptions you stopped using'],
-      ask: 'Every payment, every time.',
-    },
-    {
-      icon: 'check' as IconName,
-      tag: 'TASKS',
-      title: 'FOLLOW-THROUGH',
-      points: ['Turns emails into to-dos with due dates', 'Schedules them where they fit', 'Reminds you at the right moment'],
-      ask: 'Not needed. Nothing here leaves your account.',
-    },
-  ],
-} as const;
-
-/** Which value a boundary mark stands for — the same key links it across lanes. */
-export type BoundaryKey = 'contact' | 'wallet' | 'phone';
-/** A run of lane text: plain strings, or a tappable value. */
-export type Seg = string | { k: BoundaryKey; v: string };
-type Lane = {
-  step: string;
-  where: string;
-  title: string;
-  /** `real` values render as highlighted originals, `token` as lime placeholders */
-  kind: 'real' | 'token';
-  body: Seg[];
-  code?: Seg[];
-  chips: string[];
-};
-
-export const BOUNDARY: {
+/** The Connections screen preview (components/Connectors.tsx). The items also
+ *  feed the hero hub, the workflow steps and the ecosystem diagram. */
+export const CONNECTORS: {
   eyebrow: string;
   title: string;
   body: string;
-  hint: string;
-  lanes: Lane[];
-  vaultTitle: string;
-  vaultBody: string;
+  windowUrl: string;
+  panelTitle: string;
+  count: (on: number, total: number) => string;
+  items: Connector[];
+  blockedTitle: string;
+  blockedTag: string;
+  blocked: Blocked[];
+  caption: string;
 } = {
-  eyebrow: 'THE BOUNDARY',
-  title: 'THE MODEL GETS PLACEHOLDERS. YOU KEEP THE REAL THING.',
-  body: 'Before your request reaches the model, names, phone numbers, wallet addresses and account numbers are swapped for tokens. The model plans with the tokens. Only after you approve are the real values put back, straight into the message that leaves.',
-  hint: 'TAP A VALUE TO FOLLOW IT ACROSS THE BOUNDARY',
-  lanes: [
-    {
-      step: '01 · YOU ASK',
-      where: 'ON YOUR DEVICE',
-      title: 'YOUR REQUEST',
-      kind: 'real',
-      body: [
-        'Email ',
-        { k: 'contact', v: 'Maya Kranz' },
-        ' that the deposit goes to ',
-        { k: 'wallet', v: '0x71C7…9A3f' },
-        ', and to call me on ',
-        { k: 'phone', v: '+49 151 2345 6789' },
-        ' if it bounces.',
-      ],
-      chips: ['3 VALUES DETECTED'],
-    },
-    {
-      step: '02 · IT THINKS',
-      where: 'WHAT THE MODEL SEES',
-      title: 'TOKENS ONLY',
-      kind: 'token',
-      body: [
-        'Email ',
-        { k: 'contact', v: '<CONTACT_1>' },
-        ' that the deposit goes to ',
-        { k: 'wallet', v: '<WALLET_1>' },
-        ', and to call me on ',
-        { k: 'phone', v: '<PHONE_1>' },
-        ' if it bounces.',
-      ],
-      code: [
-        'send_email(\n  to:   ',
-        { k: 'contact', v: '<CONTACT_1>' },
-        ',\n  body: "…goes to ',
-        { k: 'wallet', v: '<WALLET_1>' },
-        '…\n         call me on ',
-        { k: 'phone', v: '<PHONE_1>' },
-        '"\n)',
-      ],
-      chips: ['0 REAL VALUES IN PROMPT'],
-    },
-    {
-      step: '03 · YOU APPROVE',
-      where: 'WHAT LEAVES',
-      title: 'THE REAL EMAIL',
-      kind: 'real',
-      body: [
-        'To: ',
-        { k: 'contact', v: 'maya@studionord.de' },
-        '\nHi Maya, the deposit goes to ',
-        { k: 'wallet', v: '0x71C7…9A3f' },
-        '. If anything bounces, call me on ',
-        { k: 'phone', v: '+49 151 2345 6789' },
-        '.',
-      ],
-      chips: ['APPROVED BY YOU', 'OUTGOING SCAN CLEAR'],
-    },
+  eyebrow: 'CONNECTORS',
+  title: 'PLUGS INTO THE TOOLS YOU ALREADY WORK IN.',
+  body: 'Switch on the tools you want it to use. It works across all of them in one go, and it can’t reach anything you leave off.',
+  windowUrl: 'APP.FINDTIME.AI / CONNECTIONS',
+  panelTitle: 'CONNECTIONS',
+  count: (on, total) => `${on} OF ${total} ON`,
+  items: [
+    { key: 'email', icon: 'letter', name: 'EMAIL', apps: 'Gmail · Outlook', can: 'READ · DRAFT · SEND', on: true },
+    { key: 'slack', icon: 'hashtag', name: 'SLACK', apps: 'Channels · DMs · threads', can: 'READ · REPLY · POST', on: true },
+    { key: 'calendar', icon: 'calendar-mark', name: 'CALENDAR', apps: 'Google · Outlook', can: 'READ · BOOK · MOVE', on: true },
+    { key: 'cloud', icon: 'cloud', name: 'CLOUD', apps: 'Google Drive · Dropbox · OneDrive', can: 'FIND · READ · FILE', on: false },
+    { key: 'browser', icon: 'browser', name: 'BROWSER', apps: 'Any site you point it at', can: 'SEARCH · READ · COMPARE', on: false },
+    { key: 'docs', icon: 'notebook', name: 'DOCS', apps: 'Notion · Google Docs', can: 'WRITE · UPDATE', on: false },
+    { key: 'tasks', icon: 'checklist', name: 'TASKS', apps: 'Linear · Asana · Todoist', can: 'CREATE · TRACK · CLOSE', on: false },
+    { key: 'meetings', icon: 'video', name: 'MEETINGS', apps: 'Zoom · Google Meet · Teams', can: 'NOTES · FOLLOW-UPS', on: false },
   ],
-  vaultTitle: 'THE VAULT SITS OUTSIDE THE MODEL’S REACH.',
-  vaultBody:
-    'Plain code, not the model, looks up the real value and writes it into the outgoing message after the model has finished. There is nothing sensitive in the prompt to leak, to log, or to be tricked into repeating.',
+  blockedTitle: 'OFF LIMITS · CAN’T BE CONNECTED',
+  blockedTag: 'NEVER',
+  blocked: [
+    { icon: 'wallet', name: 'WALLETS' },
+    { icon: 'contacts', name: 'CONTACTS' },
+    { icon: 'key', name: 'PASSWORDS' },
+    { icon: 'card', name: 'PAYMENT CARDS' },
+  ],
+  caption: 'PREVIEW · THE CONNECTIONS SCREEN IN THE APP · TAP A TOOL TO SWITCH IT',
 };
 
-export const STORAGE: {
+/** The hero diagram (components/ConnectorHub.tsx). */
+export const HUB = {
+  label:
+    'Diagram: Find Time connected to email, Slack, calendar, cloud drive, browser, docs, tasks and meetings. Wallets and contacts are never connected.',
+  title: 'ONE AGENT / EVERY TOOL',
+  status: '8 CONNECTORS',
+  core: 'FIND TIME',
+  never: 'NEVER CONNECTS',
+} as const;
+
+export type FlowStep = { c: ConnectorKey; text: string };
+export type Flow = { tab: string; ask: string; steps: FlowStep[]; result: string };
+
+/** The tabbed flowcharts (components/Workflows.tsx). Example tasks. */
+export const WORKFLOWS: {
   eyebrow: string;
   title: string;
   body: string;
-  tableLeft: string;
-  tableRight: string;
-  rows: { field: string; value: string; note: string; empty?: boolean }[];
-  principles: { title: string; body: string }[];
-  roadmapNote: string;
+  askLabel: string;
+  uses: string;
+  flows: Flow[];
+  videoTag: string;
+  videoTitle: string;
 } = {
-  eyebrow: 'WHAT WE KEEP',
-  title: 'ALMOST NOTHING, AND NOTHING WE CAN READ.',
-  body: 'An agent can’t leak what it never stored. This is your whole account, as it will sit in our database.',
-  tableLeft: 'TABLE users · 1 ROW',
-  tableRight: 'DESIGN SPEC · PHASE 2',
-  rows: [
-    { field: 'user_id', value: 'u_7f3a91c2', note: 'Random. Means nothing outside our system.' },
-    { field: 'identity', value: 'google:sub 10984…5527', note: 'An opaque sign-in ID. No name column, no email column.' },
+  eyebrow: 'WHAT IT CAN DO',
+  title: 'ONE ASK. EVERY TOOL IT TAKES.',
+  body: 'Say what you need in a sentence. It moves between your apps until the job is done.',
+  askLabel: 'YOU ASK',
+  uses: 'USES',
+  flows: [
     {
-      field: 'google_token',
-      value: '▓▓▓▓▓▓▓▓▓▓ 412 bytes',
-      note: 'Encrypted. The key lives in a separate key service and unlocks it only for the seconds a task runs.',
+      tab: 'SCHEDULE',
+      ask: 'Find an hour with the design team this week and post it in #design.',
+      steps: [
+        { c: 'slack', text: 'Reads who’s in #design' },
+        { c: 'calendar', text: 'Finds three slots everyone has free' },
+        { c: 'slack', text: 'Posts the options to the channel' },
+        { c: 'calendar', text: 'Books the one they pick and sends the invite' },
+      ],
+      result: 'MEETING BOOKED',
     },
     {
-      field: 'calendar · inbox · contacts',
-      value: '— not stored',
-      empty: true,
-      note: 'Fetched live from Google when a task needs them, then discarded.',
+      tab: 'INBOX',
+      ask: 'Clear my inbox before 9.',
+      steps: [
+        { c: 'email', text: 'Sorts 42 new emails into what needs you' },
+        { c: 'email', text: 'Drafts six replies in your voice' },
+        { c: 'tasks', text: 'Turns three requests into to-dos' },
+        { c: 'calendar', text: 'Blocks an hour to get them done' },
+      ],
+      result: 'INBOX CLEAR',
     },
     {
-      field: 'phone · wallet · passwords',
-      value: '— never on our servers',
-      empty: true,
-      note: 'Kept on your device, encrypted with a key only you hold.',
+      tab: 'RESEARCH',
+      ask: 'Brief me on our three biggest competitors.',
+      steps: [
+        { c: 'browser', text: 'Reads their pricing and launch pages' },
+        { c: 'cloud', text: 'Pulls last quarter’s notes from Drive' },
+        { c: 'docs', text: 'Writes a one-page brief' },
+        { c: 'slack', text: 'Shares it in #strategy' },
+      ],
+      result: 'BRIEF SHARED',
+    },
+    {
+      tab: 'FOLLOW-UP',
+      ask: 'Follow up on this morning’s client call.',
+      steps: [
+        { c: 'meetings', text: 'Pulls the notes from the call' },
+        { c: 'tasks', text: 'Creates the action items' },
+        { c: 'email', text: 'Drafts the recap to the client' },
+        { c: 'calendar', text: 'Books the next check-in' },
+      ],
+      result: 'RECAP READY',
     },
   ],
-  principles: [
-    {
-      title: 'LIVE, NOT CACHED',
-      body: 'Your calendar and inbox stay with Google. We read them when a task needs them and keep no copy.',
-    },
-    {
-      title: 'UNLOCKED FOR SECONDS',
-      body: 'Background jobs decrypt your access token in memory, do one job, wipe it and exit. Between jobs, a database dump is only ciphertext.',
-    },
-    {
-      title: 'SCRUBBED BEFORE LOGGING',
-      body: 'Error reports pass through the same redaction as the model, so a crash report can’t carry your number.',
-    },
-  ],
-  roadmapNote: 'SEE THE ROADMAP FOR WHAT’S LIVE TODAY',
+  videoTag: 'LIVE IN BETA',
+  videoTitle: 'WATCH IT PLAN A WEEK AROUND A REAL CALENDAR.',
 };
 
-export const RULES = {
-  eyebrow: 'RULES IT CAN’T BREAK',
-  title: 'THE MODEL DECIDES. CODE DOES.',
-  body: 'Find Time’s planner already works this way: the model reads your request, and a plain slot-finder places every block. That’s why it can’t double-book you. The agent keeps the same rule for everything else.',
-  videoCaption: 'LIVE IN BETA · THE SLOT-FINDER, NOT THE MODEL, PLACES EVERY BLOCK',
-  items: [
-    {
-      code: 'PROPOSE → CHECK → ACT',
-      title: 'THE MODEL CAN ONLY ASK',
-      body: 'It picks an action and fills in the blanks. Tested code checks the request and carries it out, or refuses.',
-    },
-    {
-      code: 'HOLD → APPROVE',
-      title: 'NOTHING LEAVES WITHOUT YOU',
-      body: 'Every email to someone new, every payment and every shared file is shown to you in its final form first.',
-    },
-    {
-      code: 'KNOWN CONTACTS ONLY',
-      title: 'IT WRITES TO PEOPLE YOU KNOW',
-      body: 'Sends are limited to your contacts. An unfamiliar address, even one it read in an email, needs you to add it.',
-    },
-    {
-      code: 'AUDIT LOG',
-      title: 'EVERYTHING IS ON THE RECORD',
-      body: 'Every action, with what it saw and why it acted. Read it, export it, undo from it.',
-    },
-  ],
+/** The privacy diagram (components/Ecosystem.tsx). Deliberately almost no prose:
+ *  the diagram is the argument. */
+export const ECOSYSTEM = {
+  eyebrow: 'PRIVATE BY DESIGN',
+  title: 'NO TEXT LEAVES YOUR ECOSYSTEM.',
+  label:
+    'Diagram: your tools, the Find Time agent and you sit inside one boundary. Nothing crosses it to ad networks, data brokers, model training or other companies. Wallets, contacts, passwords and payment cards are never connected.',
+  inside: 'YOUR ECOSYSTEM',
+  tools: 'YOUR TOOLS',
+  core: 'FIND TIME',
+  you: 'YOU',
+  youSub: 'BRIEFS · DRAFTS · BOOKINGS',
+  outsideTitle: 'OUTSIDE',
+  outside: ['AD NETWORKS', 'DATA BROKERS', 'MODEL TRAINING', 'OTHER COMPANIES'],
+  blockedTitle: 'NEVER CONNECTED',
+  legend: { stays: 'STAYS INSIDE', blocked: 'NEVER CROSSES', never: 'NEVER CONNECTED' },
 } as const;
-
-export const LIMITS = {
-  eyebrow: 'WHAT WE WON’T PROMISE',
-  title: 'NO AGENT IS PERFECTLY SAFE. HERE’S WHERE OURS ISN’T.',
-  items: [
-    {
-      title: 'Prompt injection is managed, not solved.',
-      body: 'An email can hide instructions aimed at the agent. It treats everything it reads as information, never as orders, and holds outbound actions for you. Nobody in the industry can promise zero.',
-    },
-    {
-      title: 'Detection misses things.',
-      body: 'Phone numbers, IBANs and wallet addresses are caught reliably. Unusual formats can slip through, so every outgoing message gets a second scan before it leaves.',
-    },
-    {
-      title: 'Some data has to be used.',
-      body: 'If you ask it to text your landlord, the number has to reach the text. It travels as a token and is filled in only for that one message, but it does leave.',
-    },
-  ],
-} as const;
-
-export type PhaseState = 'live' | 'next' | 'planned';
-
-export const ROADMAP: {
-  eyebrow: string;
-  title: string;
-  body: string;
-  stateLabel: Record<PhaseState, string>;
-  phases: { n: string; state: PhaseState; title: string; points: string[] }[];
-} = {
-  eyebrow: 'ROADMAP',
-  title: 'PRIVACY FIRST, THEN POWER.',
-  body: 'The boundary ships before the agent gets anything that can send, pay or share. Money comes last because it carries the most risk.',
-  stateLabel: { live: 'LIVE IN BETA', next: 'NEXT', planned: 'PLANNED' },
-  phases: [
-    {
-      n: 'PHASE 1',
-      state: 'live',
-      title: 'FIND TIME',
-      points: [
-        'Connect Google Calendar',
-        'Describe what you need; it places blocks around your real events',
-        'Structurally unable to double-book',
-      ],
-    },
-    {
-      n: 'PHASE 2',
-      state: 'next',
-      title: 'THE BOUNDARY',
-      points: [
-        'Personal data swapped for tokens before it reaches the model',
-        'On-device vault for numbers, wallets and passwords',
-        'Calendar data fetched live instead of cached',
-        'Sign-in by opaque ID; keys held in a separate key service',
-      ],
-    },
-    {
-      n: 'PHASE 3',
-      state: 'planned',
-      title: 'EMAIL & TASKS',
-      points: [
-        'Sort, draft and send, behind your approval',
-        'Outgoing scan and a full audit log',
-        'Sends limited to your known contacts',
-      ],
-    },
-    {
-      n: 'PHASE 4',
-      state: 'planned',
-      title: 'ACCOUNTS',
-      points: ['Bills, renewals and subscriptions', 'Every payment approved by you, every time'],
-    },
-  ],
-};
 
 export const PLANNER = {
   urlBar: 'APP.FINDTIME.AI / DASHBOARD',
@@ -558,7 +395,7 @@ export const TOASTS = {
 export const WAITLIST = {
   anchor: 'waitlist' as const,
   eyebrow: 'EARLY ACCESS',
-  title: 'HAND OVER THE ADMIN. KEEP THE SECRETS.',
+  title: 'HAND OVER THE BUSYWORK.',
   body: 'Find Time is in private beta. Leave your email and we’ll tell you when a spot opens — no spam, one message.',
   placeholder: 'you@example.com',
   emailLabel: 'Email address',
@@ -569,12 +406,12 @@ export const WAITLIST = {
   pageBody:
     'Find Time is in private beta and we invite people in small batches. Add your email to hold a place. The two questions below are optional — they just help us decide who to invite next.',
   metaDescription:
-    'Request early access to Find Time — the personal agent that does the work and never sees your secrets. Private beta.',
+    'Request early access to Find Time — the productivity agent that works across your email, Slack, calendar and drive, and keeps your work inside them. Private beta.',
   optional: 'OPTIONAL',
   nameLabel: 'Your name',
   namePlaceholder: 'Ada Lovelace',
   reasonLabel: 'Why do you want to use Find Time?',
-  reasonPlaceholder: 'What would you hand over to an agent first?',
+  reasonPlaceholder: 'Which tool would you connect first?',
   back: '← FIND TIME',
   success: 'You’re on the list. We’ll be in touch.',
   successAlready: 'You’re already on the list — hang tight.',
@@ -613,7 +450,7 @@ export const COOKIES = {
  */
 export const FOOTER = {
   brand: 'FIND TIME',
-  tagline: 'REDACTED BEFORE REASONING · APPROVED BEFORE SENDING',
+  tagline: 'YOUR TOOLS · ONE AGENT · NOTHING LEAVES',
   links: [
     { label: 'PRIVACY', href: '/privacy' },
     { label: 'TERMS', href: '/terms' },

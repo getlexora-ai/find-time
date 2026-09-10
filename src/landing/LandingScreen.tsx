@@ -12,29 +12,24 @@ import { useResponsive } from '@/design/useResponsive';
 import { FOOTER, MARQUEE, TELEMETRY } from './copy';
 import { RAMP } from './ramp';
 import { type AnchorId, useAnchors } from './useAnchors';
-import { AgentLog } from './components/AgentLog';
-import { Boundary } from './components/Boundary';
-import { Capabilities } from './components/Capabilities';
+import { ConnectorHub } from './components/ConnectorHub';
+import { Connectors } from './components/Connectors';
 import { CookieConsent } from './components/CookieConsent';
+import { Ecosystem } from './components/Ecosystem';
 import { Hero } from './components/Hero';
 import { LandingHeader } from './components/LandingHeader';
-import { Limits } from './components/Limits';
-import { Roadmap } from './components/Roadmap';
-import { Rules } from './components/Rules';
-import { Storage } from './components/Storage';
 import { WaitlistSection } from './components/WaitlistSection';
+import { Workflows } from './components/Workflows';
 
 /**
- * Composition root for the web landing page, repositioned for the personal-agent
- * pivot (HANDOFF-landing.md §9). Pinned to the `electric` ground; `Frame` and
+ * Composition root for the web landing page, positioned as a productivity agent
+ * (HANDOFF-landing.md §10). Pinned to the `electric` ground; `Frame` and
  * `Marquee` sit outside the `ScrollView` as static siblings.
  *
- * Order is the argument: what it does (hero + AgentLog, Capabilities) → why it's
- * safe (Boundary, Storage, Rules) → what it can't promise (Limits) → when
- * (Roadmap) → waitlist. The walkthrough video now lives in Rules as proof the
- * "model decides, code does" rule already ships. The landing.html mocks
- * (MockPlannerCard / MockPhoneCard / FloatingWidgets / useDemoSequence) stay in
- * the tree, unmounted.
+ * The page shows, it doesn't explain: hero + connector hub → the Connections
+ * screen → flowcharts of what it does (with the live walkthrough video) → the
+ * ecosystem diagram → waitlist. The landing.html mocks (MockPlannerCard /
+ * MockPhoneCard / FloatingWidgets / useDemoSequence) stay in the tree, unmounted.
  */
 export function LandingScreen() {
   return (
@@ -69,7 +64,7 @@ function Body() {
         <LandingHeader onNav={scrollTo} onCta={toWaitlist} />
 
         <View onLayout={register('top')} style={[styles.section, { paddingTop: isDesktop ? 64 : 40 }]}>
-          <Hero onPrimary={toWaitlist} onSecondary={() => scrollTo('boundary')} aside={<AgentLog />} />
+          <Hero onPrimary={toWaitlist} onSecondary={() => scrollTo('connectors')} aside={<ConnectorHub />} />
 
           {is2xl && (
             <View style={styles.telemetry} pointerEvents="none">
@@ -82,28 +77,16 @@ function Body() {
           )}
         </View>
 
-        <View {...section('capabilities')}>
-          <Capabilities />
+        <View {...section('connectors')}>
+          <Connectors />
         </View>
 
-        <View {...section('boundary')}>
-          <Boundary />
+        <View {...section('workflows')}>
+          <Workflows />
         </View>
 
-        <View {...section()}>
-          <Storage />
-        </View>
-
-        <View {...section()}>
-          <Rules />
-        </View>
-
-        <View {...section()}>
-          <Limits />
-        </View>
-
-        <View {...section('roadmap')}>
-          <Roadmap />
+        <View {...section('privacy')}>
+          <Ecosystem />
         </View>
 
         <WaitlistSection />
