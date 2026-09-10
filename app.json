@@ -8,8 +8,7 @@
     "scheme": "findtime",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true,
-      "icon": "./assets/expo.icon"
+      "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
