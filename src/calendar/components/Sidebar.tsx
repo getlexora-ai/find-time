@@ -1,6 +1,7 @@
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { Icon, type IconName } from '../Icon';
+import { Logo } from '@/design/Logo';
 import { CATS, CAT_KEYS, C, R, w } from '../tokens';
 import type { CalEvent } from '../types';
 import { AccountButton } from './AccountButton';
@@ -34,7 +35,7 @@ export function Sidebar({
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
         <View style={styles.brand}>
           <View style={styles.logo}>
-            <Txt style={styles.logoTxt}>FT</Txt>
+            <Logo size={22} color={C.surface} />
           </View>
           <View>
             <Txt style={styles.brandName}>Find time</Txt>
@@ -118,7 +119,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logoTxt: { color: C.surface, fontSize: 16, fontWeight: '600', letterSpacing: -1 },
   brandName: { color: '#fff', fontSize: 14, fontWeight: '500' },
   brandSub: { color: w(0.45), fontSize: 12, marginTop: 2 },
   nav: { gap: 4 },

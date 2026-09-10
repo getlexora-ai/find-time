@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Icon } from '@/design/Icon';
+import { Logo } from '@/design/Logo';
 import { C, R, w } from '@/design/tokens';
 import { CHROME_BLUR, Press, Txt } from '@/design/ui';
 import { useResponsive } from '@/design/useResponsive';
@@ -31,7 +32,7 @@ export function LandingHeader({
         {({ hovered }: { hovered?: boolean }) => (
           <>
             <View style={[styles.logo, hovered ? { borderColor: C.lime } : null]}>
-              <Icon name="clock" size={20} color={C.lime} />
+              <Logo size={20} color={C.lime} />
             </View>
             <Txt style={styles.brandTxt}>{HEADER.brand}</Txt>
           </>

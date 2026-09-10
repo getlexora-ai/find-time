@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Icon } from '../Icon';
+import { Logo } from '@/design/Logo';
 import { useCalTheme } from '../theme-context';
 import { C, R, w } from '../tokens';
 import { CHROME_BLUR, Press, Txt } from '../ui';
@@ -36,7 +37,7 @@ export function Header({
       ) : (
         <View style={styles.left}>
           <View style={styles.logo}>
-            <Txt style={styles.logoTxt}>FT</Txt>
+            <Logo size={20} color={C.surface} />
           </View>
           <Txt style={styles.appName}>Calendar</Txt>
         </View>
@@ -115,7 +116,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logoTxt: { color: C.surface, fontSize: 14, fontWeight: '600', letterSpacing: -0.5 },
   appName: { fontSize: 14, fontWeight: '500' },
   crumb: { color: '#fff', fontSize: 12 },
   crumbMuted: { color: w(0.45), fontSize: 12 },
