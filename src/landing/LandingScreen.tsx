@@ -25,8 +25,9 @@ import { WaitlistSection } from './components/WaitlistSection';
  * ground; `Frame` and `Marquee` sit outside the `ScrollView` as static siblings
  * (landing.html has them `position: fixed` — RN can't, and the visible delta is
  * nil since both hug an edge). The hero's two mock cards are replaced by
- * `DemoVideo` — the pre-rendered German-learning walkthrough (public/find-time-
- * walkthrough.*). The old interactive mocks (MockPlannerCard / MockPhoneCard /
+ * `DemoVideo` — the pre-rendered German-learning walkthrough (a looping,
+ * borderless <video> from public/find-time-walkthrough-hq.{webm,mp4}). The old
+ * interactive mocks (MockPlannerCard / MockPhoneCard /
  * useDemoSequence) are kept in the tree but no longer mounted here.
  *
  * `FloatingWidgets` (drag + Animated + PanResponder, purely decorative and
