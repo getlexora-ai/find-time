@@ -3,14 +3,22 @@
  * dialog → "Plan my German learning today" → APPLY PLAN → the calendar
  * reschedules Admin batch and slots the German blocks in.
  *
- * Plain DOM <video> (this screen is web-only): autoplay + loop + muted +
- * playsInline so it plays on its own with no controls, no JS, and no border /
- * "boundary box". webm first, mp4 fallback for Safari. Files live in `public/`,
- * served at the web root by `expo export`.
+ * Plain DOM <video> (this screen is web-only): loop + muted + playsInline, no
+ * controls and no border / "boundary box". webm (VP9) with an mp4 (H.264)
+ * fallback; files live in `public/`, served at the web root by `expo export`.
+ *
+ * The `ref` kicks off playback on mount: the `autoPlay` attribute alone doesn't
+ * survive hydration here — React commits the <source> children a beat after the
+ * <video>, so the browser's first autoplay attempt aborts with no source and
+ * never retries. One `.play()` once the element (and its sources) are in the
+ * DOM starts it cleanly; it's muted, so no autoplay-policy block.
  */
 export function DemoVideo() {
   return (
     <video
+      ref={(el) => {
+        el?.play().catch(() => {});
+      }}
       autoPlay
       loop
       muted
