@@ -25,7 +25,7 @@ export function LandingHeader({
   return (
     <View style={[styles.bar, { paddingHorizontal: isSm ? 40 : 24 }]}>
       <Pressable
-        onPress={() => onNav('planner')}
+        onPress={() => onNav('top')}
         accessibilityRole="link"
         aria-label={HEADER.homeLabel}
         style={styles.brand}>

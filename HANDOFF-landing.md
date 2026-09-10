@@ -221,3 +221,54 @@ web` green — `/` SSR still 87 KB, contains `German practice` / `Deep work` /
 
 **Not done**: not eyeballed in a browser this pass; no breakpoint sweep of the
 taller schedule column against the widgets; no replay control (plays once).
+
+## 9. Personal-agent pivot (branch `agent-landing`, 2026-09-11)
+
+The user is repositioning Find Time from an AI day planner to a **personal agent**
+(email, calendar, tasks, accounts) whose model never sees personal data. The
+landing now sells that. A sanctioned rewrite of the page's content, not a
+restyle: same electric ground, lime accent, `Txt` mono, `RAMP` contrast values.
+
+**Page order is the argument:** what it does → why it's safe → what it can't
+promise → when → waitlist.
+
+| Section | File | What |
+|---|---|---|
+| Hero | `components/Hero.tsx` | H1 now spans the full width (the long accent line holds to 2 lines); body, CTAs and three "00" stats sit beside an `aside` slot. Primary CTA is lime now. Secondary scrolls to `#boundary`. |
+| Agent log | `components/AgentLog.tsx` | The hero card: 4 example actions, one payment **held for you**. Approve resolves it; Review shows what will be sent (IBAN only ever seen by the model as `<IBAN_1>`). |
+| Capabilities | `components/Capabilities.tsx` | Replaces `FeatureGrid` (deleted). Same hairline-seam grid; 4 cards, each ending on when it checks with you. 4-up / 2×2 / stacked. |
+| The boundary | `components/Boundary.tsx` | Centrepiece. One request in 3 lanes: as typed → as the model sees it (tokens) → as it leaves after approval. **Tap** a value to light it in all lanes (nested `<Text>` can't host a Pressable, and tap works on phones). Opens with the wallet selected so the linking shows at rest. |
+| What we keep | `components/Storage.tsx` | The whole account drawn as one `users` row on the light-card language, beside 3 storage principles. Labelled **DESIGN SPEC · PHASE 2**. |
+| Rules | `components/Rules.tsx` | "The model decides. Code does." 4 rules beside `DemoVideo` — the walkthrough moved here as proof the rule already ships (`findFreeSlots` places blocks, not the model). |
+| Limits | `components/Limits.tsx` | Prompt injection, detection misses, data that has to be used. Deliberately plain. |
+| Roadmap | `components/Roadmap.tsx` | Phase 1 live (find time) → 2 boundary → 3 email & tasks → 4 accounts. |
+| Shared | `components/SectionHead.tsx` | Eyebrow + title + lede recipe used by every section. |
+| Copy | `copy.ts` | META / MARQUEE / HEADER / HERO / TELEMETRY / FOOTER rewritten; AGENT_LOG … ROADMAP added; WAITLIST title + meta updated; FEATURES removed. Mock-only copy kept. |
+| Anchors | `useAnchors.ts` | `top · capabilities · boundary · roadmap · waitlist` (was `planner · features · focus`). |
+
+**Decisions made without asking (flag if wrong):**
+1. **No new webfonts.** An editorial display face was considered, but `+html.tsx`
+   records shipping webfonts as an open question, so the page stays in `Txt` mono.
+2. **Unmounted:** `FloatingWidgets` (German-planner widgets no longer fit the
+   story). Files kept, like the other landing.html mocks.
+3. **Claims track the roadmap.** Phase 1 is stated as fact; the boundary and
+   storage are future scope and say so (`DESIGN SPEC · PHASE 2`, roadmap states).
+   The engineering to-do behind Phases 2–4 is the privacy/architecture list agreed
+   with the user; it is not built.
+4. Sections align to a 1200 column (= header 1280 − 2×40) so edges line up with
+   the logo. `WaitlistSection` keeps its own 1152.
+
+**Verified:** `tsc --noEmit` · `expo lint` green. `npx expo export --platform web`
+green — `/` SSR 86 KB and contains every new section headline. Served with
+`expo serve`, viewed in Chrome at 1440: header, hero and AgentLog render, no
+console errors. One fix from that look: placeholder tokens were `⟨…⟩`, which the
+platform mono draws like parentheses, so they are `<…>` now.
+
+**Worktree gotcha:** a fresh worktree has no `.env.local` or `expo-env.d.ts` (both
+gitignored). Without the Clerk key the client throws `Missing publishableKey` and
+`/` renders blank blue; tsc also fails on untouched files. Copy both from the main
+checkout, then export once with `--clear` — Metro otherwise reuses the key-less
+client bundle.
+
+**Not done:** only the hero was eyeballed. Below-the-fold sections, the
+375 / 640 / 1024 widths, tap-to-follow in Boundary, and native were not viewed.

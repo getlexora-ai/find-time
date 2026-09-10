@@ -1,5 +1,4 @@
-import { lazy, Suspense } from 'react';
-import { type LayoutChangeEvent, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 
 import { Frame } from '@/calendar/components/Frame';
@@ -12,32 +11,31 @@ import { useResponsive } from '@/design/useResponsive';
 
 import { FOOTER, MARQUEE, TELEMETRY } from './copy';
 import { RAMP } from './ramp';
-import { useAnchors } from './useAnchors';
+import { type AnchorId, useAnchors } from './useAnchors';
+import { AgentLog } from './components/AgentLog';
+import { Boundary } from './components/Boundary';
+import { Capabilities } from './components/Capabilities';
 import { CookieConsent } from './components/CookieConsent';
-import { DemoVideo } from './components/DemoVideo';
-import { FeatureGrid } from './components/FeatureGrid';
 import { Hero } from './components/Hero';
 import { LandingHeader } from './components/LandingHeader';
+import { Limits } from './components/Limits';
+import { Roadmap } from './components/Roadmap';
+import { Rules } from './components/Rules';
+import { Storage } from './components/Storage';
 import { WaitlistSection } from './components/WaitlistSection';
 
 /**
- * Composition root for the web landing page (plan §3.3). Pinned to the `electric`
- * ground; `Frame` and `Marquee` sit outside the `ScrollView` as static siblings
- * (landing.html has them `position: fixed` — RN can't, and the visible delta is
- * nil since both hug an edge). The hero's two mock cards are replaced by
- * `DemoVideo` — the pre-rendered German-learning walkthrough (a looping,
- * borderless <video> from public/find-time-walkthrough-hq.{webm,mp4}). The old
- * interactive mocks (MockPlannerCard / MockPhoneCard /
- * useDemoSequence) are kept in the tree but no longer mounted here.
+ * Composition root for the web landing page, repositioned for the personal-agent
+ * pivot (HANDOFF-landing.md §9). Pinned to the `electric` ground; `Frame` and
+ * `Marquee` sit outside the `ScrollView` as static siblings.
  *
- * `FloatingWidgets` (drag + Animated + PanResponder, purely decorative and
- * off-screen on phone) is `React.lazy`'d so its chunk isn't in the `/` first
- * load. Everything above the fold stays eager.
+ * Order is the argument: what it does (hero + AgentLog, Capabilities) → why it's
+ * safe (Boundary, Storage, Rules) → what it can't promise (Limits) → when
+ * (Roadmap) → waitlist. The walkthrough video now lives in Rules as proof the
+ * "model decides, code does" rule already ships. The landing.html mocks
+ * (MockPlannerCard / MockPhoneCard / FloatingWidgets / useDemoSequence) stay in
+ * the tree, unmounted.
  */
-const FloatingWidgets = lazy(() =>
-  import('./components/FloatingWidgets').then((m) => ({ default: m.FloatingWidgets })),
-);
-
 export function LandingScreen() {
   return (
     <CalendarThemeProvider forceTheme="electric">
@@ -54,14 +52,13 @@ function Body() {
   const router = useRouter();
 
   const pad = width >= 640 ? 40 : 24;
-  const onHeroLayout = (e: LayoutChangeEvent) => {
-    register('planner')(e);
-  };
-  const onFeaturesLayout = (e: LayoutChangeEvent) => {
-    register('features')(e);
-    register('focus')(e);
-  };
+  const sectionGap = { marginTop: isDesktop ? 128 : 80 };
   const toWaitlist = () => router.push('/waitlist');
+  /** A page section: shared width + rhythm, and an anchor when it has one. */
+  const section = (id?: AnchorId) => ({
+    style: [styles.section, sectionGap],
+    onLayout: id ? register(id) : undefined,
+  });
 
   return (
     <View style={styles.root}>
@@ -71,10 +68,8 @@ function Body() {
       <ScrollView ref={scrollRef} contentContainerStyle={[styles.content, { paddingHorizontal: pad }]}>
         <LandingHeader onNav={scrollTo} onCta={toWaitlist} />
 
-        <View
-          onLayout={onHeroLayout}
-          style={[styles.hero, { minHeight: isDesktop ? 960 : 940, paddingTop: isDesktop ? 64 : 40 }]}>
-          <Hero onPrimary={toWaitlist} onSecondary={() => scrollTo('planner')} />
+        <View onLayout={register('top')} style={[styles.section, { paddingTop: isDesktop ? 64 : 40 }]}>
+          <Hero onPrimary={toWaitlist} onSecondary={() => scrollTo('boundary')} aside={<AgentLog />} />
 
           {is2xl && (
             <View style={styles.telemetry} pointerEvents="none">
@@ -85,18 +80,30 @@ function Body() {
               ))}
             </View>
           )}
-
-          <View style={[styles.cards, isDesktop ? styles.cardsDesktop : styles.cardsStacked]}>
-            <DemoVideo />
-          </View>
-
-          <Suspense fallback={null}>
-            <FloatingWidgets />
-          </Suspense>
         </View>
 
-        <View onLayout={onFeaturesLayout} style={styles.features}>
-          <FeatureGrid />
+        <View {...section('capabilities')}>
+          <Capabilities />
+        </View>
+
+        <View {...section('boundary')}>
+          <Boundary />
+        </View>
+
+        <View {...section()}>
+          <Storage />
+        </View>
+
+        <View {...section()}>
+          <Rules />
+        </View>
+
+        <View {...section()}>
+          <Limits />
+        </View>
+
+        <View {...section('roadmap')}>
+          <Roadmap />
         </View>
 
         <WaitlistSection />
@@ -123,31 +130,19 @@ function Body() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { maxWidth: 1440, width: '100%', alignSelf: 'center', paddingBottom: 80 },
-  hero: { width: '100%', maxWidth: 1280, alignSelf: 'center', position: 'relative' },
+  // 1200 = the header bar's 1280 minus its 40px side padding, so every section's
+  // left edge lines up with the logo.
+  section: { width: '100%', maxWidth: 1200, alignSelf: 'center', position: 'relative' },
   telemetry: {
     position: 'absolute',
-    // in the left gutter of the centred 1280 hero — only mounted at is2xl, where
-    // there is >=128px of gutter, so it never collides with the ml-56 headline
-    // (landing.html hides this behind text-white/35; the a11y contrast bump in
-    // ramp.ts makes it too loud to sit under the H1). See HANDOFF-landing.md.
-    left: -32,
+    // in the left gutter — only mounted at is2xl, where there is room beside the
+    // 1200 column (see HANDOFF-landing.md §4.1).
+    left: -72,
     top: 96,
-    bottom: 64,
+    bottom: 0,
     justifyContent: 'space-between',
   },
   telemetryTxt: { color: RAMP.onBlueFaint, fontSize: 12 },
-  cards: { gap: 20 },
-  cardsStacked: { marginTop: 48 },
-  cardsDesktop: {
-    position: 'absolute',
-    left: '31%',
-    top: '34%',
-    width: '69%',
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  phoneSlot: { flex: 0.72, marginTop: 48, marginLeft: -20, zIndex: 20 },
-  features: { marginTop: 64, width: '100%' },
   footer: {
     marginTop: 64,
     alignItems: 'center',
@@ -157,7 +152,7 @@ const styles = StyleSheet.create({
     paddingTop: 32,
   },
   footerBrand: { color: '#fff', fontSize: 14, fontWeight: '500', letterSpacing: -0.3 },
-  footerTagline: { color: RAMP.onBlueMuted, fontSize: 12, letterSpacing: 1 },
+  footerTagline: { color: RAMP.onBlueMuted, fontSize: 12, letterSpacing: 1, textAlign: 'center' },
   footerLinks: { flexDirection: 'row', gap: 24, marginTop: 8 },
   footerLink: {
     color: RAMP.onBlueMuted,

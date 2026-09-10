@@ -3,10 +3,10 @@ import { Platform, type LayoutChangeEvent, type ScrollView } from 'react-native'
 
 import { useReducedMotion } from '@/design/useReducedMotion';
 
-export type AnchorId = 'planner' | 'features' | 'focus' | 'waitlist';
+export type AnchorId = 'top' | 'capabilities' | 'boundary' | 'roadmap' | 'waitlist';
 
 /**
- * `href="#planner"` in RN.
+ * `href="#boundary"` in RN.
  *
  * There is no document to scroll to, so each section reports its own offset with
  * `onLayout` and the nav scrolls the root `ScrollView` there. On web the hash is

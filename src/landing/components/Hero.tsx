@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Icon } from '@/design/Icon';
@@ -9,57 +10,78 @@ import { HERO } from '../copy';
 import { RAMP } from '../ramp';
 
 /**
- * Lime dot + eyebrow, the two-line H1, the sub-paragraph, and the two hero CTAs —
- * ported from landing.html's `.max-w-2xl` block. The CTAs are inert in M1 (plan
- * §9 / §10 Q2 — their destinations are still the user's call); `onSecondary`
- * carries landing.html's `watchDemo` behaviour: scroll to the planner mock.
+ * Lime dot + eyebrow, the two-line H1 across the full width, then the body, CTAs
+ * and the three "zero" stats beside `aside` (the AgentLog card) on ≥1024, stacked
+ * below. The H1 spans the width so the long accent line holds to two lines on
+ * desktop rather than breaking word-by-word in a half column.
  */
-export function Hero({ onPrimary, onSecondary }: { onPrimary: () => void; onSecondary: () => void }) {
+export function Hero({
+  onPrimary,
+  onSecondary,
+  aside,
+}: {
+  onPrimary: () => void;
+  onSecondary: () => void;
+  aside?: ReactNode;
+}) {
   const { width } = useResponsive();
-  const h1 = width >= 1024 ? 60 : width >= 640 ? 48 : 36;
+  const wide = width >= 1024;
+  const h1 = width >= 1280 ? 64 : width >= 1024 ? 56 : width >= 640 ? 44 : 30;
+  const lh = Math.round(h1 * 1.05);
 
   return (
-    <View style={[styles.wrap, width >= 1024 ? { marginLeft: 56 } : null]}>
+    <View style={styles.wrap}>
       <View style={styles.eyebrow}>
         <View style={styles.dot} />
         <Txt style={styles.eyebrowTxt}>{HERO.eyebrow}</Txt>
       </View>
 
-      <Txt style={[styles.h1, { fontSize: h1, lineHeight: h1 }]}>
+      <Txt accessibilityRole="header" style={[styles.h1, { fontSize: h1, lineHeight: lh }]}>
         {HERO.headlineTop}
         {'\n'}
-        <Txt style={[styles.h1, { fontSize: h1, lineHeight: h1, color: C.lime }]}>{HERO.headlineAccent}</Txt>
+        <Txt style={[styles.h1, { fontSize: h1, lineHeight: lh, color: C.lime }]}>{HERO.headlineAccent}</Txt>
       </Txt>
 
-      <Txt style={styles.body}>{HERO.body}</Txt>
+      <View style={[styles.split, wide ? styles.splitWide : null]}>
+        <View style={[styles.copy, wide ? { flex: 1 } : null]}>
+          <Txt style={styles.body}>{HERO.body}</Txt>
 
-      <View style={styles.ctaRow}>
-        <Press
-          onPress={onPrimary}
-          accessibilityRole="button"
-          hoverTransform={{ translateY: -2 }}
-          style={styles.primary}>
-          <Icon name="magic" size={18} color={C.lime} />
-          <Txt style={styles.primaryTxt}>{HERO.primaryCta}</Txt>
-          <Txt style={styles.primaryArrow}>→</Txt>
-        </Press>
+          <View style={styles.ctaRow}>
+            <Press
+              onPress={onPrimary}
+              accessibilityRole="button"
+              hoverBg={C.limeHover}
+              hoverTransform={{ translateY: -2 }}
+              style={styles.primary}>
+              <Txt style={styles.primaryTxt}>{HERO.primaryCta}</Txt>
+              <Txt style={styles.primaryArrow}>→</Txt>
+            </Press>
 
-        <Press
-          onPress={onSecondary}
-          accessibilityRole="button"
-          hoverBg={w(0.15)}
-          style={styles.secondary}>
-          <Icon name="play-circle" size={18} color={RAMP.onBlue} />
-          <Txt style={styles.secondaryTxt}>{HERO.secondaryCta}</Txt>
-        </Press>
+            <Press onPress={onSecondary} accessibilityRole="button" hoverBg={w(0.15)} style={styles.secondary}>
+              <Icon name="shield" size={18} color={RAMP.onBlue} />
+              <Txt style={styles.secondaryTxt}>{HERO.secondaryCta}</Txt>
+            </Press>
+          </View>
+
+          <View style={styles.stats}>
+            {HERO.stats.map((s) => (
+              <View key={s.label} style={styles.stat}>
+                <Txt style={styles.statValue}>{s.value}</Txt>
+                <Txt style={styles.statLabel}>{s.label}</Txt>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {aside ? <View style={[styles.aside, wide ? { flex: 1.1 } : null]}>{aside}</View> : null}
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { maxWidth: 672, zIndex: 20 },
-  eyebrow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
+  wrap: { width: '100%', zIndex: 20 },
+  eyebrow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 24 },
   dot: {
     height: 8,
     width: 8,
@@ -71,39 +93,30 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 0 },
   },
-  eyebrowTxt: { color: C.lime, letterSpacing: 2, fontSize: 12 },
-  h1: {
-    maxWidth: 672,
-    fontWeight: '500',
-    letterSpacing: -0.5,
-    color: '#fff',
-  },
-  body: {
-    marginTop: 24,
-    maxWidth: 512,
-    fontSize: 14,
-    lineHeight: 22,
-    color: RAMP.onBlue,
-  },
-  ctaRow: { marginTop: 28, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12 },
+  eyebrowTxt: { flexShrink: 1, color: C.lime, letterSpacing: 2, fontSize: 12 },
+  h1: { maxWidth: 1120, fontWeight: '500', letterSpacing: -1, color: '#fff' },
+  split: { marginTop: 48, gap: 48 },
+  splitWide: { flexDirection: 'row', alignItems: 'flex-start', gap: 64 },
+  copy: { gap: 28 },
+  body: { maxWidth: 520, fontSize: 15, lineHeight: 24, color: RAMP.onBlue },
+  ctaRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12 },
   primary: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     borderRadius: 8,
-    backgroundColor: C.surface,
+    backgroundColor: C.lime,
     paddingHorizontal: 20,
-    minHeight: 44,
+    minHeight: 48,
     justifyContent: 'center',
-    // shadow-2xl
     shadowColor: '#000',
-    shadowOpacity: 0.5,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
     elevation: 8,
   },
-  primaryTxt: { color: '#fff', fontWeight: '500', fontSize: 12 },
-  primaryArrow: { color: w(0.3), fontSize: 12 },
+  primaryTxt: { color: C.surface, fontWeight: '600', fontSize: 12, letterSpacing: 1 },
+  primaryArrow: { color: C.surface, fontSize: 12 },
   secondary: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -113,9 +126,21 @@ const styles = StyleSheet.create({
     borderColor: w(0.2),
     backgroundColor: w(0.1),
     paddingHorizontal: 20,
-    minHeight: 44,
+    minHeight: 48,
     justifyContent: 'center',
     ...(CHROME_BLUR ?? {}),
   },
-  secondaryTxt: { color: RAMP.onBlue, fontSize: 12 },
+  secondaryTxt: { color: RAMP.onBlue, fontSize: 12, letterSpacing: 1 },
+  stats: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 24,
+    paddingTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: w(0.18),
+  },
+  stat: { minWidth: 120, flexShrink: 1, gap: 4 },
+  statValue: { color: C.lime, fontSize: 28, lineHeight: 32, fontWeight: '500', fontVariant: ['tabular-nums'] },
+  statLabel: { maxWidth: 160, color: RAMP.onBlue, fontSize: 10, lineHeight: 14, letterSpacing: 1.5 },
+  aside: { width: '100%' },
 });
