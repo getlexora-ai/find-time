@@ -221,3 +221,28 @@ web` green — `/` SSR still 87 KB, contains `German practice` / `Deep work` /
 
 **Not done**: not eyeballed in a browser this pass; no breakpoint sweep of the
 taller schedule column against the widgets; no replay control (plays once).
+
+## 9. Replaced by the 3D calendar landing (2026-09-11)
+
+**§1–§8 above describe the old RN landing, which is deleted.** `/` on web now
+renders `src/landing/dom/LandingPage.tsx` — the approved 3D artifact
+(week board · connectors orbit · privacy dome), ported on `calendar-landing`
+and copied here unchanged apart from real Privacy / Terms links in the form's
+consent line and the footer. Only the landing changed; `/app`, `/login`,
+`/privacy`, `/terms`, auth and the API are untouched.
+
+| Change | Files |
+|---|---|
+| New page (plain React DOM + three.js, CSS scoped under `.ft-landing`) | `src/landing/dom/**`, `three` in `package.json` |
+| `/` mounts it + the existing `CookieConsent` | `src/app/index.web.tsx` |
+| Waitlist: the page's email form → `joinWaitlist({ email, source: 'landing' })` → `POST /api/waitlist` → `waitlist-store` (Neon, in-memory fallback). Backend unchanged. | `index.web.tsx` |
+| `/waitlist` page removed (route, `Stack.Screen`, robots, sitemap) | `src/app/waitlist.tsx`, `WaitlistScreen.tsx`, `_layout.tsx`, `public/robots.txt`, `public/sitemap.xml` |
+| Old landing removed | `LandingScreen`, `Hero`, `LandingHeader`, `FeatureGrid`, `FloatingWidgets`, `DemoVideo`, `Mock*Card`, `Waitlist{Form,Section}`, `useAnchors`, `useDemoSequence`, `useDraggable`, `public/find-time-walkthrough-*` |
+| `copy.ts` cut to `META` (calendar wording) + `COOKIES`; the page keeps its copy inline | `src/landing/copy.ts` |
+
+Kept: `LegalScreen`, `legal-copy`, `ramp`, `CookieConsent`. The API still
+accepts `name` / `reason` (db/014) though nothing sends them now.
+
+**Known:** one lint warning (unused `active` in `engine/connectorsOrbit.js`,
+from the artifact). The page loads JetBrains Mono from Google Fonts for its 3D
+labels (artifact HANDOFF §5) — a third-party request on `/`.
