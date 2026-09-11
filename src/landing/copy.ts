@@ -19,7 +19,6 @@ export const META = {
 export const LANDING = {
   nav: [
     { label: 'HOW IT WORKS', section: 'how' },
-    { label: 'WHY', section: 'why' },
     { label: 'CONNECTORS', section: 'connectors' },
     { label: 'PRIVACY', section: 'privacy' },
   ],
@@ -40,7 +39,6 @@ export const LANDING = {
     hint: 'Pick a request and watch Find Time plan it on a sample week.',
     week: 'SAMPLE WEEK · SEP 14–18',
     askLabel: 'YOU ASK',
-    stepsLabel: 'WHAT FIND TIME DOES',
     resultLabel: 'RESULT',
     replay: '↻ REPLAY',
     legend: [
@@ -69,38 +67,6 @@ export const LANDING = {
         title: 'It lands on your calendar',
         body:
           'Focus time, goals and meetings go into time that’s actually free — never on top of an existing event. When something moves, ask again and it replans.',
-      },
-    ],
-  },
-
-  why: {
-    eyebrow: 'WHY FIND TIME',
-    title: 'Calendars store meetings. Nobody plans the rest.',
-    body:
-      'A week with more than one track — a job, a side project, training, a language — breaks the usual tools in the same four ways.',
-    head: { problem: 'WHAT GOES WRONG', fix: 'WHAT FIND TIME DOES' },
-    items: [
-      {
-        tag: 'THE CONTEXT DUMP',
-        problem:
-          'To get a useful plan from ChatGPT or Claude you first type out your meetings, deadlines and routine — slower than planning it yourself.',
-        fix: 'It already sees your calendar and the tools you connect, so one sentence is enough.',
-      },
-      {
-        tag: 'THE GOAL THAT SLIPS',
-        problem:
-          'Running, German, the side project: nothing on your calendar protects them, so they get pushed week after week.',
-        fix: 'Fits them into the gaps you really have, every week.',
-      },
-      {
-        tag: 'ONE CHANGE, THREE CLASHES',
-        problem: 'A call moves or runs over and the rest of the day no longer fits. Rigid time blocks break.',
-        fix: 'Replans the rest of the day in one pass.',
-      },
-      {
-        tag: 'THE BACK-AND-FORTH',
-        problem: 'Seven emails to agree on one meeting time.',
-        fix: 'Finds the hour everyone has free and sends one invite.',
       },
     ],
   },
@@ -162,46 +128,44 @@ export const LANDING = {
         required: false,
       },
     ],
-    never: {
-      title: '⊘ CAN’T BE CONNECTED — EVER',
-      items: ['WALLETS', 'CONTACTS', 'PASSWORDS', 'PAYMENT CARDS'],
-      body: 'Find Time has no connector for these, so there is no switch to turn on.',
-    },
   },
 
   privacy: {
     eyebrow: 'PRIVATE BY DESIGN',
-    title: 'No text leaves your ecosystem.',
+    title: 'Your data never leaves your ecosystem. Not even to us.',
     body:
-      'Find Time only moves information between your own tools and you. This is every place your data can go — and where it can’t.',
+      'Find Time works inside the tools you already use. Your events, emails and messages stay where they are — they are never copied out, not even to Find Time.',
     diagramLabel:
-      'Diagram: inside your ecosystem, your tools and Find Time exchange events and plans, and Find Time exchanges requests and plans with you. Ad networks, data brokers, model training and other companies are outside and blocked.',
+      'Diagram: inside your ecosystem, Find Time reads your tools in place, writes plans back to your calendar and shows the plan to you. Find Time’s own servers sit outside the boundary and receive none of your data.',
     inside: 'YOUR ECOSYSTEM',
-    outside: 'OUTSIDE · BLOCKED',
-    wall: 'NOTHING CROSSES',
+    wall: 'NOTHING LEAVES',
     tools: { name: 'YOUR TOOLS', sub: 'Calendar, email, Slack, tasks' },
-    core: { name: 'FIND TIME', sub: 'Plans with what your tools share' },
+    core: { name: 'FIND TIME', sub: 'Works inside your tools' },
     you: { name: 'YOU', sub: 'Ask in one sentence' },
-    toCore: 'Events, deadlines, requests',
+    toCore: 'Read in place',
     toTools: 'Plans and bookings',
     toYou: 'Your plan',
     fromYou: 'Your request',
-    blocked: ['AD NETWORKS', 'DATA BROKERS', 'MODEL TRAINING', 'OTHER COMPANIES'],
+    outside: {
+      tag: 'OUTSIDE YOUR ECOSYSTEM',
+      name: 'FIND TIME’S SERVERS',
+      sub: 'Receive none of your data. No copy of your calendar, emails or messages.',
+    },
     pledges: [
       {
         icon: 'line',
-        title: 'STAYS INSIDE',
-        body: 'Plans, bookings and invites move between your own tools and you. Nowhere else.',
+        title: 'STAYS IN YOUR TOOLS',
+        body: 'Your events, emails and messages stay where they already are. Find Time reads them in place.',
       },
       {
         icon: 'cross',
-        title: 'NEVER CROSSES',
-        body: 'No ad networks, data brokers, model training or other companies on the other side.',
+        title: 'NEVER SENT TO US',
+        body: 'Find Time’s servers never receive your data, so there is no copy of it on our side.',
       },
       {
-        icon: 'slash',
-        title: 'NEVER CONNECTED',
-        body: 'Wallets, contacts, passwords and payment cards can’t be switched on at all.',
+        icon: 'line',
+        title: 'PLANS GO BACK TO YOU',
+        body: 'What Find Time plans is written to your own calendar and shown to you. Nowhere else.',
       },
     ],
   },

@@ -24,7 +24,7 @@ type Props = {
 const FONT_HREF =
   'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap';
 
-const { hero, demo, how, why, connectors, privacy, waitlist } = LANDING;
+const { hero, demo, how, connectors, privacy, waitlist } = LANDING;
 
 export default function LandingPage({ onJoinWaitlist }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -124,10 +124,6 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
                 </div>
                 <p data-ft="ask-text" aria-live="polite" />
               </div>
-              <div className="steps-box">
-                <p className="k">{demo.stepsLabel}</p>
-                <ol className="steps" data-ft="steps" />
-              </div>
               <div className="result" data-ft="result">
                 <span className="ic">✓</span>
                 <span>
@@ -154,27 +150,6 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
           </ol>
         </section>
 
-        {/* ================= WHY ================= */}
-        <section className="sec" data-section="why">
-          <p className="eyebrow">{why.eyebrow}</p>
-          <h2>{why.title}</h2>
-          <p className="lede">{why.body}</p>
-          <div className="pains">
-            <div className="pains-head" aria-hidden="true">
-              <span />
-              <span>{why.head.problem}</span>
-              <span>{why.head.fix}</span>
-            </div>
-            {why.items.map((it) => (
-              <div className="pain" key={it.tag}>
-                <h3>{it.tag}</h3>
-                <p>{it.problem}</p>
-                <p className="fix">{it.fix}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
         {/* ================= CONNECTORS ================= */}
         <section className="sec" data-section="connectors">
           <p className="eyebrow">{connectors.eyebrow}</p>
@@ -193,17 +168,6 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
                 </li>
               ))}
             </ul>
-            <div className="sealed">
-              <h3>{connectors.never.title}</h3>
-              <ul className="sockets">
-                {connectors.never.items.map((name) => (
-                  <li className="socket" key={name}>
-                    <s>{name}</s>
-                  </li>
-                ))}
-              </ul>
-              <p>{connectors.never.body}</p>
-            </div>
           </div>
         </section>
 
@@ -245,12 +209,9 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
                 <span>{privacy.wall}</span>
               </div>
               <div className="eco-out">
-                <span className="eco-tag bad">{privacy.outside}</span>
-                <ul>
-                  {privacy.blocked.map((b) => (
-                    <li key={b}>{b}</li>
-                  ))}
-                </ul>
+                <span className="eco-tag bad">{privacy.outside.tag}</span>
+                <b>{privacy.outside.name}</b>
+                <span>{privacy.outside.sub}</span>
               </div>
             </figure>
 

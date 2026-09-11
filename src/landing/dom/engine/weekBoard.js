@@ -1171,8 +1171,7 @@ export function createWeekBoard(root) {
     usesEl = $("uses"),
     resEl = $("result"),
     resTxt = $("result-text"),
-    statusEl = $("status"),
-    stepsEl = $("steps");
+    statusEl = $("status");
   SCEN.forEach((s, i) => {
     const b = document.createElement("button");
     b.type = "button";
@@ -1208,18 +1207,6 @@ export function createWeekBoard(root) {
     );
     usesEl.innerHTML = s.uses.map((u) => `<span>${u}</span>`).join("");
     resTxt.textContent = s.done;
-    stepsEl.replaceChildren(
-      ...s.steps.map(([tool, text]) => {
-        const li = document.createElement("li");
-        const body = document.createElement("span");
-        const tag = document.createElement("small");
-        body.textContent = text;
-        tag.textContent = tool;
-        body.appendChild(tag);
-        li.appendChild(body);
-        return li;
-      }),
-    );
     lastStep = -9;
     lastTyped = -1;
     if (play && !ENV.reduce) {
@@ -1258,11 +1245,7 @@ export function createWeekBoard(root) {
       lastStep = step;
       const fin = t >= 4;
       resEl.classList.toggle("on", fin);
-      statusEl.textContent = fin ? "PLANNED" : "PLANNING…";
-      [...stepsEl.children].forEach((li, j) => {
-        li.className = fin || j < step ? "done" : j === step ? "now" : "";
-      });
-    }
+      statusEl.textContent = fin ? "PLANNED" : "PLANNING…";    }
   }
   setMode(0, false);
   track(
@@ -1320,7 +1303,6 @@ export function createWeekBoard(root) {
     tagsEl.replaceChildren();
     modesEl.replaceChildren();
     usesEl.replaceChildren();
-    stepsEl.replaceChildren();
     askEl.textContent = "";
   };
 }

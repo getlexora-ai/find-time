@@ -264,6 +264,14 @@ at." Content first, then animations.
 Left alone: `shared.js` still exports `panelGeo`, `glowSprite`, `pointsMat`,
 `projectTo`, now unused (only the deleted scenes used them).
 
-Open for the user: the privacy headline ("No text leaves your ecosystem") is
-the approved claim, but planning calls go to the Anthropic API — worth checking
-the wording against the zero-retention item in the agent roadmap before launch.
+**Follow-up (same day, user):** removed the hero's "What Find Time does" step
+list and the Why section. Privacy no longer lists blocked parties (ad networks,
+brokers, model training, other companies) or never-connected items (wallets,
+contacts, passwords, cards) — the connectors "can't be connected" strip went
+too. The one message is now: *your data never leaves your ecosystem, not even
+to Find Time*. Diagram: your tools ⇄ Find Time ⇄ you inside the boundary;
+"Find Time's servers" outside, receiving none of your data.
+
+Open for the user: that claim is ahead of the current build — `google/sync.ts`
+caches calendar events server-side and planning calls go to the Anthropic API
+(agent roadmap items 4 and 12). Ship the copy together with those, or soften it.
