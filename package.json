@@ -2,6 +2,9 @@
   "name": "find-time",
   "main": "expo-router/entry",
   "version": "0.1.0",
+  "engines": {
+    "node": ">=24.3.0"
+  },
   "dependencies": {
     "@clerk/backend": "^3.17.1",
     "@clerk/clerk-expo": "^2.20.0",
