@@ -1171,7 +1171,8 @@ export function createWeekBoard(root) {
     usesEl = $("uses"),
     resEl = $("result"),
     resTxt = $("result-text"),
-    statusEl = $("status");
+    statusEl = $("status"),
+    stepsEl = $("steps");
   SCEN.forEach((s, i) => {
     const b = document.createElement("button");
     b.type = "button";
@@ -1186,10 +1187,12 @@ export function createWeekBoard(root) {
   const STEP = 2.6,
     PRE = -0.5,
     END = 4.8;
+  // Plays once when first scrolled into view, then holds the finished plan.
+  // No auto-advance between examples: the visitor picks the next one.
   let mode = 0,
     t = 4,
     playing = false,
-    holdUntil = 0,
+    played = false,
     touched = false,
     visible = false,
     lastStep = -9,
@@ -1205,6 +1208,18 @@ export function createWeekBoard(root) {
     );
     usesEl.innerHTML = s.uses.map((u) => `<span>${u}</span>`).join("");
     resTxt.textContent = s.done;
+    stepsEl.replaceChildren(
+      ...s.steps.map(([tool, text]) => {
+        const li = document.createElement("li");
+        const body = document.createElement("span");
+        const tag = document.createElement("small");
+        body.textContent = text;
+        tag.textContent = tool;
+        body.appendChild(tag);
+        li.appendChild(body);
+        return li;
+      }),
+    );
     lastStep = -9;
     lastTyped = -1;
     if (play && !ENV.reduce) {
@@ -1214,7 +1229,6 @@ export function createWeekBoard(root) {
       t = END;
       playing = false;
     }
-    holdUntil = 0;
     need = true;
   }
   on($("replay"), "click", () => {
@@ -1245,13 +1259,16 @@ export function createWeekBoard(root) {
       const fin = t >= 4;
       resEl.classList.toggle("on", fin);
       statusEl.textContent = fin ? "PLANNED" : "PLANNING…";
+      [...stepsEl.children].forEach((li, j) => {
+        li.className = fin || j < step ? "done" : j === step ? "now" : "";
+      });
     }
   }
   setMode(0, false);
   track(
     onVisible(stage, (v) => {
       visible = v;
-      if (v && !ENV.reduce && !touched && t >= END && !holdUntil) {
+      if (v && !ENV.reduce && !touched && t >= END && !played) {
         setMode(mode, true);
       }
     }),
@@ -1273,10 +1290,8 @@ export function createWeekBoard(root) {
       if (t >= END) {
         t = END;
         playing = false;
-        holdUntil = now + 3600;
+        played = true;
       }
-    } else if (!touched && holdUntil && now > holdUntil && visible) {
-      setMode((mode + 1) % SCEN.length, true);
     }
     const want = SCEN[mode].cam(t),
       k = ENV.reduce || need ? 1 : 1 - Math.exp(-dt * 4.2);
@@ -1305,6 +1320,7 @@ export function createWeekBoard(root) {
     tagsEl.replaceChildren();
     modesEl.replaceChildren();
     usesEl.replaceChildren();
+    stepsEl.replaceChildren();
     askEl.textContent = "";
   };
 }

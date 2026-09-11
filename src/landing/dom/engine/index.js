@@ -1,10 +1,9 @@
 // Find Time landing — engine entry.
 // mountLanding(root) finds the [data-ft="…"] hooks rendered by LandingPage.tsx,
-// builds the three 3D scenes into them and returns a cleanup function.
+// builds the 3D week board (the page's one animation) into them and returns a
+// cleanup function.
 import { initEnv, glOK, FONT } from "./shared";
 import { createWeekBoard } from "./weekBoard";
-import { createConnectorsOrbit } from "./connectorsOrbit";
-import { createPrivacyDome } from "./privacyDome";
 
 export function mountLanding(root) {
   initEnv();
@@ -29,28 +28,20 @@ export function mountLanding(root) {
     .then(() => {
       if (dead) return;
       if (!glOK()) {
-        ["stage-plan", "stage-orbit", "stage-dome"].forEach((name) => {
-          const stage = root.querySelector(`[data-ft="${name}"]`);
-          if (!stage) return;
-          const note = document.createElement("div");
-          note.className = "nogl";
-          note.textContent =
-            "THE 3D PREVIEW NEEDS WEBGL — TRY A BROWSER WITH HARDWARE ACCELERATION ON.";
-          stage.appendChild(note);
-          disposers.push(() => note.remove());
-        });
+        const stage = root.querySelector('[data-ft="stage-plan"]');
+        if (!stage) return;
+        const note = document.createElement("div");
+        note.className = "nogl";
+        note.textContent =
+          "THE 3D PREVIEW NEEDS WEBGL — TRY A BROWSER WITH HARDWARE ACCELERATION ON.";
+        stage.appendChild(note);
+        disposers.push(() => note.remove());
         return;
       }
-      for (const create of [
-        createWeekBoard,
-        createConnectorsOrbit,
-        createPrivacyDome,
-      ]) {
-        try {
-          disposers.push(create(root));
-        } catch (err) {
-          console.error("[find-time landing] scene failed to start", err);
-        }
+      try {
+        disposers.push(createWeekBoard(root));
+      } catch (err) {
+        console.error("[find-time landing] week board failed to start", err);
       }
     });
 

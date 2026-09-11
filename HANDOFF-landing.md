@@ -243,6 +243,27 @@ consent line and the footer. Only the landing changed; `/app`, `/login`,
 Kept: `LegalScreen`, `legal-copy`, `ramp`, `CookieConsent`. The API still
 accepts `name` / `reason` (db/014) though nothing sends them now.
 
-**Known:** one lint warning (unused `active` in `engine/connectorsOrbit.js`,
-from the artifact). The page loads JetBrains Mono from Google Fonts for its 3D
-labels (artifact HANDOFF §5) — a third-party request on `/`.
+**Known:** The page loads JetBrains Mono from Google Fonts for its 3D labels
+(artifact HANDOFF §5) — a third-party request on `/`.
+
+## 10. Clarity pass — one animation, plain content (2026-09-11)
+
+User feedback on §9: "I couldn't read anything that tells me what I'm looking
+at." Content first, then animations.
+
+| Change | Where |
+|---|---|
+| All page copy moved into `LANDING` (review/edit here); the 4 worked examples stay next to their animation in `weekBoard.js` | `src/landing/copy.ts` |
+| Hero says what the product is (eyebrow `AI CALENDAR PLANNER`, h1, lede). Marquee removed. | `LandingPage.tsx` |
+| Week board = the only animation. Now labelled `EXAMPLE`, has a colour legend, and a visible numbered step list (the `steps` data existed but was never rendered) that ticks through as it plays. Plays once on first view; no more auto-advancing between examples. | `weekBoard.js`, `LandingPage.tsx` |
+| New static sections: **How it works** (3 steps), **Why** (problem → what Find Time does, wording from `calendar-landing`'s PROBLEM) | `LandingPage.tsx` |
+| Connectors orbit → static cards (name, apps, what it's used for, REQUIRED/OPTIONAL) + "can't be connected" strip. Fake switches removed. | `connectorsOrbit.js` deleted |
+| Privacy dome → static labelled diagram (your tools ⇄ Find Time ⇄ you inside the boundary; ad networks / brokers / training / other companies outside, blocked) + the 3 pledges | `privacyDome.js` deleted |
+| Readability: sentence-case headings, body copy in system sans at 15–18px, muted text raised to .84/.64 alpha | `landing.css` |
+
+Left alone: `shared.js` still exports `panelGeo`, `glowSprite`, `pointsMat`,
+`projectTo`, now unused (only the deleted scenes used them).
+
+Open for the user: the privacy headline ("No text leaves your ecosystem") is
+the approved claim, but planning calls go to the Anthropic API — worth checking
+the wording against the zero-retention item in the agent roadmap before launch.
