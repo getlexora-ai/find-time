@@ -306,3 +306,31 @@ Connections screen is labelled a preview.
 green, SSR contains every new headline and no payment copy. Viewed in Chrome at
 1440 and 400 via `expo serve`: all sections, the switch toggles and the tab
 replay; no console errors.
+
+## 11. Calendar-planning variant (branch `calendar-landing`, 2026-09-11)
+
+Branched from `agent-landing` at `94f7f44`. The user is keeping calendar
+planning and scheduling as the product's lead, because that is the pain being
+sold; the agent's connectors and the privacy diagram stay as support. Same
+design language, same "show, don't explain" rule as §10.
+
+**Page order:** hero + a week getting planned → the problem (four pictures) →
+how it plans (calendar flowcharts + walkthrough video) → connectors → ecosystem
+diagram → waitlist.
+
+| Section | File | What |
+|---|---|---|
+| Hero aside | `components/WeekBoard.tsx` | New. MON–FRI, 08–18, 15 grey meetings and the ask "Plan my week…". At rest (SSR) it's the unplanned week; first `onLayout` holds 1.1s then pops in 6 lime blocks (2 focus, 3 German, 1:1 booked) and the footer flips `15 MEETINGS · 0H FOCUS` → `4.5H FOCUS · … · 0 CONFLICTS`. Replay button in the header. Blocks sit at % offsets in flex day columns, so it scales to any width. Reduced motion → snaps to planned. |
+| The problem | `components/PainPoints.tsx` | New. 4 cards, 2×2 ≥900: email back-and-forth thread, a packed day bar with only 15-minute gaps, a goal pushed three weeks running, one moved call → three clashes. Each ends on one lime "FIND TIME" line. |
+| How it plans | `components/Workflows.tsx` (copy only) | Tabs now PLAN MY WEEK / BOOK A MEETING / RESCHEDULE / INBOX → CALENDAR. |
+| Connectors | `components/Connectors.tsx` (copy only) | Calendar first; capability lines reworded around scheduling; tasks on at rest (4 of 8). |
+| Copy | `copy.ts` | META / MARQUEE / HEADER / HERO / TELEMETRY / FOOTER rewritten; WEEK + PROBLEM added; WAITLIST title "GET YOUR WEEK BACK." |
+| Anchors | `useAnchors.ts` | `top · problem · workflows · connectors · privacy · waitlist`. |
+
+**Unmounted:** `ConnectorHub` (hero aside on `agent-landing`), kept in the tree
+with its `HUB` copy.
+
+**Claims:** the hero stats are "01 sentence", "00 double bookings", "00 words
+leave your ecosystem". "Double bookings" is a design goal — `findFreeSlots`
+only places into free time — not a measured number. The same §10 caveat on
+"no text leaves" applies.

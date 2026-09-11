@@ -3,7 +3,7 @@ import { Platform, type LayoutChangeEvent, type ScrollView } from 'react-native'
 
 import { useReducedMotion } from '@/design/useReducedMotion';
 
-export type AnchorId = 'top' | 'connectors' | 'workflows' | 'privacy' | 'waitlist';
+export type AnchorId = 'top' | 'problem' | 'workflows' | 'connectors' | 'privacy' | 'waitlist';
 
 /**
  * `href="#connectors"` in RN.

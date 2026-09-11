@@ -11,7 +11,7 @@ import { RAMP } from '../ramp';
 
 /**
  * Lime dot + eyebrow, the two-line H1 across the full width, then the body, CTAs
- * and the three stats beside `aside` (the ConnectorHub diagram) on ≥1024, stacked
+ * and the three stats beside `aside` (the WeekBoard diagram) on ≥1024, stacked
  * below. The H1 spans the width so the long accent line holds to two lines on
  * desktop rather than breaking word-by-word in a half column.
  */
@@ -58,7 +58,7 @@ export function Hero({
             </Press>
 
             <Press onPress={onSecondary} accessibilityRole="button" hoverBg={w(0.15)} style={styles.secondary}>
-              <Icon name="transfer" size={18} color={RAMP.onBlue} />
+              <Icon name="play-circle" size={18} color={RAMP.onBlue} />
               <Txt style={styles.secondaryTxt}>{HERO.secondaryCta}</Txt>
             </Press>
           </View>

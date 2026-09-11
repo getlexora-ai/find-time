@@ -12,24 +12,27 @@ import { useResponsive } from '@/design/useResponsive';
 import { FOOTER, MARQUEE, TELEMETRY } from './copy';
 import { RAMP } from './ramp';
 import { type AnchorId, useAnchors } from './useAnchors';
-import { ConnectorHub } from './components/ConnectorHub';
 import { Connectors } from './components/Connectors';
 import { CookieConsent } from './components/CookieConsent';
 import { Ecosystem } from './components/Ecosystem';
 import { Hero } from './components/Hero';
 import { LandingHeader } from './components/LandingHeader';
+import { PainPoints } from './components/PainPoints';
 import { WaitlistSection } from './components/WaitlistSection';
+import { WeekBoard } from './components/WeekBoard';
 import { Workflows } from './components/Workflows';
 
 /**
- * Composition root for the web landing page, positioned as a productivity agent
- * (HANDOFF-landing.md §10). Pinned to the `electric` ground; `Frame` and
- * `Marquee` sit outside the `ScrollView` as static siblings.
+ * Composition root for the web landing page, positioned as an AI calendar
+ * planner with the agent's connectors behind it (HANDOFF-landing.md §11). Pinned
+ * to the `electric` ground; `Frame` and `Marquee` sit outside the `ScrollView` as
+ * static siblings.
  *
- * The page shows, it doesn't explain: hero + connector hub → the Connections
- * screen → flowcharts of what it does (with the live walkthrough video) → the
- * ecosystem diagram → waitlist. The landing.html mocks (MockPlannerCard /
- * MockPhoneCard / FloatingWidgets / useDemoSequence) stay in the tree, unmounted.
+ * The page shows, it doesn't explain: hero + a week getting planned → the pain,
+ * as four small pictures → flowcharts of calendar jobs (with the live walkthrough
+ * video) → the Connections screen → the ecosystem diagram → waitlist.
+ * ConnectorHub and the landing.html mocks (MockPlannerCard / MockPhoneCard /
+ * FloatingWidgets / useDemoSequence) stay in the tree, unmounted.
  */
 export function LandingScreen() {
   return (
@@ -64,7 +67,7 @@ function Body() {
         <LandingHeader onNav={scrollTo} onCta={toWaitlist} />
 
         <View onLayout={register('top')} style={[styles.section, { paddingTop: isDesktop ? 64 : 40 }]}>
-          <Hero onPrimary={toWaitlist} onSecondary={() => scrollTo('connectors')} aside={<ConnectorHub />} />
+          <Hero onPrimary={toWaitlist} onSecondary={() => scrollTo('workflows')} aside={<WeekBoard />} />
 
           {is2xl && (
             <View style={styles.telemetry} pointerEvents="none">
@@ -77,12 +80,16 @@ function Body() {
           )}
         </View>
 
-        <View {...section('connectors')}>
-          <Connectors />
+        <View {...section('problem')}>
+          <PainPoints />
         </View>
 
         <View {...section('workflows')}>
           <Workflows />
+        </View>
+
+        <View {...section('connectors')}>
+          <Connectors />
         </View>
 
         <View {...section('privacy')}>
