@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 
-import { addMonths, iso, MO, sameDay } from '../cal-date';
+import { addMonths, iso, MO, sameDay, today } from '../cal-date';
 import { Icon } from '../Icon';
 import { monthCells } from '../layout';
-import { TODAY } from '../seed';
 import { useCalTheme } from '../theme-context';
 import { C, R, w } from '../tokens';
 import type { CalEvent } from '../types';
@@ -62,7 +61,7 @@ export function PickerSheet({
           <View style={styles.grid}>
             {monthCells(pc).map((d) => {
               const other = d.getMonth() !== pc.getMonth();
-              const isToday = sameDay(d, TODAY);
+              const isToday = sameDay(d, today());
               const sel = sameDay(d, selected);
               return (
                 <Press

@@ -26,6 +26,13 @@ export type FindSpec = {
   /** minutes kept clear between two newly-placed blocks (a new block may still
    *  butt right up against an existing calendar event — that is normal) */
   bufferMin: number;
+  /** Most blocks to put on any single day. Undefined = no limit, which packs
+   *  the earliest day to capacity before moving on. The route passes 1 for a
+   *  multi-block request so "three review slots this week" spreads Mon/Tue/Wed
+   *  instead of stacking all three on Monday morning. */
+  maxPerDay?: number;
+  /** Skip Saturday and Sunday (UTC weekday, matching the wall-clock convention). */
+  skipWeekends?: boolean;
 };
 
 const MIN = 60_000;
@@ -64,19 +71,27 @@ export function findFreeSlots(busy: Busy[], spec: FindSpec): Slot[] {
     blocked.some((b) => s < b.e && e > b.s) ||
     placedIntervals.some((b) => s < b.e && e > b.s);
 
+  const perDay = spec.maxPerDay && spec.maxPerDay > 0 ? spec.maxPerDay : Infinity;
+
   for (let day = dayStart(earliest); day <= latest && placed.length < count; day += DAY) {
+    if (spec.skipWeekends) {
+      const dow = new Date(day).getUTCDay();
+      if (dow === 0 || dow === 6) continue;
+    }
     const windowStart = Math.max(earliest, day + spec.dayStartHour * 60 * MIN);
     const windowEnd = Math.min(latest, day + spec.dayEndHour * 60 * MIN);
     // Align the first candidate to the 15-minute grid.
     let c = Math.ceil(windowStart / stepMs) * stepMs;
+    let placedToday = 0;
 
-    while (c + durMs <= windowEnd && placed.length < count) {
+    while (c + durMs <= windowEnd && placed.length < count && placedToday < perDay) {
       if (hitsBlocked(c, c + durMs)) {
         c += stepMs;
         continue;
       }
       placed.push({ startISO: iso(c), endISO: iso(c + durMs) });
       placedIntervals.push({ s: c, e: c + durMs + bufMs });
+      placedToday++;
       c += durMs + bufMs;
     }
   }

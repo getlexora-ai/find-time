@@ -2,9 +2,8 @@ import { useEffect, useRef } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { byDate } from '../cal-store';
-import { iso, pad, sameDay } from '../cal-date';
+import { fromMin, iso, nowMin, pad, sameDay, today } from '../cal-date';
 import { BODY_H, gutterHours, laidOut, minToY } from '../layout';
-import { NOW_MIN, TODAY } from '../seed';
 import type { CalActions } from '../state';
 import { useCalTheme } from '../theme-context';
 import { C, ROW, w } from '../tokens';
@@ -52,7 +51,7 @@ export function TimeGrid({
 
       {days.map((d) => {
         const laid = laidOut(byDate(events, iso(d)));
-        const isToday = sameDay(d, TODAY);
+        const isToday = sameDay(d, today());
         return (
           <View key={iso(d)} style={[styles.col, { backgroundColor: theme.panel }]}>
             <HourLines />
@@ -60,12 +59,12 @@ export function TimeGrid({
               <EventBlock key={it.ev.id} it={it} onPress={(a) => actions.openEvent(it.ev.id, a)} />
             ))}
             {isToday && (
-              <View pointerEvents="none" style={[styles.nowLine, { top: minToY(NOW_MIN) }]}>
+              <View pointerEvents="none" style={[styles.nowLine, { top: minToY(nowMin()) }]}>
                 <View style={styles.nowBar} />
                 <View style={styles.nowDot} />
                 {showNowChip && (
                   <View style={styles.nowChip}>
-                    <Txt style={styles.nowChipTxt}>14:22</Txt>
+                    <Txt style={styles.nowChipTxt}>{fromMin(nowMin())}</Txt>
                   </View>
                 )}
               </View>

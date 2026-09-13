@@ -18,7 +18,7 @@ import {
  * Find Time do not push back (yet).
  */
 export function GoogleCalendars() {
-  const { loading, accounts, syncing } = useAccounts();
+  const { loading, accounts, syncing, error } = useAccounts();
   const toast = useToast();
   const isWeb = Platform.OS === 'web';
   // Key the connect CTA off "no Google account connected", not "no session" —
@@ -41,6 +41,11 @@ export function GoogleCalendars() {
           </Press>
         )}
       </View>
+
+      {/* The store sets this when /api/auth/google/start fails. Nothing rendered
+          it before, so a 503 for missing GOOGLE_* / SESSION_SECRET looked like
+          the Connect button simply doing nothing. */}
+      {!!error && <Txt style={styles.error}>{error}</Txt>}
 
       {loading ? (
         <Txt style={styles.muted}>Loading…</Txt>
@@ -138,6 +143,7 @@ const styles = StyleSheet.create({
   title: { color: w(0.4), fontSize: 12, textTransform: 'uppercase', letterSpacing: 1.2 },
   iconBtn: { borderRadius: R.md, padding: 6 },
   muted: { color: w(0.4), fontSize: 12, paddingHorizontal: 8 },
+  error: { color: C.orange, fontSize: 12, lineHeight: 16, paddingHorizontal: 8, marginBottom: 8 },
   connect: {
     flexDirection: 'row',
     alignItems: 'center',

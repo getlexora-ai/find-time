@@ -1,10 +1,9 @@
 import { StyleSheet, View } from 'react-native';
 
 import { byDate } from '../cal-store';
-import { iso, isoWeek, sameDay, WD } from '../cal-date';
+import { iso, isoWeek, sameDay, today, WD } from '../cal-date';
 import { Icon } from '../Icon';
 import { monthCells } from '../layout';
-import { TODAY } from '../seed';
 import type { CalActions, CalState } from '../state';
 import { useCalTheme } from '../theme-context';
 import { CATS, C, R, w } from '../tokens';
@@ -62,7 +61,7 @@ function DesktopMonth({ state, actions, events }: { state: CalState; actions: Ca
             </View>
             {week.map((d) => {
               const list = byDate(events, iso(d));
-              const isToday = sameDay(d, TODAY);
+              const isToday = sameDay(d, today());
               const other = d.getMonth() !== mo;
               const shown = list.slice(0, 3);
               const rest = list.length - shown.length;
@@ -135,7 +134,7 @@ function MobileMonth({ state, actions, events }: { state: CalState; actions: Cal
           <View style={styles.mCells}>
             {cells.map((d) => {
               const list = byDate(events, iso(d));
-              const isToday = sameDay(d, TODAY);
+              const isToday = sameDay(d, today());
               const sel = sameDay(d, state.selected);
               const other = d.getMonth() !== mo;
               const dots = list.slice(0, 3);

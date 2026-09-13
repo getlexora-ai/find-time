@@ -40,7 +40,7 @@ export function AiPanel({
 }: {
   prefill?: string;
   onClose: () => void;
-  onApplied: (firstISO?: string, count?: number) => void;
+  onApplied: (firstISO?: string, count?: number, asked?: number) => void;
   toast: (m: string) => void;
 }) {
   const { theme } = useCalTheme();
@@ -214,9 +214,13 @@ export function AiPanel({
                     <>
                       <Press
                         onPress={() => {
-                          const n = applyProposals(result.proposals);
-                          onApplied(result.proposals[0]?.startISO, n);
+                          // Report what actually persisted, not what we asked for.
+                          const first = result.proposals[0]?.startISO;
+                          const asked = result.proposals.length;
                           onClose();
+                          void applyProposals(result.proposals).then((n) =>
+                            onApplied(first, n, asked),
+                          );
                         }}
                         hoverBg={C.limeHover}
                         style={styles.applyBtn}>

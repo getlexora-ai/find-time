@@ -23,6 +23,9 @@ export const LANDING = {
     { label: 'PRIVACY', section: 'privacy' },
   ],
   headerCta: 'JOIN WAITLIST ↗',
+  /** Beta testers already have an account — without this the only way in was a
+   *  hand-sent /login link. The waitlist stays the primary CTA. */
+  signIn: 'SIGN IN',
 
   hero: {
     eyebrow: 'AI CALENDAR PLANNER · PRIVATE BETA',

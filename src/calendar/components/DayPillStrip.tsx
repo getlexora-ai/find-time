@@ -1,8 +1,7 @@
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { byDate } from '../cal-store';
-import { addDays, iso, isoWeek, MO, sameDay, WD, wdIndex } from '../cal-date';
-import { TODAY } from '../seed';
+import { addDays, iso, isoWeek, MO, sameDay, today, WD, wdIndex } from '../cal-date';
 import { useCalTheme } from '../theme-context';
 import { CATS, C, R, w } from '../tokens';
 import type { CalEvent } from '../types';
@@ -33,7 +32,7 @@ export function DayPillStrip({
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.strip}>
         {days.map((d) => {
-          const isToday = sameDay(d, TODAY);
+          const isToday = sameDay(d, today());
           const sel = sameDay(d, selected);
           const list = byDate(events, iso(d));
           const n = list.length;

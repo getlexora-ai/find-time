@@ -1,9 +1,8 @@
 import { StyleSheet, View } from 'react-native';
 
-import { byDate } from '../cal-store';
-import { fromMin, iso, MO, sameDay, toMin, wdIndex, WD_LONG } from '../cal-date';
+import { acceptEvent, byDate } from '../cal-store';
+import { fromMin, iso, MO, sameDay, today, toMin, wdIndex, WD_LONG } from '../cal-date';
 import { Icon } from '../Icon';
-import { TODAY } from '../seed';
 import type { CalActions } from '../state';
 import { useCalTheme } from '../theme-context';
 import { CATS, C, DAY_END, DAY_START, durLabel, R, rgba, w } from '../tokens';
@@ -42,7 +41,7 @@ export function Agenda({
   const { isPhone } = useResponsive();
   const gutter = isPhone ? 52 : 72;
   const list = byDate(events, iso(date));
-  const isToday = sameDay(date, TODAY);
+  const isToday = sameDay(date, today());
   const planned = list
     .filter((e) => e.kind !== 'break' && e.kind !== 'ai')
     .reduce((s, e) => s + toMin(e.end) - toMin(e.start), 0);
@@ -127,7 +126,15 @@ export function Agenda({
     prevEnd = Math.max(prevEnd ?? 0, toMin(ev.end));
     rows.push(
       <Row key={ev.id} left={ev.start} gutter={gutter} compact={compact}>
-        <AgendaCard ev={ev} compact={compact} onPress={() => actions.openEvent(ev.id)} />
+        <AgendaCard
+          ev={ev}
+          compact={compact}
+          onPress={() => actions.openEvent(ev.id)}
+          onAccept={() => {
+            acceptEvent(ev.id);
+            actions.toast('Block accepted');
+          }}
+        />
       </Row>,
     );
   });
@@ -167,7 +174,19 @@ function Row({
   );
 }
 
-function AgendaCard({ ev, compact, onPress }: { ev: CalEvent; compact?: boolean; onPress: () => void }) {
+function AgendaCard({
+  ev,
+  compact,
+  onPress,
+  onAccept,
+}: {
+  ev: CalEvent;
+  compact?: boolean;
+  onPress: () => void;
+  /** Accepts an AI-proposed block. The "Accept" pill used to be a plain View
+   *  inside the card's Press, so it just opened the detail popover. */
+  onAccept: () => void;
+}) {
   if (ev.kind === 'break') {
     if (compact) {
       return (
@@ -208,9 +227,9 @@ function AgendaCard({ ev, compact, onPress }: { ev: CalEvent; compact?: boolean;
               {ev.start}–{ev.end}
             </Txt>
           </View>
-          <View style={styles.acceptPill}>
+          <Press onPress={onAccept} hoverBg={C.limeHover} style={styles.acceptPill}>
             <Txt style={styles.acceptTxt}>Accept</Txt>
-          </View>
+          </Press>
         </Press>
       );
     }
@@ -225,9 +244,9 @@ function AgendaCard({ ev, compact, onPress }: { ev: CalEvent; compact?: boolean;
             {ev.start}–{ev.end} · your strongest open window
           </Txt>
         </View>
-        <View style={styles.acceptPill}>
+        <Press onPress={onAccept} hoverBg={C.limeHover} style={styles.acceptPill}>
           <Txt style={styles.acceptTxt}>Accept</Txt>
-        </View>
+        </Press>
       </Press>
     );
   }

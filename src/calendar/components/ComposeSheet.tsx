@@ -2,9 +2,8 @@ import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { allEvents, byDate, createEvent, deleteEvent, updateEvent } from '../cal-store';
-import { fromMin, iso, toMin } from '../cal-date';
+import { fromMin, iso, toMin, today } from '../cal-date';
 import { Icon } from '../Icon';
-import { TODAY } from '../seed';
 import { useCalTheme } from '../theme-context';
 import { CATS, CAT_KEYS, type CatKey, C, R, w } from '../tokens';
 import { MONO, Press, Txt } from '../ui';
@@ -18,13 +17,13 @@ const DURATIONS = [
   { v: 120, label: '120 min' },
   { v: 180, label: '3 hours' },
 ];
-const REPEATS = ['Does not repeat', 'Every weekday', 'Weekly on this day', 'Every 2 weeks'];
 const PROJECTS = ['Mobile launch', 'Website v2', 'User research', 'No project'];
 
 export function ComposeSheet({
   composeId,
   defaultDate,
   defaultStart,
+  autoPlace,
   onClose,
   onSaved,
   toast,
@@ -32,6 +31,8 @@ export function ComposeSheet({
   composeId: number | null;
   defaultDate: string;
   defaultStart: string;
+  /** Open with "Let AI place it" already on — how Reschedule moves a block. */
+  autoPlace?: boolean;
   onClose: () => void;
   onSaved: (dateIso: string) => void;
   toast: (m: string) => void;
@@ -46,10 +47,9 @@ export function ComposeSheet({
   const [date, setDate] = useState(editing?.date ?? defaultDate);
   const [start, setStart] = useState(editing?.start ?? defaultStart);
   const [dur, setDur] = useState(editing ? toMin(editing.end) - toMin(editing.start) : 60);
-  const [repeat, setRepeat] = useState(0);
   const [cat, setCat] = useState<CatKey>(editing?.cat ?? 'deep');
   const [project, setProject] = useState(editing?.project || 'No project');
-  const [ai, setAi] = useState(!editing);
+  const [ai, setAi] = useState(autoPlace ?? !editing);
   const [notes, setNotes] = useState(editing?.notes ?? '');
 
   function save() {
@@ -58,11 +58,16 @@ export function ComposeSheet({
       toast('Give the block a name');
       return;
     }
-    const d = date || iso(TODAY);
+    const d = date || iso(today());
     let s = start || '09:00';
     let placed = false;
-    if (ai && !composeId) {
-      const taken = byDate(allEvents(), d).map((e) => [toMin(e.start), toMin(e.end)] as const);
+    // Also runs when editing, which is what makes "Reschedule" a real move.
+    if (ai) {
+      // Exclude the block being edited — otherwise it collides with where it
+      // already is and the placer skips its own slot.
+      const taken = byDate(allEvents(), d)
+        .filter((e) => e.id !== composeId)
+        .map((e) => [toMin(e.start), toMin(e.end)] as const);
       for (let m = 8 * 60; m + dur <= 18 * 60; m += 15) {
         if (!taken.some(([a, b]) => m < b && m + dur > a)) {
           s = fromMin(m);
@@ -82,7 +87,7 @@ export function ComposeSheet({
         project: proj,
         notes: notes.trim(),
       });
-      toast('Event updated');
+      toast(placed ? `Moved to ${s}. No conflicts.` : 'Event updated');
     } else {
       createEvent({ date: d, start: s, end: fromMin(toMin(s) + dur), title: t, cat, project: proj, notes: notes.trim() });
       toast(placed ? `Time found at ${s}. No conflicts.` : `Added at ${s}`);
@@ -141,13 +146,9 @@ export function ComposeSheet({
               />
             </Field>
 
-            <Field label="Repeats">
-              <ChipRow
-                options={REPEATS.map((r, i) => ({ key: String(i), label: r }))}
-                value={String(repeat)}
-                onChange={(k) => setRepeat(Number(k))}
-              />
-            </Field>
+            {/* "Repeats" lived here with Every weekday / Weekly / Every 2 weeks.
+                Nothing read the value — save() never looked at it — so the chips
+                were decorative. Removed until recurrence is actually stored. */}
 
             <Field label="Category">
               <View style={styles.chips}>

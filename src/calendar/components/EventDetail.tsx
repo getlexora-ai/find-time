@@ -1,6 +1,6 @@
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-import { deleteEvent, toggleProtected } from '../cal-store';
+import { acceptEvent, deleteEvent, toggleProtected } from '../cal-store';
 import { fromIso, MO, toMin, wdIndex, WD_LONG } from '../cal-date';
 import { Icon } from '../Icon';
 import type { CalActions, PointAnchor } from '../state';
@@ -81,7 +81,11 @@ export function EventDetail({
           </Line>
           {!!ev.project && <Line icon="folder">{ev.project}</Line>}
           <Line icon="bolt">
-            {toMin(ev.start) < 12 * 60 ? 'Placed in your morning energy peak' : 'Placed after the midday dip'}
+            {ev.kind === 'focus'
+              ? 'Protected — Find time will not move this'
+              : ev.kind === 'ai'
+                ? 'Proposed by Find time — not accepted yet'
+                : 'Flexible — Find time may move this'}
           </Line>
           {!!ev.notes && (
             <View style={styles.notes}>
@@ -94,9 +98,26 @@ export function EventDetail({
           <View style={styles.conflictBox}>
             <Icon name="triangle" size={16} color={C.orange} />
             <Txt style={styles.conflictTxt}>
-              Overlaps another block for 30 minutes. Find time can move whichever is flexible.
+              Overlaps another block on this day. Reschedule whichever one is flexible.
             </Txt>
           </View>
+        )}
+
+        {/* The grid/agenda label an AI block "tap to accept"; this is where that
+            actually happens. Accepting persists origin 'manual', so it stops
+            rendering as a dashed proposal after a reload. */}
+        {ev.kind === 'ai' && (
+          <Press
+            onPress={() => {
+              acceptEvent(ev.id);
+              onClose();
+              toast('Block accepted');
+            }}
+            hoverBg={C.limeHover}
+            style={styles.acceptBtn}>
+            <Icon name="check" size={16} color={C.surface} />
+            <Txt style={styles.acceptBtnTxt}>Accept this block</Txt>
+          </Press>
         )}
 
         <View style={styles.actionsGrid}>
@@ -110,10 +131,14 @@ export function EventDetail({
             <Icon name="pen" size={16} color={w(0.75)} />
             <Txt style={styles.ghostTxt}>Edit</Txt>
           </Press>
+          {/* Opens the compose sheet on THIS block, where "Let AI place it"
+              moves it to the next free slot on the day. It used to open the AI
+              panel with a prefill, which created a SECOND block and left the
+              original exactly where it was. */}
           <Press
             onPress={() => {
               onClose();
-              actions.openAI(`Find a better slot for "${ev.title}" this week`);
+              actions.openCompose(ev.id, undefined, undefined, true);
             }}
             hoverBg={C.limeHover}
             style={styles.limeBtn}>
@@ -220,6 +245,17 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   conflictTxt: { flex: 1, color: w(0.7), fontSize: 12, lineHeight: 16 },
+  acceptBtn: {
+    marginTop: 20,
+    height: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: R.lg,
+    backgroundColor: C.lime,
+  },
+  acceptBtnTxt: { color: C.surface, fontSize: 12, fontWeight: '500' },
   actionsGrid: { marginTop: 20, flexDirection: 'row', gap: 8 },
   ghostBtn: {
     flex: 1,

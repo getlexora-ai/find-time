@@ -1,8 +1,9 @@
 import { ScrollView, StyleSheet, View } from 'react-native';
 
+import { toMin } from '../cal-date';
 import { Icon, type IconName } from '../Icon';
 import { Logo } from '@/design/Logo';
-import { CATS, CAT_KEYS, C, R, w } from '../tokens';
+import { CATS, CAT_KEYS, C, durLabel, R, w } from '../tokens';
 import type { CalEvent } from '../types';
 import { AccountButton } from './AccountButton';
 import { GoogleCalendars } from './GoogleCalendars';
@@ -11,11 +12,10 @@ import { useCalTheme } from '../theme-context';
 import { Press, Txt } from '../ui';
 import { useToast } from './Toast';
 
+/** Today / Projects / AI sessions used to sit here as toast-only stubs carrying
+ *  hardcoded counts ("04", "03"). Calendar is the only screen that exists. */
 const NAV: { label: string; icon: IconName; badge?: string; dot?: boolean; active?: boolean }[] = [
-  { label: 'Today', icon: 'sun', badge: '04' },
-  { label: 'Projects', icon: 'folder', badge: '03' },
   { label: 'Calendar', icon: 'calendar', active: true },
-  { label: 'AI sessions', icon: 'magic', dot: true },
 ];
 
 export function Sidebar({
@@ -29,6 +29,14 @@ export function Sidebar({
 }) {
   const { theme } = useCalTheme();
   const toast = useToast();
+
+  // Was hardcoded: "11h", "+2h 30m", a 72%-wide bar and "72% of this week's
+  // deep work is booked" — none of it derived from the calendar.
+  const bookedMin = events.reduce((s, e) => s + toMin(e.end) - toMin(e.start), 0);
+  const protectedMin = events
+    .filter((e) => e.kind === 'focus')
+    .reduce((s, e) => s + toMin(e.end) - toMin(e.start), 0);
+  const focusPct = bookedMin ? Math.round((protectedMin / bookedMin) * 100) : 0;
 
   return (
     <View style={[styles.aside, { backgroundColor: theme.rail, borderRightColor: w(0.1) }]}>
@@ -88,13 +96,17 @@ export function Sidebar({
             <Icon name="shield" size={18} color={C.lime} />
           </View>
           <View style={styles.focusRow}>
-            <Txt style={styles.focusBig}>11h</Txt>
-            <Txt style={styles.focusDelta}>+2h 30m</Txt>
+            <Txt style={styles.focusBig}>{protectedMin ? durLabel(protectedMin) : '—'}</Txt>
+            <Txt style={styles.focusDelta}>{focusPct}%</Txt>
           </View>
           <View style={styles.bar}>
-            <View style={styles.barFill} />
+            <View style={[styles.barFill, { width: `${focusPct}%` }]} />
           </View>
-          <Txt style={styles.focusNote}>72% of this week&apos;s deep work is booked.</Txt>
+          <Txt style={styles.focusNote}>
+            {bookedMin
+              ? `${durLabel(protectedMin)} protected of ${durLabel(bookedMin)} booked.`
+              : 'Nothing booked yet. Protect a block and it shows up here.'}
+          </Txt>
         </View>
 
         <View style={styles.user}>
@@ -157,7 +169,7 @@ const styles = StyleSheet.create({
   focusBig: { color: '#fff', fontSize: 24, fontWeight: '500', letterSpacing: -0.5 },
   focusDelta: { color: C.lime, fontSize: 12 },
   bar: { height: 6, borderRadius: R.full, backgroundColor: w(0.1), overflow: 'hidden' },
-  barFill: { height: '100%', width: '72%', borderRadius: R.full, backgroundColor: C.lime },
+  barFill: { height: '100%', borderRadius: R.full, backgroundColor: C.lime },
   focusNote: { marginTop: 12, color: w(0.4), fontSize: 12, lineHeight: 18 },
   user: { paddingHorizontal: 8, paddingVertical: 8, marginTop: 16 },
 });

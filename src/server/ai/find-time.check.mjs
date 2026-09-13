@@ -93,4 +93,42 @@ assert.equal(s.length, 2);
 assert.equal(s[0].startISO, '2026-09-10T09:00:00.000Z');
 assert.equal(s[1].startISO, '2026-09-10T10:00:00.000Z');
 
+// maxPerDay spreads the blocks out instead of packing the earliest day.
+// Regression: "three 45-minute review slots this week" used to return
+// 10:00, 10:55 and 11:50 all on the Monday.
+s = findFreeSlots([], {
+  ...base,
+  latestISO: '2026-09-11T23:59:00.000Z',
+  durationMin: 45,
+  count: 3,
+  maxPerDay: 1,
+});
+assert.deepEqual(s.map((x) => x.startISO), [
+  '2026-09-09T09:00:00.000Z',
+  '2026-09-10T09:00:00.000Z',
+  '2026-09-11T09:00:00.000Z',
+]);
+
+// skipWeekends: Sat 12 / Sun 13 Sep 2026 are skipped, so block 2 lands on Monday.
+// Regression: with Friday full the placer used to book both blocks on Saturday.
+s = findFreeSlots([], {
+  ...base,
+  earliestISO: '2026-09-11T00:00:00.000Z',
+  latestISO: '2026-09-15T23:59:00.000Z',
+  durationMin: 60,
+  count: 3,
+  maxPerDay: 1,
+  skipWeekends: true,
+});
+assert.deepEqual(s.map((x) => x.startISO), [
+  '2026-09-11T09:00:00.000Z',
+  '2026-09-14T09:00:00.000Z',
+  '2026-09-15T09:00:00.000Z',
+]);
+
+// no maxPerDay → unchanged pack-the-day behaviour (same-day requests still work)
+s = findFreeSlots([], { ...base, durationMin: 60, count: 3 });
+assert.equal(s.length, 3);
+assert.ok(s.every((x) => x.startISO.startsWith('2026-09-09')));
+
 console.log('find-time.check: ok');

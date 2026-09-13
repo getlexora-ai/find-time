@@ -44,6 +44,48 @@ function rruleOf(recurrence: string[] | undefined): string | null {
   return line ? line.slice('RRULE:'.length) : null;
 }
 
+/** Literal `YYYY-MM-DDTHH:MM:SS` prefix of an RFC3339 string, re-stamped as Z. */
+function literalAsZ(dateTime: string): string | null {
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})/.exec(dateTime);
+  return m ? `${m[1]}T${m[2]}.000Z` : null;
+}
+
+/**
+ * Google returns a timed event as a true instant carrying a real offset
+ * (`2026-09-09T09:00:00+02:00`). Everything downstream reads an ISO string as
+ * *wall-clock* — `api-adapter.ts` slices `HH:MM` straight out of it — so we must
+ * store the event's local clock re-stamped as `Z`, exactly like the all-day
+ * branch below. Storing the raw offset lets the `timestamptz` column normalise
+ * it to `07:00Z`, which renders a 09:00 Berlin meeting two hours early and lets
+ * the find-time placer book straight over it.
+ */
+function wallClockIso(dateTime: string, zone: string | undefined): string {
+  // With no IANA zone the offset in the string already states the local clock,
+  // so the literal prefix is precisely the wall-clock we want.
+  if (!zone) return literalAsZ(dateTime) ?? dateTime;
+
+  const ms = Date.parse(dateTime);
+  if (!Number.isFinite(ms)) return literalAsZ(dateTime) ?? dateTime;
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: zone,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    }).formatToParts(ms);
+    const p: Record<string, string> = {};
+    for (const part of parts) p[part.type] = part.value;
+    return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}.000Z`;
+  } catch {
+    // Unknown IANA zone — fall back to the offset already in the string.
+    return literalAsZ(dateTime) ?? dateTime;
+  }
+}
+
 export function toRow(
   g: GEvent,
   ctx: { userId: string; calendarId: string; connectedAccountId: string },
@@ -64,9 +106,12 @@ export function toRow(
     endAt = `${e}T00:00:00.000Z`;
     timeZone = g.start!.timeZone ?? 'UTC';
   } else {
-    startAt = g.start?.dateTime ?? new Date().toISOString();
-    endAt = g.end?.dateTime ?? new Date(Date.parse(startAt) + 3600_000).toISOString();
-    timeZone = g.start?.timeZone ?? 'UTC';
+    const zone = g.start?.timeZone ?? g.end?.timeZone;
+    const rawStart = g.start?.dateTime ?? new Date().toISOString();
+    const rawEnd = g.end?.dateTime ?? new Date(Date.parse(rawStart) + 3600_000).toISOString();
+    startAt = wallClockIso(rawStart, zone);
+    endAt = wallClockIso(rawEnd, g.end?.timeZone ?? zone);
+    timeZone = zone ?? 'UTC';
   }
 
   return {

@@ -5,15 +5,14 @@ import { Icon, type IconName } from '../Icon';
 import { useCalTheme } from '../theme-context';
 import { C, R, w } from '../tokens';
 import { CHROME_BLUR, Press, Txt } from '../ui';
-import { useToast } from './Toast';
 
 /**
- * The fixed 5-item bottom nav `calendar.html` shows below `lg` (lines 277-298).
+ * The fixed bottom nav shown below `lg`.
  *
- * Today / Projects are the same out-of-scope stubs the prototype ships — they
- * toast rather than navigate, because the mockup is a single page. Calendar is
- * the active item and is inert; the lime ⊕ in the middle opens compose, and
- * Ask AI opens the same slide-over as the desktop header's "Plan with AI".
+ * Today / Projects used to sit on the left as out-of-scope stubs that only
+ * raised a toast; they are gone. Calendar is the active item and is inert, the
+ * lime ⊕ opens compose, and Ask AI opens the same slide-over as the desktop
+ * header's "Plan with AI".
  */
 export function MobileNav({
   onCompose,
@@ -23,7 +22,6 @@ export function MobileNav({
   onOpenAI: () => void;
 }) {
   const { theme } = useCalTheme();
-  const toast = useToast();
   const insets = useSafeAreaInsets();
 
   const item = (label: string, icon: IconName, onPress: () => void, active = false) => (
@@ -49,9 +47,6 @@ export function MobileNav({
       accessibilityRole="tablist"
       aria-label="Mobile navigation">
       <View style={styles.inner}>
-        {item('Today', 'sun', () => toast('Today is out of scope for this prototype'))}
-        {item('Projects', 'folder', () => toast('Projects is out of scope for this prototype'))}
-
         <Press
           onPress={onCompose}
           style={styles.center}

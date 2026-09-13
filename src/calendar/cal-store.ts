@@ -114,7 +114,7 @@ export type NewEvent = {
   kind?: CalEvent['kind'];
 };
 
-export function createEvent(input: NewEvent): CalEvent {
+function optimistic(input: NewEvent): CalEvent {
   const temp: CalEvent = {
     id: tempSeq--,
     project: '',
@@ -124,29 +124,44 @@ export function createEvent(input: NewEvent): CalEvent {
   };
   events = [...events, temp];
   emit();
-
-  void (async () => {
-    try {
-      const res = await apiFetch(`/api/events`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(toEventInput(temp)),
-      });
-      if (!res.ok) throw new Error(`POST /api/events ${res.status}`);
-      const { event: row } = (await res.json()) as {
-        event: Parameters<typeof toCalEvent>[0];
-      };
-      const saved = toCalEvent(row);
-      idMap.set(saved.id, row.id);
-      events = events.map((e) => (e.id === temp.id ? saved : e));
-      emit();
-    } catch {
-      events = events.filter((e) => e.id !== temp.id);
-      emit();
-    }
-  })();
-
   return temp;
+}
+
+/** POST an optimistically-added block. Resolves with the reconciled server row;
+ *  rolls the optimistic row back and rejects if the write fails. */
+async function persist(temp: CalEvent): Promise<CalEvent> {
+  try {
+    const res = await apiFetch(`/api/events`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(toEventInput(temp)),
+    });
+    if (!res.ok) throw new Error(`POST /api/events ${res.status}`);
+    const { event: row } = (await res.json()) as {
+      event: Parameters<typeof toCalEvent>[0];
+    };
+    const saved = toCalEvent(row);
+    idMap.set(saved.id, row.id);
+    events = events.map((e) => (e.id === temp.id ? saved : e));
+    emit();
+    return saved;
+  } catch (err) {
+    events = events.filter((e) => e.id !== temp.id);
+    emit();
+    throw err;
+  }
+}
+
+/** Fire-and-forget create, for callers that must stay synchronous. */
+export function createEvent(input: NewEvent): CalEvent {
+  const temp = optimistic(input);
+  void persist(temp).catch(() => {});
+  return temp;
+}
+
+/** Create and wait for the server, so the caller can report what really saved. */
+export function createEventAsync(input: NewEvent): Promise<CalEvent> {
+  return persist(optimistic(input));
 }
 
 export function updateEvent(id: number, patch: Partial<CalEvent>) {
@@ -203,20 +218,37 @@ const API_CAT_TO_CAT: Record<string, CatKey> = {
   admin: 'admin',
 };
 
+/** Accept an AI-proposed block: `kind: 'ai'` is what renders the dashed lime
+ *  "tap to accept" state, and it comes back from the server as `origin: 'ai'`,
+ *  so accepting has to persist `origin: 'manual'` or it reverts on reload. */
+export function acceptEvent(id: number) {
+  const cur = events.find((e) => e.id === id);
+  if (!cur || cur.kind !== 'ai') return;
+  updateEvent(id, { kind: 'event' });
+}
+
 /** Apply the AI "Find time" proposals from POST /api/ai/find-time: create each
- *  as an AI-kind block (dashed lime). Goes through the normal `createEvent`
- *  path, so each one is persisted to /api/events. Returns how many were added. */
-export function applyProposals(proposals: FindTimeProposal[]): number {
-  for (const p of proposals) {
-    createEvent({
-      date: p.startISO.slice(0, 10),
-      start: p.startISO.slice(11, 16),
-      end: p.endISO.slice(11, 16),
-      title: p.title,
-      cat: API_CAT_TO_CAT[p.category] ?? 'deep',
-      kind: 'ai',
-    });
-  }
-  return proposals.length;
+ *  as an AI-kind block (dashed lime), persisted via POST /api/events.
+ *
+ *  Awaits the writes and returns how many actually landed. This used to be
+ *  synchronous and return `proposals.length` unconditionally, so a failed POST
+ *  showed "N blocks added to your calendar" and then silently removed them. */
+export async function applyProposals(proposals: FindTimeProposal[]): Promise<number> {
+  const results = await Promise.all(
+    proposals.map((p) =>
+      createEventAsync({
+        date: p.startISO.slice(0, 10),
+        start: p.startISO.slice(11, 16),
+        end: p.endISO.slice(11, 16),
+        title: p.title,
+        cat: API_CAT_TO_CAT[p.category] ?? 'deep',
+        kind: 'ai',
+      }).then(
+        () => true,
+        () => false,
+      ),
+    ),
+  );
+  return results.filter(Boolean).length;
 }
 

@@ -1,20 +1,30 @@
 import { StyleSheet, View } from 'react-native';
 
+import { fromIso, toMin, wdIndex, WD_LONG } from '../cal-date';
 import { Icon } from '../Icon';
-import { C, R, rgba, w } from '../tokens';
+import { C, durLabel, R, rgba, w } from '../tokens';
+import type { CalEvent } from '../types';
 import { Press, Txt } from '../ui';
 import { useResponsive } from '../useResponsive';
 
-export function ConflictBanner({ onResolve }: { onResolve: () => void }) {
+/** Describes a real overlap found by `overlapping()` in CalendarScreen. The copy
+ *  used to be two hardcoded sentences about a fixture double-book ("Product team
+ *  sync overlaps Roadmap review with Maya"), shown to every user. */
+export function ConflictBanner({ a, b, onResolve }: { a: CalEvent; b: CalEvent; onResolve: () => void }) {
   const { isPhone } = useResponsive();
+  const overlapMin = Math.max(0, Math.min(toMin(a.end), toMin(b.end)) - toMin(b.start));
   return (
     <View style={styles.wrap}>
       <View style={styles.badge}>
         <Icon name="triangle" size={18} color={C.surface} />
       </View>
       <View style={styles.body}>
-        <Txt style={styles.title}>Double-booked Wednesday 11:00</Txt>
-        <Txt style={styles.sub}>Product team sync overlaps Roadmap review with Maya by 30 minutes.</Txt>
+        <Txt style={styles.title}>
+          Double-booked {WD_LONG[wdIndex(fromIso(a.date))]} {b.start}
+        </Txt>
+        <Txt style={styles.sub}>
+          {a.title} overlaps {b.title} by {durLabel(overlapMin)}.
+        </Txt>
       </View>
       {!isPhone && (
         <Press onPress={onResolve} hoverBg="#ff5a1f" style={styles.resolve} accessibilityRole="button">

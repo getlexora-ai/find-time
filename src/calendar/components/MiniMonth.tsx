@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { addMonths, iso, MO, sameDay } from '../cal-date';
+import { addMonths, iso, MO, sameDay, today } from '../cal-date';
 import { Icon } from '../Icon';
 import { monthCells } from '../layout';
-import { TODAY } from '../seed';
 import { useCalTheme } from '../theme-context';
 import { C, R, w } from '../tokens';
 import type { CalEvent } from '../types';
@@ -24,7 +23,7 @@ export function MiniMonth({
   onPick: (dateIso: string) => void;
 }) {
   const { theme } = useCalTheme();
-  const [cursor, setCursor] = useState(new Date(TODAY));
+  const [cursor, setCursor] = useState(() => today());
   const cells = monthCells(cursor);
   const hasEvents = (d: Date) => events.some((e) => e.date === iso(d));
 
@@ -63,7 +62,7 @@ export function MiniMonth({
       <View style={styles.grid}>
         {cells.map((d) => {
           const other = d.getMonth() !== cursor.getMonth();
-          const isToday = sameDay(d, TODAY);
+          const isToday = sameDay(d, today());
           const sel = sameDay(d, selected);
           const dot = hasEvents(d) && !isToday;
           return (

@@ -24,7 +24,11 @@ const timed = toRow(
 assert.equal(timed.deleted, false);
 assert.equal(timed.row.title, 'Standup');
 assert.equal(timed.row.all_day, false);
-assert.equal(timed.row.start_at, '2026-09-09T09:00:00+02:00');
+// Google's instant is re-stamped as the event's LOCAL clock with a Z, matching
+// the wall-clock convention the client reads (src/calendar/api-adapter.ts).
+// Storing the raw +02:00 here made a 09:00 Berlin meeting render at 07:00.
+assert.equal(timed.row.start_at, '2026-09-09T09:00:00.000Z');
+assert.equal(timed.row.end_at, '2026-09-09T09:15:00.000Z');
 assert.equal(timed.row.time_zone, 'Europe/Berlin');
 assert.equal(timed.row.status, 'confirmed');
 assert.equal(timed.row.provider_event_id, 'ev1');

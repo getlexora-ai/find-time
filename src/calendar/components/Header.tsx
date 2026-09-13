@@ -7,8 +7,17 @@ import { useCalTheme } from '../theme-context';
 import { C, R, w } from '../tokens';
 import { CHROME_BLUR, Press, Txt } from '../ui';
 import { useResponsive } from '../useResponsive';
+import { useAccounts } from '../account-store';
 import { AccountButton } from './AccountButton';
 import { useToast } from './Toast';
+
+function agoShort(iso: string): string {
+  const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
+  if (s < 60) return 'JUST NOW';
+  if (s < 3600) return `${Math.floor(s / 60)}M AGO`;
+  if (s < 86400) return `${Math.floor(s / 3600)}H AGO`;
+  return `${Math.floor(s / 86400)}D AGO`;
+}
 
 /** Sticky top bar. bg is the theme "chrome" colour (calendar.html `ft-chrome`). */
 export function Header({
@@ -22,6 +31,21 @@ export function Header({
   const { width, isDesktop, isPhone } = useResponsive();
   const toast = useToast();
   const themeBtn = useRef<View>(null);
+  const { accounts, syncing } = useAccounts();
+
+  // Real sync state. This pill used to be the literal string "SYNC 2M AGO".
+  const lastSync = accounts
+    .map((a) => a.lastSyncAt)
+    .filter((t): t is string => Boolean(t))
+    .sort()
+    .at(-1);
+  const syncLabel = syncing
+    ? 'SYNCING…'
+    : lastSync
+      ? `SYNC ${agoShort(lastSync)}`
+      : accounts.length
+        ? 'NOT SYNCED'
+        : 'NO CALENDAR';
 
   return (
     <View style={[styles.bar, CHROME_BLUR, { backgroundColor: theme.chrome }]}>
@@ -31,7 +55,7 @@ export function Header({
           <Txt style={styles.crumbMuted}>/</Txt>
           <Txt style={styles.crumb}>Calendar</Txt>
           <View style={styles.syncPill}>
-            <Txt style={styles.syncTxt}>SYNC 2M AGO</Txt>
+            <Txt style={styles.syncTxt}>{syncLabel}</Txt>
           </View>
         </View>
       ) : (
@@ -45,7 +69,7 @@ export function Header({
 
       <View style={styles.right}>
         <Press
-          onPress={() => toast('Search events, projects, and free windows')}
+          onPress={() => toast('Search is not built yet')}
           hoverBg={w(0.1)}
           style={styles.searchBtn}
           accessibilityRole="button"
@@ -77,9 +101,8 @@ export function Header({
           style={styles.iconBtn}
           accessibilityRole="button"
           aria-label="Notifications"
-          onPress={() => toast('1 clash and 2 AI suggestions waiting')}>
+          onPress={() => toast('No notifications yet')}>
           <Icon name="bell" size={18} color={w(0.6)} />
-          <View style={styles.bellDot} />
         </Press>
 
         {!isPhone && (

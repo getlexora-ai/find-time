@@ -2,9 +2,8 @@ import { StyleSheet, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { byDate } from '../cal-store';
-import { iso, sameDay, toMin } from '../cal-date';
+import { iso, nowMin, sameDay, toMin, today } from '../cal-date';
 import { Icon } from '../Icon';
-import { NOW_MIN, TODAY } from '../seed';
 import type { CalActions, CalState } from '../state';
 import { useCalTheme } from '../theme-context';
 import { C, DAY_END, DAY_START, durLabel, R, rgba, w } from '../tokens';
@@ -14,7 +13,10 @@ import { useResponsive } from '../useResponsive';
 import { Agenda } from './Agenda';
 import { TimeGrid } from './TimeGrid';
 
-const NOW_PCT = ((NOW_MIN - DAY_START * 60) / ((DAY_END - DAY_START) * 60)) * 100;
+/** Where the "now" marker sits on the energy band, as a % of the working day.
+ *  A function, not a constant: it has to follow the real clock. */
+const nowPct = () =>
+  Math.min(100, Math.max(0, ((nowMin() - DAY_START * 60) / ((DAY_END - DAY_START) * 60)) * 100));
 
 export function DayView({
   state,
@@ -93,25 +95,21 @@ export function DayView({
                 <Txt style={styles.insightLabel}>AI insight</Txt>
                 <Icon name="bulb" size={20} color={C.surface} />
               </View>
+              {/* Was a fixed sentence naming fixture events and people ("Maya is
+                  free Thursday 14:00"), under two inert Views styled as buttons. */}
               <Txt style={styles.insightBody}>
                 {nClash
-                  ? 'Roadmap review clashes with your team sync. Maya is free Thursday 14:00 — move it there and your morning stays whole.'
-                  : booked < 3 * 60
-                    ? 'This day is mostly open. Two hours here would clear the onboarding spec before the beta cut-off.'
-                    : 'Your afternoon is back-to-back. Move one flexible block to tomorrow and you keep a recovery window.'}
+                  ? `${nClash} block${nClash > 1 ? 's' : ''} here overlap another. Open one and reschedule whichever is flexible.`
+                  : booked === 0
+                    ? 'Nothing booked on this day. Ask Find time to make room for what keeps slipping.'
+                    : booked < 3 * 60
+                      ? `${durLabel(capacity - booked)} of this day is still free.`
+                      : 'This day is close to full. Move a flexible block to keep some recovery time.'}
               </Txt>
-              <View style={styles.insightBtns}>
-                <View style={styles.insightPrimary}>
-                  <Txt style={styles.insightPrimaryTxt}>{nClash ? 'Move it' : 'Do it'}</Txt>
-                </View>
-                <View style={styles.insightGhost}>
-                  <Txt style={styles.insightGhostTxt}>{nClash ? 'Keep both' : 'Dismiss'}</Txt>
-                </View>
-              </View>
             </View>
 
             <View style={[styles.railCard, { backgroundColor: theme.panel, borderColor: theme.panelBorder }]}>
-              <Txt style={styles.protectedTitle}>Protected {sameDay(d, TODAY) ? 'today' : 'this day'}</Txt>
+              <Txt style={styles.protectedTitle}>Protected {sameDay(d, today()) ? 'today' : 'this day'}</Txt>
               <View style={{ marginTop: 16, gap: 8 }}>
                 {list.filter((e) => e.kind === 'focus' || e.kind === 'break').length === 0 ? (
                   <Txt style={styles.protectedEmpty}>
@@ -175,7 +173,7 @@ function EnergyBand({ theme }: { theme: { panel: string; panelBorder: string } }
           </Defs>
           <Rect x={0} y={0} width="100%" height="100%" fill="url(#energy)" />
         </Svg>
-        <View style={[styles.energyNow, { left: `${NOW_PCT}%` }]}>
+        <View style={[styles.energyNow, { left: `${nowPct()}%` }]}>
           <View style={styles.energyNowDot} />
         </View>
       </View>

@@ -26,7 +26,20 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const { state, cookie } = makeOAuthState(request, userId);
+  // makeOAuthState throws when SESSION_SECRET is unset. Uncaught, that was an
+  // empty 500 and the sidebar's Connect button appeared to do nothing at all.
+  let state: string;
+  let cookie: string;
+  try {
+    ({ state, cookie } = makeOAuthState(request, userId));
+  } catch (err) {
+    console.error('google/start: cannot sign the OAuth state', err);
+    return Response.json(
+      { error: 'Google connect is not configured on the server (SESSION_SECRET missing).' },
+      { status: 503 },
+    );
+  }
+
   const headers = new Headers({ 'Content-Type': 'application/json' });
   headers.append('Set-Cookie', cookie);
   return new Response(JSON.stringify({ url: authUrl(state) }), { status: 200, headers });

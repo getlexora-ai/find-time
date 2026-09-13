@@ -72,6 +72,10 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
                 {n.label}
               </button>
             ))}
+            {/* A button, not an <a>, so it inherits the nav's existing styling. */}
+            <button type="button" onClick={() => window.location.assign('/login')}>
+              {LANDING.signIn}
+            </button>
           </nav>
           <button className="btn-lime" type="button" onClick={goToWaitlist}>
             {LANDING.headerCta}

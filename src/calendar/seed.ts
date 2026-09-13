@@ -5,11 +5,13 @@ import type { CalEvent, EventKind } from './types';
  * Seed fixtures — ported verbatim from design/from_user/calendar.html `EVENTS`.
  * ~55 events across three Sept 2026 weeks, including the deliberate Wed 11:00
  * double-book, a 6-event day → `+3 more`, protected focus blocks and an
- * AI-suggested Friday window. Keep TODAY / NOW_MIN so the board mockups line up
- * (HANDOFF.md §6).
+ * AI-suggested Friday window.
+ *
+ * Offline fallback fixtures only. "Today" and the now-line come from
+ * `cal-date.ts` (`today()` / `nowMin()`). This module used to export a hardcoded
+ * `TODAY = 9 Sep 2026` + `NOW_MIN = 14:22` that every view imported, which
+ * pinned the whole app to the wrong week and the wrong time of day.
  */
-export const TODAY = new Date(2026, 8, 9); // Wed 9 Sep 2026
-export const NOW_MIN = 14 * 60 + 22; // 14:22 — matches the UTC.14:22 telemetry
 
 let uid = 100;
 const E = (

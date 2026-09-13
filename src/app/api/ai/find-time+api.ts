@@ -54,6 +54,19 @@ const INTENT_TOOL = {
         maximum: 24,
         description: 'Latest hour of day a block may end (24h UTC). Default 18. "mornings" → 12, "evening" → 21.',
       },
+      oneBlockPerDay: {
+        type: 'boolean',
+        description:
+          'True (the default) when the blocks should be spread out — at most one per day. ' +
+          'Only false when the user explicitly wants several blocks on the SAME day, ' +
+          'e.g. "three review slots on Tuesday".',
+      },
+      weekdaysOnly: {
+        type: 'boolean',
+        description:
+          'True (the default) to keep blocks on Mon–Fri. False only when the user ' +
+          'explicitly invites weekend time, e.g. "including the weekend" or "on Saturday".',
+      },
       rationale: {
         type: 'string',
         description: 'One sentence, first person ("I placed…"), explaining the choice for the user.',
@@ -68,6 +81,8 @@ const INTENT_TOOL = {
       'latestISO',
       'dayStartHour',
       'dayEndHour',
+      'oneBlockPerDay',
+      'weekdaysOnly',
       'rationale',
     ],
   },
@@ -169,6 +184,13 @@ export async function POST(request: Request): Promise<Response> {
   let latestISO = Date.parse(modelLatest) > Date.parse(horizonISO) ? horizonISO : modelLatest;
   if (Date.parse(latestISO) <= Date.parse(earliestISO)) latestISO = horizonISO;
 
+  // Both default ON. "Three review slots this week" means one a day on weekdays;
+  // the placer would otherwise fill Monday morning to capacity and stop, and
+  // would happily hand you a Saturday. The model opts out only when the request
+  // explicitly asks for same-day blocks or invites the weekend.
+  const oneBlockPerDay = raw.oneBlockPerDay !== false;
+  const weekdaysOnly = raw.weekdaysOnly !== false;
+
   const slots = findFreeSlots(busy, {
     durationMin,
     count,
@@ -177,6 +199,8 @@ export async function POST(request: Request): Promise<Response> {
     dayStartHour: clamp(raw.dayStartHour, 0, 23, 9),
     dayEndHour: clamp(raw.dayEndHour, 1, 24, 18),
     bufferMin: 10,
+    maxPerDay: oneBlockPerDay ? 1 : undefined,
+    skipWeekends: weekdaysOnly,
   });
 
   const proposals: FindTimeProposal[] = slots.map((s) => ({
@@ -189,7 +213,9 @@ export async function POST(request: Request): Promise<Response> {
   const rationale =
     proposals.length > 0
       ? (typeof raw.rationale === 'string' && raw.rationale) || `Placed ${proposals.length} block${proposals.length > 1 ? 's' : ''} around your existing events.`
-      : `No free ${durationMin}-minute slot before ${latestISO.slice(0, 10)}. Try a shorter block or a wider window.`;
+      : `No free ${durationMin}-minute slot before ${latestISO.slice(0, 10)}${
+          weekdaysOnly ? ' on a weekday' : ''
+        }. Try a shorter block or a wider window.`;
 
   const payload: FindTimeResponse = { proposals, rationale, requested: count };
   return Response.json(payload);

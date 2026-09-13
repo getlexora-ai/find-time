@@ -1,11 +1,10 @@
 import { StyleSheet, View } from 'react-native';
 
-import { addDays, iso, isoWeek, sameDay, startOfWeek, WD, wdIndex } from '../cal-date';
+import { addDays, iso, isoWeek, sameDay, startOfWeek, today, WD, wdIndex } from '../cal-date';
 import { Icon } from '../Icon';
-import { TODAY } from '../seed';
 import type { CalActions, CalState } from '../state';
 import { useCalTheme } from '../theme-context';
-import { C, R, rgba, w } from '../tokens';
+import { C, R, w } from '../tokens';
 import type { CalEvent } from '../types';
 import { Txt } from '../ui';
 import { useResponsive } from '../useResponsive';
@@ -38,11 +37,6 @@ export function WeekView({
   return <DesktopWeek state={state} actions={actions} events={events} start={start} />;
 }
 
-const ALLDAY_BADGE: Record<string, { label: string; bg: string; fg: string }> = {
-  '2026-09-07': { label: 'Sprint 14 · week 1 of 2', bg: rgba('#c8c8ff', 0.2), fg: '#c8c8ff' },
-  '2026-09-11': { label: 'Beta cut-off', bg: rgba('#ff7040', 0.2), fg: '#ffb39a' },
-};
-
 function DesktopWeek({
   state,
   actions,
@@ -66,7 +60,7 @@ function DesktopWeek({
           <Txt style={styles.gutterHead}>W{isoWeek(start)}</Txt>
         </View>
         {days.map((d) => {
-          const isToday = sameDay(d, TODAY);
+          const isToday = sameDay(d, today());
           return (
             <View key={iso(d)} style={[styles.col, styles.dayHead, { backgroundColor: theme.recessed }]}>
               <Txt style={[styles.dayHeadWd, { color: isToday ? C.lime : w(0.4) }]}>{WD[wdIndex(d)]}</Txt>
@@ -85,20 +79,12 @@ function DesktopWeek({
         <View style={[styles.gutterCell, styles.allDayGutter, { backgroundColor: theme.recessed }]}>
           <Txt style={styles.gutterHead}>All day</Txt>
         </View>
-        {days.map((d) => {
-          const badge = ALLDAY_BADGE[iso(d)];
-          return (
-            <View key={iso(d)} style={[styles.col, styles.allDayCell, { backgroundColor: theme.panel }]}>
-              {badge && (
-                <View style={[styles.allDayBadge, { backgroundColor: badge.bg }]}>
-                  <Txt numberOfLines={1} style={[styles.allDayBadgeTxt, { color: badge.fg }]}>
-                    {badge.label}
-                  </Txt>
-                </View>
-              )}
-            </View>
-          );
-        })}
+        {/* All-day events are not imported yet (google/map.ts stores them, the
+            grid has nowhere to draw them). The row stays as the placeholder it
+            is — it used to show two hardcoded fake badges pinned to Sep 2026. */}
+        {days.map((d) => (
+          <View key={iso(d)} style={[styles.col, styles.allDayCell, { backgroundColor: theme.panel }]} />
+        ))}
       </View>
 
       <TimeGrid days={days} events={events} actions={actions} maxHeight={Math.max(360, height * 0.58)} />

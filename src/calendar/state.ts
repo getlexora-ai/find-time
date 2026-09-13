@@ -20,7 +20,9 @@ export type CalActions = {
   goToday: () => void;
   /** pick a date; in month view on desktop this also drops into day view */
   pick: (dateIso: string, fromMonthTile?: boolean) => void;
-  openCompose: (id: number | null, dateIso?: string, at?: string) => void;
+  /** `autoPlace` opens the sheet with "Let AI place it" already on, which is
+   *  what turns Reschedule into a real move rather than a second Edit. */
+  openCompose: (id: number | null, dateIso?: string, at?: string, autoPlace?: boolean) => void;
   openEvent: (id: number, anchor?: PointAnchor) => void;
   openAI: (prefill?: string) => void;
   openPicker: () => void;

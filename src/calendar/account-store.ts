@@ -76,13 +76,20 @@ export async function refreshAccounts(): Promise<void> {
  */
 export async function connect(): Promise<void> {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+  set({ error: null });
   try {
     const res = await apiFetch(`/api/auth/google/start`, { method: 'POST' });
-    if (!res.ok) throw new Error(String(res.status));
-    const { url } = (await res.json()) as { url?: string };
-    if (url) window.location.assign(url);
+    const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+    if (!res.ok) {
+      // The route explains itself (503 for missing GOOGLE_* or SESSION_SECRET).
+      // Keep that message — it is the only clue the user gets.
+      set({ error: data.error ?? `Could not start Google connect (${res.status}).` });
+      return;
+    }
+    if (data.url) window.location.assign(data.url);
+    else set({ error: 'Google connect did not return a consent URL.' });
   } catch {
-    set({ error: 'Could not start Google connect.' });
+    set({ error: 'Could not reach the server to start Google connect.' });
   }
 }
 

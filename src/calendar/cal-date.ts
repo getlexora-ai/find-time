@@ -1,7 +1,8 @@
 /**
  * Date helpers — ported verbatim from design/from_user/calendar.html.
  * Monday-start weeks, ISO week numbers, minute math. Kept as `Date`-based (local
- * time) exactly like the reference so the seed fixtures and TODAY/NOW line up.
+ * time) exactly like the reference. `today()` / `nowMin()` at the bottom are the
+ * single source of "now" for every view.
  */
 
 export const WD = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -64,3 +65,21 @@ export function isoWeek(d: Date) {
 
 /** Weekday index with Monday = 0. */
 export const wdIndex = (d: Date) => (d.getDay() + 6) % 7;
+
+/**
+ * Local midnight today. A function rather than a module constant on purpose:
+ * this used to be a hardcoded `TODAY` in seed.ts, which pinned the whole app to
+ * 9 Sep 2026 — the calendar opened on the wrong week and the compose sheet
+ * defaulted to the wrong date. A constant would also go stale in a tab left
+ * open across midnight.
+ */
+export const today = () => {
+  const n = new Date();
+  return new Date(n.getFullYear(), n.getMonth(), n.getDate());
+};
+
+/** Minutes since local midnight — drives the "now" line on the time grid. */
+export const nowMin = () => {
+  const n = new Date();
+  return n.getHours() * 60 + n.getMinutes();
+};
