@@ -6,4 +6,4 @@ Disallow: /app
 Disallow: /login
 Disallow: /api/
 
-Sitemap: https://findtime.ai/sitemap.xml
+Sitemap: https://usefindtime.com/sitemap.xml

@@ -11,7 +11,7 @@
 
 export const LEGAL_UPDATED = '9 September 2026';
 // TODO(user): confirm the operating entity + a real contact address before launch.
-export const LEGAL_CONTACT = 'privacy@findtime.ai';
+export const LEGAL_CONTACT = 'privacy@usefindtime.com';
 
 export type LegalSection = { heading: string; body: string[] };
 
