@@ -30,7 +30,7 @@ function fmtSlot(startISO: string, endISO: string) {
 type Phase = 'idle' | 'analysing' | 'result';
 
 /** Find time — right drawer ≥1024px, bottom sheet below (spec §2.13). Calls
- *  POST /api/ai/find-time (Claude parse + deterministic placer), renders the
+ *  POST /api/ai/find-time (Gemini parse + deterministic placer), renders the
  *  proposed blocks, and creates them via `applyProposals` on Add. */
 export function AiPanel({
   prefill,

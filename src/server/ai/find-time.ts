@@ -1,5 +1,5 @@
 /**
- * Deterministic slot finder. The LLM (src/server/ai/anthropic.ts) turns the
+ * Deterministic slot finder. The LLM (src/server/ai/gemini.ts) turns the
  * user's sentence into a `FindSpec`; this function does the actual placement so
  * the model can never hallucinate a double-book. Pure — no I/O, no clock.
  *

@@ -1,6 +1,6 @@
 import type { FindTimeProposal, FindTimeResponse } from '@/lib/api-types';
 import { requireUserId, unauthorized } from '@/server/auth/clerk';
-import { aiConfigured, extractWithTool } from '@/server/ai/anthropic';
+import { aiConfigured, extractWithTool } from '@/server/ai/gemini';
 import { findFreeSlots } from '@/server/ai/find-time';
 import { isConfigured } from '@/server/db';
 import { enforceRateLimit } from '@/server/rate-limit';
@@ -9,7 +9,7 @@ import { listEvents } from '@/server/events-repo';
 /**
  * POST /api/ai/find-time — { prompt: string }.
  *
- * Claude parses the sentence into bounds + preferences (never specific slots);
+ * Gemini parses the sentence into bounds + preferences (never specific slots);
  * `findFreeSlots` does the placement against the user's real calendar, so the
  * model cannot propose a double-book. Returns `FindTimeResponse`; the client
  * (AiPanel) shows the proposals and creates them via POST /api/events on Apply.
@@ -99,7 +99,7 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: 'Database not configured (DATABASE_URL missing).' }, { status: 503 });
   }
   if (!aiConfigured()) {
-    return Response.json({ error: 'AI is not configured (ANTHROPIC_API_KEY missing).' }, { status: 503 });
+    return Response.json({ error: 'AI is not configured (GEMINI_API_KEY missing).' }, { status: 503 });
   }
 
   const userId = await requireUserId(request);
