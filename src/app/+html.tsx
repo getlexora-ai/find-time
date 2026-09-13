@@ -20,7 +20,7 @@ import { META } from '@/landing/copy';
 
 // The deployed origin — used for canonical + absolute OG image URLs. Set
 // EXPO_PUBLIC_SITE_URL on Railway to the real host.
-const SITE = (process.env.EXPO_PUBLIC_SITE_URL || 'https://findtime.ai').replace(/\/$/, '');
+const SITE = (process.env.EXPO_PUBLIC_SITE_URL || 'https://www.usefindtime.com').replace(/\/$/, '');
 const OG_IMAGE = `${SITE}/find-time-og.jpg`;
 
 export default function Root({ children }: PropsWithChildren) {
