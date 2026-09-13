@@ -21,7 +21,7 @@ export type RateRoute = 'waitlist' | 'ai-find-time' | 'google-connect';
 const LIMITS: Record<RateRoute, Pair> = {
   // unauthenticated — spammable to junk; keep tight
   waitlist: { hour: 5, day: 20 },
-  // authed, burns Anthropic tokens per hit
+  // authed, burns Gemini tokens per hit
   'ai-find-time': { hour: 15, day: 40 },
   // authed, kicks off a Google OAuth round trip
   'google-connect': { hour: 10, day: 30 },

@@ -6,7 +6,7 @@ import type { CalendarEvent, EventCategory } from './types';
  *
  * ┌─────────────────────────────────────────────────────────────────────────────┐
  * │ LLM PLUG POINT                                                               │
- * │ Replace `parseRequest` with a call to a model (e.g. Claude) that returns the │
+ * │ Replace `parseRequest` with a call to a model (e.g. Gemini) that returns the │
  * │ same PlanIntent shape, then keep `placeBlocks` as the deterministic          │
  * │ scheduler. The screen calls `generatePlan` and does not care which is used.  │
  * └─────────────────────────────────────────────────────────────────────────────┘
