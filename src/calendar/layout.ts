@@ -1,4 +1,4 @@
-import { addDays, startOfWeek, toMin } from './cal-date';
+import { addDays, iso, startOfWeek, toMin } from './cal-date';
 import { DAY_END, DAY_START, ROW } from './tokens';
 import type { CalEvent, LaidBlock } from './types';
 
@@ -54,8 +54,8 @@ export function laidOut(list: CalEvent[]): LaidBlock[] {
 }
 
 /** Pixel geometry for a week/day block — ported from calendar.html `blockHTML`. */
-export function blockGeometry(it: LaidBlock) {
-  const top = ((it.s - DAY_START * 60) / 60) * ROW;
+export function blockGeometry(it: LaidBlock, dayStart = DAY_START) {
+  const top = ((it.s - dayStart * 60) / 60) * ROW;
   const height = Math.max(22, ((it.t - it.s) / 60) * ROW - 2);
   const widthPct = 100 / it.cols;
   const leftPct = it.col * widthPct;
@@ -64,13 +64,31 @@ export function blockGeometry(it: LaidBlock) {
 }
 
 /** Vertical offset (px) of a minute-of-day inside the time grid. */
-export const minToY = (min: number) => ((min - DAY_START * 60) / 60) * ROW;
+export const minToY = (min: number, dayStart = DAY_START) => ((min - dayStart * 60) / 60) * ROW;
 
 /** The hour labels down the gutter. */
-export const gutterHours = () => {
+export const gutterHours = (start = DAY_START, end = DAY_END) => {
   const out: number[] = [];
-  for (let h = DAY_START; h < DAY_END; h++) out.push(h);
+  for (let h = start; h < end; h++) out.push(h);
   return out;
 };
 
-export const BODY_H = (DAY_END - DAY_START) * ROW;
+export const bodyH = (start = DAY_START, end = DAY_END) => (end - start) * ROW;
+
+/**
+ * Grid window in hours [start, end), widened past the default workday
+ * (DAY_START–DAY_END) whenever a rendered day has an event outside it — an
+ * early flight or a late call should stay reachable, not scrolled off the
+ * top of a ScrollView that can't scroll past its own content start.
+ */
+export function dayWindow(days: Date[], events: CalEvent[]): [number, number] {
+  const isoDays = new Set(days.map(iso));
+  let start = DAY_START;
+  let end = DAY_END;
+  for (const e of events) {
+    if (!isoDays.has(e.date)) continue;
+    start = Math.min(start, Math.floor(toMin(e.start) / 60));
+    end = Math.max(end, Math.ceil(toMin(e.end) / 60));
+  }
+  return [Math.max(0, start), Math.min(24, end)];
+}

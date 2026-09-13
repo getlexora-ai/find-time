@@ -13,8 +13,16 @@ const at = (e: GestureResponderEvent): PointAnchor => ({
 });
 
 /** Week / day time-grid block (spec §2.6). Blocks < 46px tall drop the time line. */
-export function EventBlock({ it, onPress }: { it: LaidBlock; onPress: (anchor: PointAnchor) => void }) {
-  const { top, height, widthPct, leftPct, tight } = blockGeometry(it);
+export function EventBlock({
+  it,
+  dayStart,
+  onPress,
+}: {
+  it: LaidBlock;
+  dayStart?: number;
+  onPress: (anchor: PointAnchor) => void;
+}) {
+  const { top, height, widthPct, leftPct, tight } = blockGeometry(it, dayStart);
   const ev = it.ev;
   const c = CATS[ev.cat];
 
