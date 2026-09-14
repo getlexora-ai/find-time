@@ -43,7 +43,7 @@ export function Sidebar({
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
         <View style={styles.brand}>
           <View style={styles.logo}>
-            <Logo size={22} color={C.surface} />
+            <Logo size={28} color={C.surface} />
           </View>
           <View>
             <Txt style={styles.brandName}>Find time</Txt>

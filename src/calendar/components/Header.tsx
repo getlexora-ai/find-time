@@ -61,7 +61,7 @@ export function Header({
       ) : (
         <View style={styles.left}>
           <View style={styles.logo}>
-            <Logo size={20} color={C.surface} />
+            <Logo size={26} color={C.surface} />
           </View>
           <Txt style={styles.appName}>Calendar</Txt>
         </View>
