@@ -120,7 +120,8 @@ export function editKind(
 export type TurnInput = {
   userId: string;
   sessionId: string | null;
-  action: 'propose' | 'ask' | 'record_rule' | 'answer' | 'error';
+  /** 'time_off' needs db/018_time_off_turns.sql, or the row fails its CHECK and is dropped. */
+  action: 'propose' | 'ask' | 'record_rule' | 'time_off' | 'answer' | 'error';
   modelId: string;
   promptVersion: string;
   scorerVersion: string;

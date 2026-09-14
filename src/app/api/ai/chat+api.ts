@@ -13,6 +13,7 @@ import {
   TOOL_ASK,
   TOOL_PROPOSE,
   TOOL_RULE,
+  TOOL_TIME_OFF,
   asString,
   buildSystemPrompt,
   clampInt,
@@ -43,7 +44,8 @@ import {
 } from '@/server/ai/repo';
 import { isConfigured } from '@/server/db';
 import { enforceRateLimit } from '@/server/rate-limit';
-import { listEvents } from '@/server/events-repo';
+import { checkTimeOff, splitByDay } from '@/server/ai/time-off';
+import { createEvent, deleteEvent, listEvents } from '@/server/events-repo';
 
 /**
  * POST /api/ai/chat — one turn of a conversation with the scheduling agent.
@@ -175,7 +177,7 @@ export async function POST(request: Request): Promise<Response> {
     ]);
   } catch (err) {
     console.error('ai/chat load', err);
-    return Response.json({ error: 'Could not read your calendar.' }, { status: 500 });
+    return Response.json({ sessionId, error: 'Could not read your calendar.' }, { status: 500 });
   }
 
   // Flexible blocks may be scheduled over; everything else is a hard conflict.
@@ -239,15 +241,18 @@ export async function POST(request: Request): Promise<Response> {
       input: modelInput,
       error: err instanceof Error ? err.message.slice(0, 500) : 'unknown',
     });
-    return Response.json({ error: 'Find time could not read that. Try rephrasing.' }, { status: 502 });
+    // sessionId rides along so the client stays in this conversation — the
+    // user's message is already saved in it.
+    return Response.json({ sessionId, error: 'Find time could not read that. Try rephrasing.' }, { status: 502 });
   }
 
   const args = choice.args;
 
-  const ACTION_BY_TOOL: Record<string, 'propose' | 'ask' | 'record_rule' | 'answer'> = {
+  const ACTION_BY_TOOL: Record<string, 'propose' | 'ask' | 'record_rule' | 'time_off' | 'answer'> = {
     [TOOL_PROPOSE]: 'propose',
     [TOOL_ASK]: 'ask',
     [TOOL_RULE]: 'record_rule',
+    [TOOL_TIME_OFF]: 'time_off',
     [TOOL_ANSWER]: 'answer',
   };
   // Logged before the action is carried out, so a turn that fails downstream
@@ -269,6 +274,7 @@ export async function POST(request: Request): Promise<Response> {
   let proposals: ChatProposal[] | undefined;
   let question: ChatMessage['question'];
   let savedRule: ChatMessage['savedRule'];
+  let timeOff: ChatMessage['timeOff'];
   let kind = 'text';
 
   if (choice.name === TOOL_PROPOSE) {
@@ -358,7 +364,7 @@ export async function POST(request: Request): Promise<Response> {
         );
       } catch (err) {
         console.error('ai/chat saveProposals', err);
-        return Response.json({ error: 'Could not save that plan. Try again.' }, { status: 500 });
+        return Response.json({ sessionId, error: 'Could not save that plan. Try again.' }, { status: 500 });
       }
 
       /**
@@ -481,6 +487,41 @@ export async function POST(request: Request): Promise<Response> {
       console.error('ai/chat addRule', err);
       reply = "I couldn't save that rule just now — try telling me again in a moment.";
     }
+  } else if (choice.name === TOOL_TIME_OFF) {
+    const title = asString(args.title, 'Away').slice(0, 120) || 'Away';
+    const checked = checkTimeOff(args.startISO, args.endISO, nowISO);
+    if (!checked.ok) {
+      // Asked back rather than guessed around: a wrong stretch blocked quietly
+      // is worse than one more question.
+      reply = checked.reason;
+    } else {
+      // Fixed and manual: the user said it, so the scheduler treats it as busy
+      // (it is not `flexible`) and it renders as an ordinary block they can
+      // delete, not as an AI proposal.
+      const created: string[] = [];
+      try {
+        for (const day of splitByDay(checked.span)) {
+          const ev = await createEvent(userId, {
+            title,
+            start: day.startISO,
+            end: day.endISO,
+            category: 'other',
+            itemType: 'event',
+            flexibility: 'fixed',
+            origin: 'manual',
+          });
+          created.push(ev.id);
+        }
+        timeOff = { title, startISO: checked.span.startISO, endISO: checked.span.endISO, days: created.length };
+        reply = reply || `Blocked — ${title}.`;
+      } catch (err) {
+        console.error('ai/chat timeOff', err);
+        // All or nothing: half a vacation on the calendar would read as the
+        // whole one having been saved.
+        await Promise.all(created.map((id) => deleteEvent(userId, id).catch(() => false)));
+        reply = "I couldn't block that time just now, so nothing was added. Try telling me again in a moment.";
+      }
+    }
   } else if (choice.name === TOOL_ANSWER) {
     reply = reply || "I'm not sure how to help with that one.";
   }
@@ -489,6 +530,7 @@ export async function POST(request: Request): Promise<Response> {
   if (proposals) extras.proposals = proposals;
   if (question) extras.question = question;
   if (savedRule) extras.savedRule = savedRule;
+  if (timeOff) extras.timeOff = timeOff;
 
   const messageId = await appendMessage(sessionId, {
     role: 'assistant',

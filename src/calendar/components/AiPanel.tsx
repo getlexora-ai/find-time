@@ -57,6 +57,15 @@ function fmtSlot(startISO: string, endISO: string) {
   )}–${endISO.slice(11, 16)}`;
 }
 
+/** "Thu 17 Sep 18:00 → Tue 22 Sep 18:00" — a span of time away, both ends in full. */
+function fmtAway(startISO: string, endISO: string) {
+  const end = (iso: string) => {
+    const d = new Date(iso);
+    return `${DOW[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]} ${iso.slice(11, 16)}`;
+  };
+  return `${end(startISO)} → ${end(endISO)}`;
+}
+
 /** Local-only view state layered over a server message. */
 type Decision = { kind: 'added' | 'declined'; label: string };
 
@@ -380,6 +389,20 @@ function MessageRow({
         <View style={styles.ruleCard}>
           <Icon name="stars" size={16} color={C.lime} />
           <Txt style={styles.ruleTxt}>{message.savedRule.label}</Txt>
+        </View>
+      )}
+
+      {/* Only rendered when the blocks were actually written — the server sets
+          timeOff after the last one saves, never on a failed attempt. */}
+      {message.timeOff && (
+        <View style={styles.ruleCard}>
+          <Icon name="calendar-mark" size={16} color={C.lime} />
+          <View style={{ flex: 1 }}>
+            <Txt style={styles.ruleTxt}>{message.timeOff.title}</Txt>
+            <Txt style={[styles.ruleTxt, { color: w(0.55), fontFamily: MONO }]}>
+              {fmtAway(message.timeOff.startISO, message.timeOff.endISO)}
+            </Txt>
+          </View>
         </View>
       )}
 

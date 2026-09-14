@@ -122,6 +122,9 @@ export type ChatMessage = {
   question?: { text: string; options: string[] };
   /** present when the turn saved a standing rule */
   savedRule?: { id: string; label: string };
+  /** present when the turn blocked out time away (vacation, travel, a day off).
+   *  Wall-clock span as the user said it; `days` is how many calendar blocks it made. */
+  timeOff?: { title: string; startISO: string; endISO: string; days: number };
   /** the user has reported this reply (POST /api/ai/report) */
   reported?: boolean;
 };

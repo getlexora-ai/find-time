@@ -32,12 +32,13 @@ import { CATEGORIES } from './preferences.ts';
  * a change in the prompt rather than guessed at. Without it, "the agent got
  * worse last week" has no answerable form.
  */
-export const PROMPT_VERSION = 'p1';
+export const PROMPT_VERSION = 'p2';
 
 export const TOOL_PROPOSE = 'propose_blocks';
 export const TOOL_ASK = 'ask_clarification';
 export const TOOL_RULE = 'record_rule';
 export const TOOL_ANSWER = 'answer';
+export const TOOL_TIME_OFF = 'block_time_off';
 
 const CATS = [...CATEGORIES];
 
@@ -193,6 +194,51 @@ export const RULE_TOOL: ToolDef = {
   },
 };
 
+/**
+ * Time away, understood from however the user says it. The one tool that takes
+ * exact times from the model — they are the user's own times, read out of their
+ * sentence, not a slot the model chose — and src/server/ai/time-off.ts checks
+ * them before anything is written. Before this, "I'm on vacation from the 17th"
+ * had nowhere to go: the model replied "noted" and nothing was saved.
+ */
+export const TIME_OFF_TOOL: ToolDef = {
+  name: TOOL_TIME_OFF,
+  description:
+    'The user will be away or unavailable for a stretch of time and wants it kept clear — vacation, ' +
+    'travel, a trip, sick leave, a day off, parental leave, "I\'m out Friday afternoon", "at a wedding ' +
+    'all weekend", "I\'m in Copenhagen from the 17th". They do not have to say "block" or "vacation"; ' +
+    'saying they will be somewhere else or unavailable is enough. This puts the whole span on their ' +
+    'calendar, so nothing gets planned into it and later conversations can see it. ' +
+    'Read the dates from their words: resolve "the 17th", "next Monday" or "the week after" against ' +
+    'today; "morning" starts 09:00, "afternoon" 13:00, "evening" 18:00, "end of day" 18:00; dates ' +
+    'with no time ("17th to 22nd") are whole days, from 00:00 on the first to 00:00 the day after the ' +
+    'last. Use ask_clarification first only when a date itself is missing or could mean two different ' +
+    'days — never just for the time of day, which has the defaults above.',
+  input_schema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      startISO: {
+        type: 'string',
+        description: 'When the time away starts, ISO 8601 wall-clock as the user would read it, e.g. "2026-09-17T18:00:00Z".',
+      },
+      endISO: {
+        type: 'string',
+        description: 'When it ends, same format, e.g. "2026-09-22T18:00:00Z".',
+      },
+      title: {
+        type: 'string',
+        description: 'Short calendar title in the user\'s terms, e.g. "Vacation — Copenhagen" or "Day off". No quotes.',
+      },
+      reply: {
+        type: 'string',
+        description: 'One sentence, first person, saying what you blocked, with the dates in words.',
+      },
+    },
+    required: ['startISO', 'endISO', 'title', 'reply'],
+  },
+};
+
 export const ANSWER_TOOL: ToolDef = {
   name: TOOL_ANSWER,
   description:
@@ -209,7 +255,7 @@ export const ANSWER_TOOL: ToolDef = {
   },
 };
 
-export const CHAT_TOOLS: ToolDef[] = [PROPOSE_TOOL, ASK_TOOL, RULE_TOOL, ANSWER_TOOL];
+export const CHAT_TOOLS: ToolDef[] = [PROPOSE_TOOL, ASK_TOOL, RULE_TOOL, TIME_OFF_TOOL, ANSWER_TOOL];
 
 /**
  * Build the system prompt.
@@ -232,15 +278,23 @@ export function buildSystemPrompt(opts: {
       'conversation: the user can revise, question, or reject what you just proposed, and you ' +
       'should treat their latest message as a reply to your previous turn.',
     `"now" is ${opts.nowISO}. Every time you produce or read is UTC wall-clock.`,
+    `Today is ${new Date(opts.nowISO).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' })} ` +
+      `${opts.nowISO.slice(0, 10)}. Resolve dates like "the 17th" or "next Monday" against it.`,
     '',
     'Rules you must follow:',
-    '- Never invent specific slots. Give bounds; the scheduler places the blocks.',
+    '- Understand what the user means, not only the words they use. "I\'m in Copenhagen from the 17th ' +
+      'till the 22nd" is time away even though it never says "vacation" or "block".',
+    '- Never invent slots for work you place. Give bounds; the scheduler picks the times. Times the user ' +
+      'stated themselves, like when they are away, are not invented — pass them through.',
     '- Prefer acting on a sensible default over asking. Ask at most one question, and only when ' +
       'the answer would actually change where a block goes.',
     '- When the user pushes back ("too early", "not Tuesday", "make it shorter"), re-propose with ' +
       'adjusted bounds rather than defending your previous answer.',
     '- Keep replies short and first person. Never list the times in your reply text; the UI renders them.',
-    `- Never place anything more than ${opts.horizonDays} days out.`,
+    `- Never place work more than ${opts.horizonDays} days out.`,
+    '- Only say you saved, noted, blocked or will remember something when one of your tools did it in this ' +
+      'turn. If none of your tools can do what they asked, say so plainly. You do not remember earlier ' +
+      'conversations: you only know this conversation, the calendar, and the rules and preferences below.',
   ];
 
   if (opts.rules.length) {

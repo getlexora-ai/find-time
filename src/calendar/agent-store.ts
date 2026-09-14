@@ -21,7 +21,7 @@ import type {
 } from '@/lib/api-types';
 import { apiFetch } from '@/lib/api';
 
-import { createAgentBlock } from './cal-store';
+import { createAgentBlock, refresh } from './cal-store';
 
 const SESSION_KEY = 'ft.agent.session';
 
@@ -71,10 +71,16 @@ export async function sendMessage(text: string): Promise<ChatMessage> {
     body: JSON.stringify({ sessionId: restoreSession() ?? undefined, message: text }),
   });
   const data = (await res.json().catch(() => ({}))) as Partial<ChatResponse> & { error?: string };
+  // Kept before the error check: the server opens the conversation and saves
+  // the message before it calls the model, so a failed reply still belongs to
+  // that thread. Dropping the id here started a new conversation on the next
+  // message, and everything said before it was gone.
+  if (data.sessionId) rememberSession(data.sessionId);
   if (!res.ok || !data.message) {
     throw new AgentError(data.error ?? 'Find time hit a snag. Try again.');
   }
-  if (data.sessionId) rememberSession(data.sessionId);
+  // Time off is written server-side, so the calendar has not seen it yet.
+  if (data.message.timeOff) void refresh();
   return data.message;
 }
 

@@ -23,7 +23,10 @@ export function aiConfigured(): boolean {
 export type ToolDef = { name: string; description: string; input_schema: Record<string, unknown> };
 
 type GeminiResponse = {
-  candidates?: { content?: { parts?: { functionCall?: { name?: string; args?: Record<string, unknown> } }[] } }[];
+  candidates?: {
+    content?: { parts?: { functionCall?: { name?: string; args?: Record<string, unknown> } }[] };
+    finishReason?: string;
+  }[];
   usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
 };
 
@@ -151,7 +154,38 @@ export type ToolChoice = {
  * prompt can never come back out as an unframed instruction, because every
  * reply is a typed object rather than free text.
  */
-export async function chatWithTools(opts: {
+/**
+ * A failure worth one more try: Google overloaded or rate-limiting (429/5xx),
+ * or a reply that came back without the forced function call. A bad key or a
+ * bad schema would fail the same way twice, so those are not retried.
+ */
+class GeminiCallError extends Error {
+  readonly retryable: boolean;
+  constructor(message: string, retryable: boolean) {
+    super(message);
+    this.retryable = retryable;
+  }
+}
+
+const RETRY_DELAY_MS = 800;
+
+/**
+ * Retries once. Both failures seen in production were one-offs — a 503 "high
+ * demand" and a reply with no function call — and the user's next message
+ * worked each time, so a single retry turns them into a slower reply instead
+ * of "could not read that".
+ */
+export async function chatWithTools(opts: Parameters<typeof chatWithToolsOnce>[0]): Promise<ToolChoice> {
+  try {
+    return await chatWithToolsOnce(opts);
+  } catch (err) {
+    if (!(err instanceof GeminiCallError) || !err.retryable || opts.signal?.aborted) throw err;
+    await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+    return chatWithToolsOnce(opts);
+  }
+}
+
+async function chatWithToolsOnce(opts: {
   system: string;
   history: ChatTurn[];
   tools: ToolDef[];
@@ -199,7 +233,7 @@ export async function chatWithTools(opts: {
 
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(`Gemini ${res.status}: ${body.slice(0, 300)}`);
+    throw new GeminiCallError(`Gemini ${res.status}: ${body.slice(0, 300)}`, res.status === 429 || res.status >= 500);
   }
 
   const data = (await res.json()) as GeminiResponse;
@@ -207,7 +241,12 @@ export async function chatWithTools(opts: {
   const parts = data.candidates?.[0]?.content?.parts ?? [];
   const call = parts.find((p) => p.functionCall?.name && names.includes(p.functionCall.name))
     ?.functionCall;
-  if (!call?.name || !call.args) throw new Error('Gemini returned no functionCall.');
+  if (!call?.name || !call.args) {
+    // The stop reason is the only clue to why (MAX_TOKENS, SAFETY, …), so it
+    // goes into the message that lands in ai_turns.error.
+    const reason = data.candidates?.[0]?.finishReason;
+    throw new GeminiCallError(`Gemini returned no functionCall${reason ? ` (finishReason ${reason})` : ''}.`, true);
+  }
   return {
     name: call.name,
     args: call.args,
