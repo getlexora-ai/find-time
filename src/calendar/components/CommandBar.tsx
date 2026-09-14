@@ -12,7 +12,6 @@ import { useResponsive } from '../useResponsive';
 import { AccountButton } from './AccountButton';
 
 const VIEWS: { key: ViewKind; label: string; short: string }[] = [
-  { key: 'month', label: 'Month', short: 'M' },
   { key: 'week', label: 'Week', short: 'W' },
   { key: 'day', label: 'Day', short: 'D' },
 ];
@@ -43,13 +42,11 @@ export function CommandBar({
   state,
   actions,
   title,
-  clashes,
   onOpenTheme,
 }: {
   state: CalState;
   actions: CalActions;
   title: string;
-  clashes: number;
   onOpenTheme: (anchor: { x: number; y: number }) => void;
 }) {
   const { theme } = useCalTheme();
@@ -111,20 +108,10 @@ export function CommandBar({
         </Press>
       </View>
 
-      {/* The old toolbar spent a full sentence on "N clashes to resolve". A
-          pill that opens the first one is the same information and an action. */}
-      {clashes > 0 && (
-        <Press
-          onPress={() => actions.setView('day')}
-          hoverBg="rgba(255,68,0,0.18)"
-          style={styles.clashPill}
-          accessibilityRole="button">
-          <Icon name="triangle" size={13} color={C.orange} />
-          <Txt style={styles.clashTxt}>
-            {clashes} clash{clashes > 1 ? 'es' : ''}
-          </Txt>
-        </Press>
-      )}
+      {/* The clash count used to live here as a pill. It is now one of the four
+          readings in the KPI panel directly below, where it sits next to the
+          other three numbers that describe the same period — one instrument,
+          not a stray warning bolted to the navigation. */}
 
       <View style={styles.spacer} />
 
@@ -228,18 +215,6 @@ const styles = StyleSheet.create({
   tabOn: { backgroundColor: w(0.16) },
   tabTxt: { color: w(0.5), fontSize: 11 },
   tabTxtOn: { color: '#fff', fontWeight: '500' },
-  clashPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: R.md,
-    borderWidth: 1,
-    borderColor: 'rgba(255,68,0,0.4)',
-    backgroundColor: 'rgba(255,68,0,0.1)',
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-  },
-  clashTxt: { color: C.orange, fontSize: 11 },
   sync: { color: w(0.3), fontSize: 11 },
   newBtn: {
     height: 32,

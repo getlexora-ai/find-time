@@ -5,7 +5,7 @@ import type { CalActions, CalState } from '../state';
 import { useCalTheme } from '../theme-context';
 import { R, w } from '../tokens';
 import type { CalEvent } from '../types';
-import { Txt } from '../ui';
+import { Press, Txt } from '../ui';
 import { useResponsive } from '../useResponsive';
 import { Agenda } from './Agenda';
 import { DayPillStrip } from './DayPillStrip';
@@ -68,11 +68,31 @@ function DesktopWeek({
         </View>
         {days.map((d) => {
           const isToday = sameDay(d, today());
+          const isWeekend = wdIndex(d) > 4;
           return (
-            <View key={iso(d)} style={[styles.col, styles.dayHead, { backgroundColor: theme.recessed }]}>
+            /* The header is the way into a single day. Week → day used to need
+               the view tabs; clicking the column you are already looking at is
+               the gesture people try first. */
+            <Press
+              key={iso(d)}
+              onPress={() => {
+                actions.pick(iso(d));
+                actions.setView('day');
+              }}
+              hoverBg={w(0.06)}
+              accessibilityRole="button"
+              aria-label={`Open ${WD[wdIndex(d)]} ${d.getDate()} in day view`}
+              style={[styles.col, styles.dayHead, { backgroundColor: theme.recessed }]}>
               <Txt style={[styles.dayHeadWd, isToday && styles.dayHeadWdToday]}>{WD[wdIndex(d)]}</Txt>
-              <Txt style={[styles.dayHeadNum, isToday && styles.dayHeadNumToday]}>{d.getDate()}</Txt>
-            </View>
+              <Txt
+                style={[
+                  styles.dayHeadNum,
+                  isWeekend && styles.dayHeadNumWknd,
+                  isToday && styles.dayHeadNumToday,
+                ]}>
+                {d.getDate()}
+              </Txt>
+            </Press>
           );
         })}
       </View>
@@ -92,6 +112,7 @@ const styles = StyleSheet.create({
   dayHeadWd: { fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.6, color: w(0.35) },
   dayHeadWdToday: { color: '#fff' },
   dayHeadNum: { fontSize: 14, color: w(0.6) },
+  dayHeadNumWknd: { color: w(0.32) },
   // Today is marked by weight, not by a glowing lime chip on every view — the
   // grid reads better when only the now-line is loud.
   dayHeadNumToday: { color: '#fff', fontWeight: '500' },

@@ -64,8 +64,20 @@ export function TimeGrid({
       {days.map((d) => {
         const laid = laidOut(byDate(events, iso(d)));
         const isToday = sameDay(d, today());
+        const isWeekend = d.getDay() === 0 || d.getDay() === 6;
         return (
           <View key={iso(d)} style={[styles.col, { backgroundColor: theme.panel, height: bh }]}>
+            {/* Ground tints, under the hour lines: the weekend sits back a
+                shade and today comes forward a shade, so the eye finds the
+                right column before it reads a single label. Both are ~2%, far
+                below the weight of any block — the grid must not compete with
+                what is on it. */}
+            {(isWeekend || isToday) && (
+              <View
+                pointerEvents="none"
+                style={[StyleSheet.absoluteFill, isToday ? styles.todayCol : styles.weekendCol]}
+              />
+            )}
             <HourLines start={dayStart} end={dayEnd} />
             {laid.map((it) => (
               <EventBlock key={it.ev.id} it={it} dayStart={dayStart} onPress={(a) => actions.openEvent(it.ev.id, a)} />
@@ -108,6 +120,8 @@ const styles = StyleSheet.create({
   gutterHour: { height: ROW, position: 'relative' },
   gutterTxt: { position: 'absolute', right: 8, top: -6, color: w(0.25), fontSize: 11, textAlign: 'right' },
   col: { flex: 1, minWidth: 0, position: 'relative' },
+  weekendCol: { backgroundColor: 'rgba(255,255,255,0.022)' },
+  todayCol: { backgroundColor: 'rgba(204,255,0,0.022)' },
   hourLine: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: 'rgba(255,255,255,0.09)' },
   halfLine: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: 'rgba(255,255,255,0.035)' },
   nowLine: { position: 'absolute', left: 0, right: 0, zIndex: 20 },

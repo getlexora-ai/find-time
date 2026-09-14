@@ -16,9 +16,15 @@ the mobile nav's "Ask AI". `src/lib/*` is now unreferenced but left on disk.
 | Tokens / themes / dates / seed | `tokens.ts`, `themes.ts`, `cal-date.ts`, `seed.ts`, `types.ts` |
 | State + store | `state.ts`, `cal-store.ts` (in-memory, `useSyncExternalStore`), `theme-context.tsx` (AsyncStorage, key `ft-theme`) |
 | Geometry | `layout.ts` (`monthCells`, `laidOut` overlap split, block px), `useResponsive.ts` (1024px breakpoint) |
+| Readings | `kpi.ts` — the four numbers above the grid, derived from the events the grid draws |
 | Icons | `Icon.tsx` + `solar-icons.ts` — the **real** Solar glyphs, rendered with `SvgXml` |
 | Screen | `CalendarScreen.tsx` (orchestrator: state, nav model, derived toolbar copy, web keyboard shortcuts) |
-| Surfaces | `components/` — Frame, Header, MobileNav, Toolbar, ConflictBanner, Sidebar, MiniMonth, MonthView, WeekView, DayView, TimeGrid, EventBlock, EventChip, Agenda, DayPillStrip, EventDetail, ComposeSheet, AiPanel, PickerSheet, ThemeMenu, Toast, Skeleton |
+| Surfaces | `components/` — Frame, CommandBar, KpiStrip, MobileNav, ConflictBanner, Sidebar, MiniMonth, WeekView, DayView, TimeGrid, EventBlock, Agenda, DayPillStrip, EventDetail, ComposeSheet, AiPanel, PickerSheet, ThemeMenu, Toast, Skeleton |
+
+Two views, week and day. Month view (and the `EventChip` it alone used) was removed: it
+showed which days were busy while hiding every time, so every path through it ended in
+week or day anyway. `monthCells` stays — `MiniMonth` and `PickerSheet` still use it to
+draw a date picker.
 
 `src/app/index.tsx` wraps `CalendarScreen` in `CalendarThemeProvider` + `ToastProvider`.
 

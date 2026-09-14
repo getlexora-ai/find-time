@@ -6,7 +6,6 @@ import { useCalEvents } from './cal-store';
 import { syncNow, useAccounts } from './account-store';
 import {
   addDays,
-  addMonths,
   fromIso,
   iso,
   MO,
@@ -24,17 +23,17 @@ import { ConflictBanner } from './components/ConflictBanner';
 import { DayView } from './components/DayView';
 import { EventDetail } from './components/EventDetail';
 import { Frame } from './components/Frame';
+import { KpiStrip } from './components/KpiStrip';
 import { MobileNav } from './components/MobileNav';
-import { MonthView } from './components/MonthView';
 import { PickerSheet } from './components/PickerSheet';
 import { Sidebar } from './components/Sidebar';
 import { Skeleton } from './components/Skeleton';
 import { ThemeMenu } from './components/ThemeMenu';
 import { useToast } from './components/Toast';
 import { WeekView } from './components/WeekView';
+import { computeKpis } from './kpi';
 import type { CalActions, CalState, PointAnchor, ViewKind } from './state';
 import type { CalEvent, EventKind } from './types';
-import { DESKTOP_BP } from './tokens';
 import { useResponsive } from './useResponsive';
 
 /**
@@ -66,7 +65,7 @@ function overlapping(list: CalEvent[]): { a: CalEvent; b: CalEvent }[] {
 export function CalendarScreen() {
   const all = useCalEvents();
   const toast = useToast();
-  const { width, isDesktop, isPhone } = useResponsive();
+  const { isDesktop, isPhone } = useResponsive();
   const { signedIn } = useAccounts();
 
   // Pull Google Calendar on mount (throttled in the store) and once we're signed in.
@@ -83,8 +82,13 @@ export function CalendarScreen() {
     window.history.replaceState(null, '', window.location.pathname);
   }, [toast]);
 
+  /**
+   * Week is the only sensible landing view now that month is gone. Month was a
+   * density map you could not act on: it showed which days were busy and hid
+   * every time, so the first thing you did on opening the app was leave it.
+   */
   const [state, setState] = useState<CalState>(() => ({
-    view: width < DESKTOP_BP ? 'week' : 'month',
+    view: 'week',
     cursor: today(),
     selected: today(),
     loading: false,
@@ -134,15 +138,13 @@ export function CalendarScreen() {
     if (loadTimer.current) clearTimeout(loadTimer.current);
     loadTimer.current = setTimeout(() => {
       setState((s) => {
-        if (s.view === 'month') return { ...s, loading: false, cursor: addMonths(s.cursor, dir) };
-        if (s.view === 'week')
-          return {
-            ...s,
-            loading: false,
-            cursor: addDays(s.cursor, dir * 7),
-            selected: addDays(s.selected, dir * 7),
-          };
-        return { ...s, loading: false, cursor: addDays(s.cursor, dir), selected: addDays(s.selected, dir) };
+        const n = s.view === 'week' ? dir * 7 : dir;
+        return {
+          ...s,
+          loading: false,
+          cursor: addDays(s.cursor, n),
+          selected: addDays(s.selected, n),
+        };
       });
     }, 200);
   }, []);
@@ -156,11 +158,9 @@ export function CalendarScreen() {
         setState((s) => ({ ...s, cursor: t, selected: new Date(t) }));
         toast(`Back to today, ${WD[wdIndex(t)]} ${t.getDate()} ${MO[t.getMonth()].slice(0, 3)}`);
       },
-      pick: (dateIso, fromMonthTile) =>
+      pick: (dateIso) =>
         setState((s) => {
           const d = fromIso(dateIso);
-          if (s.view === 'month' && width >= DESKTOP_BP && fromMonthTile)
-            return { ...s, selected: d, cursor: new Date(d), view: 'day' };
           return { ...s, selected: d, cursor: new Date(d) };
         }),
       openCompose: (id, date, at, autoPlace) =>
@@ -173,22 +173,31 @@ export function CalendarScreen() {
       openPicker: () => setPicker(true),
       toast,
     }),
-    [step, toast, width],
+    [step, toast],
   );
+
+  /**
+   * The exact days on screen. One list drives the conflict scope, the KPI panel
+   * and nothing else — which is what keeps the panel honest: it can only ever
+   * describe the same days the grid is drawing.
+   */
+  const days = useMemo(() => {
+    if (state.view === 'day') return [iso(state.selected)];
+    const s = startOfWeek(state.cursor);
+    return Array.from({ length: 7 }, (_, i) => iso(addDays(s, i)));
+  }, [state.view, state.cursor, state.selected]);
 
   /* ── real clashes, scoped to whatever the bar is showing ── */
   const conflicts = useMemo(() => overlapping(events), [events]);
-  const scopedConflicts = useMemo(() => {
-    const c = state.cursor;
-    const wkStart = startOfWeek(c);
-    const wkEnd = addDays(wkStart, 6);
-    return conflicts.filter(({ a }) => {
-      const d = fromIso(a.date);
-      if (state.view === 'day') return a.date === iso(state.selected);
-      if (state.view === 'week') return d >= wkStart && d <= wkEnd;
-      return d.getMonth() === c.getMonth() && d.getFullYear() === c.getFullYear();
-    });
-  }, [conflicts, state.view, state.cursor, state.selected]);
+  const scopedConflicts = useMemo(
+    () => conflicts.filter(({ a }) => days.includes(a.date)),
+    [conflicts, days],
+  );
+
+  const kpis = useMemo(
+    () => computeKpis(events, days, scopedConflicts.length),
+    [events, days, scopedConflicts.length],
+  );
 
   /**
    * The bar's title. The eyebrow ("SEP 2026 · 14 events · no conflicts") and
@@ -196,11 +205,9 @@ export function CalendarScreen() {
    * already shows, and between them they pushed the calendar ~120px down.
    */
   const title = useMemo(() => {
-    const c = state.cursor;
     const s = state.selected;
-    if (state.view === 'month') return `${MO[c.getMonth()]} ${c.getFullYear()}`;
     if (state.view === 'week') {
-      const wkStart = startOfWeek(c);
+      const wkStart = startOfWeek(state.cursor);
       const e2 = addDays(wkStart, 6);
       return `${MO[wkStart.getMonth()].slice(0, 3)} ${wkStart.getDate()} – ${MO[e2.getMonth()].slice(0, 3)} ${e2.getDate()}`;
     }
@@ -224,7 +231,6 @@ export function CalendarScreen() {
       const t = e.target as HTMLElement | null;
       if (t && /^(input|textarea|select)$/i.test(t.tagName)) return;
       const k = e.key.toLowerCase();
-      if (k === 'm') actions.setView('month');
       if (k === 'w') actions.setView('week');
       if (k === 'd') actions.setView('day');
       if (k === 't') actions.goToday();
@@ -243,8 +249,6 @@ export function CalendarScreen() {
 
   const grid = state.loading ? (
     <Skeleton />
-  ) : state.view === 'month' ? (
-    <MonthView state={state} actions={actions} events={events} />
   ) : state.view === 'week' ? (
     <WeekView state={state} actions={actions} events={events} />
   ) : (
@@ -269,9 +273,24 @@ export function CalendarScreen() {
             state={state}
             actions={actions}
             title={title}
-            clashes={scopedConflicts.length}
             onOpenTheme={() => setThemeMenu(true)}
           />
+
+          {/*
+            The instrument panel. It sits between the bar and the grid because
+            it is a reading of the period the bar names and the grid draws —
+            the one place the whole week answers "where am I" before you start
+            parsing blocks.
+          */}
+          <KpiStrip
+            k={kpis}
+            onResolve={
+              hasConflict
+                ? () => actions.openCompose(scopedConflicts[0].b.id, undefined, undefined, true)
+                : undefined
+            }
+          />
+
           {hasConflict && (
             <View style={styles.bannerWrap}>
               <ConflictBanner
