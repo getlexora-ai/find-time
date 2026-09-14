@@ -315,6 +315,21 @@ type MessageRow = {
   parsed: Record<string, unknown> | null;
 };
 
+/** A message, but only if it sits in one of this user's own conversations. */
+export async function getOwnedMessage(
+  userId: string,
+  messageId: string,
+): Promise<{ id: string; sessionId: string; role: string; kind: string } | null> {
+  const row = await queryOne<{ id: string; session_id: string; role: string; kind: string }>(
+    `select m.id, m.session_id, m.role, m.kind
+       from ai_messages m
+       join ai_sessions s on s.id = m.session_id
+      where m.id = $1 and s.user_id = $2`,
+    [messageId, userId],
+  );
+  return row ? { id: row.id, sessionId: row.session_id, role: row.role, kind: row.kind } : null;
+}
+
 export async function listMessages(sessionId: string, limit = 40): Promise<StoredMessage[]> {
   // Newest `limit`, then flipped back into chronological order — an old thread
   // must not push the system prompt out of the context window.

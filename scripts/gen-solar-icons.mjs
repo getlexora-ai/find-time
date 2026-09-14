@@ -38,6 +38,8 @@ const MAP = {
   cursor: 'cursor-linear',
   dots: 'menu-dots-linear',
   eye: 'eye-linear',
+  // AiPanel — report a reply
+  flag: 'flag-linear',
   folder: 'folder-with-files-linear',
   magic: 'magic-stick-3-linear',
   mic: 'microphone-3-linear',

@@ -125,6 +125,7 @@ with the capture rather than after it.
 | `chat` | the user corrected the agent in words |
 | `rule` | the user stated a standing rule outright |
 | `preference` | a learned preference was deleted or confirmed |
+| `report` | the user flagged an agent reply as wrong (db/017) |
 
 `fault` is the field that matters and it is **not set by the capture layer**.
 Only `agent` is training signal: a user who changed their mind is not evidence
@@ -139,6 +140,18 @@ turns — is better placed than any classifier bolted on afterwards. It is never
 shown internal ids: *which* proposal is being revised is resolved server-side
 from the session. Its label lands `unreviewed` like everything else; it is a
 suggestion for the review queue, never a verdict.
+
+**Reported replies** cover what a proposal card can't: a turn that misread
+the request, ignored a stated rule, said something false about the calendar,
+or didn't help. Every agent reply in the panel has a *Report* link; the user
+picks one reason (`misunderstood`, `ignored-rule`, `wrong-info`, `unhelpful`,
+`inappropriate`, `other`) and may add a note. `POST /api/ai/report` writes one
+correction per reply with `turn_id` set — `ai_turns.message_id` is filled in
+after the reply is stored so the report leads back to the model, prompt
+version and replayable input. The note is Track B like any other. A report
+changes nothing by itself: it waits in review with `fault = 'unknown'`, and
+the panel says so. Unlike the other writers, a failed report write is
+surfaced to the user rather than swallowed — they asked for it to be sent.
 
 ---
 

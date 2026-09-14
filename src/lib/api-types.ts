@@ -119,6 +119,8 @@ export type ChatMessage = {
   question?: { text: string; options: string[] };
   /** present when the turn saved a standing rule */
   savedRule?: { id: string; label: string };
+  /** the user has reported this reply (POST /api/ai/report) */
+  reported?: boolean;
 };
 
 export type ChatRequest = {
@@ -161,6 +163,31 @@ export type FeedbackResponse = {
   /** plain-language notes on what the agent changed its mind about, if anything */
   notes: string[];
 };
+
+// ── POST /api/ai/report — "that reply was wrong" ────────────────────────────
+
+/**
+ * What was wrong with an agent reply. About the turn as a whole — a bad slot
+ * has its own path (RejectReason). Mirrors REPORT_REASON_CODES in
+ * src/server/ai/capture-core.ts.
+ */
+export type ReportReason =
+  | 'misunderstood'
+  | 'ignored-rule'
+  | 'wrong-info'
+  | 'unhelpful'
+  | 'inappropriate'
+  | 'other';
+
+export type ReportRequest = {
+  /** the assistant message being reported */
+  messageId: string;
+  reason: ReportReason;
+  /** optional, ≤120 chars. Track B: dropped at capture_profile='anon'. */
+  note?: string;
+};
+
+export type ReportResponse = { ok: boolean };
 
 // ── /api/ai/preferences — what the agent believes, in the open ──────────────
 

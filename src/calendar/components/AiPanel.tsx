@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
-import type { ChatMessage, ChatProposal, RejectReason } from '@/lib/api-types';
+import type { ChatMessage, ChatProposal, RejectReason, ReportReason } from '@/lib/api-types';
 
 import {
   REJECT_REASONS,
+  REPORT_REASONS,
   acceptAlternative,
   acceptProposal,
   loadHistory,
   rejectProposal,
+  reportReply,
   resetSession,
   sendMessage,
 } from '../agent-store';
@@ -32,6 +34,10 @@ import { useResponsive } from '../useResponsive';
  * so accepting it, switching to a runner-up, or turning it down with a reason
  * all report back (src/calendar/agent-store.ts) — which is what lets the agent
  * get better instead of just repeating itself politely.
+ *
+ * Replies that go wrong in ways a slot can't — misreading the request, ignoring
+ * a rule — get a quiet "Report" link underneath. That goes to a review queue
+ * (/api/ai/report), not straight into the agent, and the panel says so.
  */
 
 const STARTERS = [
@@ -77,6 +83,10 @@ export function AiPanel({
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
   // proposal id -> reason chips are open
   const [rejecting, setRejecting] = useState<string | null>(null);
+  // message id -> report form is open
+  const [reporting, setReporting] = useState<string | null>(null);
+  // message ids reported this session; history marks older ones via `reported`
+  const [reported, setReported] = useState<Record<string, true>>({});
 
   const scroller = useRef<ScrollView>(null);
   const toBottom = useCallback(() => {
@@ -173,11 +183,27 @@ export function AiPanel({
     [toast],
   );
 
+  const onReport = useCallback(
+    async (messageId: string, reason: ReportReason, note: string) => {
+      const ok = await reportReply(messageId, reason, note);
+      if (!ok) {
+        toast("Couldn't send that report. Try again.");
+        return;
+      }
+      setReporting(null);
+      setReported((r) => ({ ...r, [messageId]: true }));
+      toast('Reported. Thanks. It goes to review.');
+    },
+    [toast],
+  );
+
   const startOver = useCallback(() => {
     resetSession();
     setMessages([]);
     setDecisions({});
     setRejecting(null);
+    setReporting(null);
+    setReported({});
     toast('Started a new conversation');
   }, [toast]);
 
@@ -266,6 +292,10 @@ export function AiPanel({
                 onReject={onReject}
                 onOpenReject={setRejecting}
                 onAnswer={(a) => void send(a)}
+                reported={Boolean(m.reported || reported[m.id])}
+                reporting={reporting === m.id}
+                onOpenReport={setReporting}
+                onReport={onReport}
               />
             ))}
 
@@ -314,6 +344,10 @@ function MessageRow({
   onReject,
   onOpenReject,
   onAnswer,
+  reported,
+  reporting,
+  onOpenReport,
+  onReport,
 }: {
   message: ChatMessage;
   decisions: Record<string, Decision>;
@@ -323,6 +357,10 @@ function MessageRow({
   onReject: (p: ChatProposal, reason: RejectReason, label: string) => void;
   onOpenReject: (id: string | null) => void;
   onAnswer: (text: string) => void;
+  reported: boolean;
+  reporting: boolean;
+  onOpenReport: (id: string | null) => void;
+  onReport: (messageId: string, reason: ReportReason, note: string) => Promise<void>;
 }) {
   if (message.role === 'user') {
     return (
@@ -367,6 +405,96 @@ function MessageRow({
           onOpenReject={onOpenReject}
         />
       ))}
+
+      {/* Client-side error bubbles (`err_…`) never reached the server, so
+          there is no turn behind them to report. */}
+      {!message.id.startsWith('err_') &&
+        (reported ? (
+          <View style={styles.reportRow}>
+            <Icon name="flag" size={12} color={w(0.3)} />
+            <Txt style={styles.reportedTxt}>Reported</Txt>
+          </View>
+        ) : reporting ? (
+          <ReportBox
+            onCancel={() => onOpenReport(null)}
+            onSubmit={(reason, note) => onReport(message.id, reason, note)}
+          />
+        ) : (
+          <Press
+            onPress={() => onOpenReport(message.id)}
+            hoverBg={w(0.05)}
+            style={styles.reportLink}
+            aria-label="Report this reply">
+            <Icon name="flag" size={12} color={w(0.3)} />
+            <Txt style={styles.reportLinkTxt}>Report</Txt>
+          </Press>
+        ))}
+    </View>
+  );
+}
+
+function ReportBox({
+  onCancel,
+  onSubmit,
+}: {
+  onCancel: () => void;
+  onSubmit: (reason: ReportReason, note: string) => Promise<void>;
+}) {
+  const [reason, setReason] = useState<ReportReason | null>(null);
+  const [note, setNote] = useState('');
+  const [sending, setSending] = useState(false);
+
+  const submit = async () => {
+    if (!reason || sending) return;
+    setSending(true);
+    try {
+      await onSubmit(reason, note);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <View style={styles.reportBox}>
+      <Txt style={styles.reasonLabel}>What went wrong with this reply?</Txt>
+      <View style={styles.chipRow}>
+        {REPORT_REASONS.map((r) => {
+          const on = reason === r.code;
+          return (
+            <Press
+              key={r.code}
+              onPress={() => setReason(r.code)}
+              hoverBg={w(0.05)}
+              style={[styles.chip, on && styles.chipOn]}
+              aria-label={r.label}>
+              <Txt style={[styles.chipTxt, on && styles.chipTxtOn]}>{r.label}</Txt>
+            </Press>
+          );
+        })}
+      </View>
+      <TextInput
+        value={note}
+        onChangeText={setNote}
+        maxLength={120}
+        placeholder="What should it have done? (optional)"
+        placeholderTextColor={w(0.25)}
+        style={styles.reportInput}
+      />
+      <Txt style={styles.reportHint}>
+        Reports go to review. To change how I schedule right now, just tell me in the chat.
+      </Txt>
+      <View style={styles.reportBtns}>
+        <Press
+          onPress={() => void submit()}
+          disabled={!reason || sending}
+          hoverBg={C.limeHover}
+          style={[styles.reportSend, (!reason || sending) && styles.runOff]}>
+          <Txt style={styles.applyTxt}>{sending ? 'Sending…' : 'Send report'}</Txt>
+        </Press>
+        <Press onPress={onCancel} hoverBg={w(0.1)} style={styles.dismissBtn}>
+          <Txt style={styles.dismissTxt}>Cancel</Txt>
+        </Press>
+      </View>
     </View>
   );
 }
@@ -546,6 +674,18 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { borderRadius: R.full, borderWidth: 1, borderColor: w(0.1), paddingHorizontal: 12, paddingVertical: 8 },
   chipTxt: { color: w(0.55), fontSize: 12 },
+  chipOn: { borderColor: rgba(C.lime, 0.5), backgroundColor: rgba(C.lime, 0.08) },
+  chipTxtOn: { color: '#fff' },
+
+  reportLink: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: R.full, paddingHorizontal: 8, paddingVertical: 4, marginLeft: -8 },
+  reportLinkTxt: { color: w(0.3), fontSize: 11 },
+  reportRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },
+  reportedTxt: { color: w(0.3), fontSize: 11 },
+  reportBox: { gap: 10, borderRadius: R.xl, borderWidth: 1, borderColor: w(0.1), backgroundColor: w(0.04), padding: 12 },
+  reportInput: { minHeight: 36, borderRadius: R.lg, borderWidth: 1, borderColor: w(0.1), backgroundColor: w(0.06), paddingHorizontal: 10, paddingVertical: 8, color: '#fff', fontSize: 12, fontFamily: MONO },
+  reportHint: { color: w(0.35), fontSize: 11, lineHeight: 16 },
+  reportBtns: { flexDirection: 'row', gap: 8 },
+  reportSend: { flex: 1, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: R.lg, backgroundColor: C.lime },
 
   thinking: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
   thinkingTxt: { color: w(0.4), fontSize: 12 },

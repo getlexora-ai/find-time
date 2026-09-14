@@ -21,9 +21,11 @@ import {
   candidatesFrom,
   captureProfile,
   latestOccasionInSession,
+  linkTurnMessage,
   recordCorrection,
   recordOccasion,
   recordTurn,
+  reportedMessageIds,
   shouldExplore,
 } from '@/server/ai/capture';
 import { buildScoreContext, rankFreeSlots, selectSlots, type RankedSlot } from '@/server/ai/find-time';
@@ -108,13 +110,17 @@ export async function GET(request: Request): Promise<Response> {
     return Response.json({ sessionId: null, messages: [] } satisfies ChatHistoryResponse);
   }
 
-  const stored = await listMessages(sessionId, MAX_TURNS * 2);
+  const [stored, reported] = await Promise.all([
+    listMessages(sessionId, MAX_TURNS * 2),
+    reportedMessageIds(userId, sessionId),
+  ]);
   const messages: ChatMessage[] = stored.map((m) => ({
     id: m.id,
     role: m.role,
     text: m.content,
     createdAt: m.createdAt,
     ...((m.parsed ?? {}) as Partial<ChatMessage>),
+    ...(reported.has(m.id) ? { reported: true } : {}),
   }));
   return Response.json({ sessionId, messages } satisfies ChatHistoryResponse);
 }
@@ -490,6 +496,8 @@ export async function POST(request: Request): Promise<Response> {
     kind,
     parsed: Object.keys(extras).length ? extras : null,
   });
+  // So a reported reply leads back to the model call behind it.
+  await linkTurnMessage(turnId, messageId);
 
   const message: ChatMessage = {
     id: messageId,

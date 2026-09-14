@@ -9,8 +9,17 @@
  */
 import assert from 'node:assert/strict';
 
-const { hashInput, editKind, candidatesFrom, MAX_CANDIDATES, EXPLORE_RATE, shouldExplore } =
-  await import('./capture-core.ts');
+const {
+  hashInput,
+  editKind,
+  candidatesFrom,
+  MAX_CANDIDATES,
+  EXPLORE_RATE,
+  shouldExplore,
+  parseReport,
+  REPORT_REASON_CODES,
+  REPORT_NOTE_MAX,
+} = await import('./capture-core.ts');
 const { slotNotes, NOTE_MAX, slotFeatures } = await import('./scoring.ts');
 const { buildScoreContext, spreadPick, rankFreeSlots, selectSlots } = await import('./find-time.ts');
 const { defaultProfile } = await import('./preferences.ts');
@@ -185,6 +194,30 @@ const at = (hhmm, day = TUE) => Date.parse(iso(hhmm, day));
   assert.ok(MAX_CANDIDATES >= 20, 'enough of the field to see the decision');
   assert.ok(MAX_CANDIDATES <= 100, 'not the whole grid');
   ok('candidate cap keeps the head of the ranking');
+}
+
+// ── reported replies ────────────────────────────────────────────────────────
+{
+  const good = parseReport({ messageId: 'msg_abc', reason: 'ignored-rule' });
+  assert.deepEqual(good, { messageId: 'msg_abc', reason: 'ignored-rule', note: null });
+  ok('a message id plus a known reason is a report');
+
+  assert.equal(parseReport(null), null);
+  assert.equal(parseReport({ reason: 'other' }), null, 'no message id');
+  assert.equal(parseReport({ messageId: 'msg_abc' }), null, 'no reason');
+  assert.equal(parseReport({ messageId: 'msg_abc', reason: 'too-early' }), null, 'slot reasons are not report reasons');
+  assert.equal(parseReport({ messageId: 'sug_abc', reason: 'other' }), null, 'only messages can be reported');
+  assert.equal(parseReport({ messageId: `msg_${'x'.repeat(100)}`, reason: 'other' }), null, 'id length is bounded');
+  ok('anything else is rejected');
+
+  const long = parseReport({ messageId: 'msg_abc', reason: 'other', note: `  it   kept\n${'a'.repeat(300)}` });
+  assert.equal(long.note.length, REPORT_NOTE_MAX, 'note is cut to the column width');
+  assert.ok(long.note.startsWith('it kept a'), 'whitespace collapsed before cutting');
+  assert.equal(parseReport({ messageId: 'msg_abc', reason: 'other', note: '   ' }).note, null, 'blank note is no note');
+  ok('the note is shaped to fit reason_note');
+
+  assert.equal(new Set(REPORT_REASON_CODES).size, REPORT_REASON_CODES.length);
+  ok('report reasons are distinct');
 }
 
 console.log(`capture.check: ok (${n} checks)`);

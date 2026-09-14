@@ -17,6 +17,7 @@ import type {
   PreferenceItem,
   PreferencesResponse,
   RejectReason,
+  ReportReason,
 } from '@/lib/api-types';
 import { apiFetch } from '@/lib/api';
 
@@ -171,6 +172,40 @@ export async function rejectProposal(
 ): Promise<string[]> {
   return reportFeedback({ suggestionId: p.id, outcome: 'rejected', reasonCode: reason });
 }
+
+// ── reporting a reply ───────────────────────────────────────────────────────
+
+/**
+ * Flag an agent reply as wrong. Unlike `reportFeedback` this does NOT swallow
+ * failure: the user explicitly asked for it to be sent, so the panel must not
+ * say "reported" unless the server stored it.
+ */
+export async function reportReply(
+  messageId: string,
+  reason: ReportReason,
+  note: string,
+): Promise<boolean> {
+  try {
+    const res = await apiFetch('/api/ai/report', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ messageId, reason, note: note.trim() || undefined }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** The report reasons offered in the UI, in the order they're shown. */
+export const REPORT_REASONS: { code: ReportReason; label: string }[] = [
+  { code: 'misunderstood', label: 'Misunderstood me' },
+  { code: 'ignored-rule', label: 'Ignored my rule' },
+  { code: 'wrong-info', label: 'Got something wrong' },
+  { code: 'unhelpful', label: 'Not helpful' },
+  { code: 'inappropriate', label: 'Inappropriate' },
+  { code: 'other', label: 'Something else' },
+];
 
 // ── the learned model, in the open ──────────────────────────────────────────
 

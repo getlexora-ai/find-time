@@ -275,3 +275,71 @@ export async function latestOccasionInSession(
     return null;
   }
 }
+
+/**
+ * Point a turn at the assistant message it produced. `ai_turns.message_id`
+ * exists from 016 but the turn is logged before the reply is stored, so it has
+ * to be filled in afterwards — and a reported reply is only useful for review
+ * if it leads back to the model, prompt version and input behind it.
+ */
+export async function linkTurnMessage(turnId: string | null, messageId: string): Promise<boolean> {
+  if (!turnId) return false;
+  try {
+    const rows = await query(`update ai_turns set message_id = $2 where id = $1 returning id`, [
+      turnId,
+      messageId,
+    ]);
+    return rows.length > 0;
+  } catch (err) {
+    console.error('capture/linkTurnMessage', err);
+    return false;
+  }
+}
+
+/** The model call behind an assistant message, if it was captured. */
+export async function turnForMessage(messageId: string): Promise<string | null> {
+  try {
+    const rows = await query<{ id: string }>(
+      `select id from ai_turns where message_id = $1 order by created_at desc limit 1`,
+      [messageId],
+    );
+    return rows[0]?.id ?? null;
+  } catch (err) {
+    console.error('capture/turnForMessage', err);
+    return null;
+  }
+}
+
+// ── reported replies (db/017) ───────────────────────────────────────────────
+
+/** Whether this user already reported this reply — one report per reply. */
+export async function reportExists(userId: string, messageId: string): Promise<boolean> {
+  try {
+    const rows = await query(
+      `select id from ai_corrections
+        where user_id = $1 and source = 'report' and before_state->>'messageId' = $2
+        limit 1`,
+      [userId, messageId],
+    );
+    return rows.length > 0;
+  } catch (err) {
+    console.error('capture/reportExists', err);
+    return false;
+  }
+}
+
+/** Reply ids in a conversation the user has reported, so reloads keep the mark. */
+export async function reportedMessageIds(userId: string, sessionId: string): Promise<Set<string>> {
+  try {
+    const rows = await query<{ message_id: string }>(
+      `select before_state->>'messageId' as message_id
+         from ai_corrections
+        where user_id = $1 and source = 'report' and before_state->>'sessionId' = $2`,
+      [userId, sessionId],
+    );
+    return new Set(rows.map((r) => r.message_id));
+  } catch (err) {
+    console.error('capture/reportedMessageIds', err);
+    return new Set();
+  }
+}

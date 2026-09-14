@@ -26,6 +26,8 @@
 
 import { createHash } from 'node:crypto';
 
+import type { ReportReason } from '@/lib/api-types';
+
 import type { RankedSlot } from './find-time.ts';
 import type { SlotFeatures, SlotNotes } from './scoring.ts';
 
@@ -172,7 +174,7 @@ export type OccasionInput = {
  */
 export const MAX_CANDIDATES = 40;
 
-export type CorrectionSource = 'block' | 'chat' | 'rule' | 'preference';
+export type CorrectionSource = 'block' | 'chat' | 'rule' | 'preference' | 'report';
 
 export type CorrectionInput = {
   userId: string;
@@ -204,4 +206,48 @@ export function candidatesFrom(
     notes: notesFor ? notesFor(r) : undefined,
     offered: offeredKeys.has(r.startISO),
   }));
+}
+
+// ── reports: "that reply was wrong" ─────────────────────────────────────────
+
+/**
+ * The chips behind a reported reply. Must match `ReportReason` in
+ * src/lib/api-types.ts; stored as both `kind` and `reason_code` (db/017).
+ *
+ * These are about the TURN, not a slot — a bad slot already has "Not this" and
+ * its own reasons. Kept short on purpose: a report nobody can classify in one
+ * tap is a report nobody sends.
+ */
+export const REPORT_REASON_CODES: readonly ReportReason[] = [
+  'misunderstood',
+  'ignored-rule',
+  'wrong-info',
+  'unhelpful',
+  'inappropriate',
+  'other',
+];
+
+/** Same cap as `ai_corrections.reason_note`. */
+export const REPORT_NOTE_MAX = 120;
+
+export type ParsedReport = { messageId: string; reason: ReportReason; note: string | null };
+
+/**
+ * Validate a report body. Returns null for anything that is not a message id
+ * plus a known reason — the route turns that into a 400. The note is
+ * whitespace-collapsed and cut to the column width here rather than left to
+ * `cap()`, so what the check harness sees is what gets stored.
+ */
+export function parseReport(body: unknown): ParsedReport | null {
+  if (!body || typeof body !== 'object') return null;
+  const b = body as Record<string, unknown>;
+
+  const messageId = typeof b.messageId === 'string' ? b.messageId.trim() : '';
+  if (!messageId.startsWith('msg_') || messageId.length > 80) return null;
+
+  const reason = REPORT_REASON_CODES.find((r) => r === b.reason);
+  if (!reason) return null;
+
+  const note = typeof b.note === 'string' ? b.note.replace(/\s+/g, ' ').trim() : '';
+  return { messageId, reason, note: note ? note.slice(0, REPORT_NOTE_MAX) : null };
 }
