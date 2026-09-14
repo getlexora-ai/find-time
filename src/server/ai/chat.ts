@@ -25,6 +25,15 @@
 import type { ToolDef } from './gemini.ts';
 import { CATEGORIES } from './preferences.ts';
 
+/**
+ * Bump on every edit to buildSystemPrompt or to a tool's schema/description.
+ *
+ * It is stamped on every logged turn so a change in behaviour can be traced to
+ * a change in the prompt rather than guessed at. Without it, "the agent got
+ * worse last week" has no answerable form.
+ */
+export const PROMPT_VERSION = 'p1';
+
 export const TOOL_PROPOSE = 'propose_blocks';
 export const TOOL_ASK = 'ask_clarification';
 export const TOOL_RULE = 'record_rule';
@@ -92,6 +101,34 @@ export const PROPOSE_TOOL: ToolDef = {
         description:
           'One or two sentences, first person, said to the user alongside the blocks. Mention what ' +
           'changed if this is a revision of your previous proposal. Do not list the times — the UI shows them.',
+      },
+      // A correction made in words ("no, make it 90 minutes") is otherwise just
+      // another message: nothing links it to the proposal it corrects, so it is
+      // invisible to any dataset. Detecting it afterwards — diffing consecutive
+      // proposals, classifying intent with a second call — is unreliable. The
+      // model is better placed than any classifier, having just read both turns,
+      // and every reply is already a forced function call, so labelling costs
+      // one field. Which proposal is being revised is resolved server-side from
+      // the session; the model is never shown internal ids.
+      revisesPrevious: {
+        type: 'boolean',
+        description:
+          'True when this proposal replaces the one you made earlier in this conversation because ' +
+          'the user asked for something different. False for a fresh request.',
+      },
+      correctionKind: {
+        type: 'string',
+        enum: [
+          'changed_duration',
+          'changed_day',
+          'changed_time_of_day',
+          'changed_count',
+          'misread_request',
+          'ignored_rule',
+          'other',
+        ],
+        description:
+          'Only when revisesPrevious is true: what you got wrong the first time, in the user\'s terms.',
       },
     },
     required: ['title', 'category', 'durationMin', 'count', 'earliestISO', 'latestISO', 'oneBlockPerDay', 'weekdaysOnly', 'reply'],

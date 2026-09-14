@@ -32,6 +32,16 @@ import {
   weekdayLean,
 } from './preferences.ts';
 
+/**
+ * Bump whenever a feature's definition changes or a factor is added/removed.
+ *
+ * Feature values are only comparable within a scorer version: if `dayLoad`
+ * starts measuring something else, rows from before and after the change are
+ * different variables wearing the same name, and pooling them silently
+ * corrupts any analysis run across the boundary.
+ */
+export const SCORER_VERSION = 's1';
+
 const MIN = 60_000;
 const HOUR = 3_600_000;
 const DAY = 86_400_000;
@@ -329,4 +339,122 @@ export function topReason(features: SlotFeatures, profile: AgentProfile): string
     }
   }
   return labels[best];
+}
+
+// ── track B: why each number came out that way ──────────────────────────────
+
+/**
+ * A short, human-readable trace behind each feature value.
+ *
+ * A bare `0.55` says the scorer was unenthusiastic but not why, and while
+ * there is a single consenting tester the "why" is the whole point — you
+ * cannot tell which of the seven factors deserves to survive until you have
+ * watched a few hundred decisions with the reasoning attached.
+ *
+ * These live here rather than in the capture layer because every intermediate
+ * value they describe is already in scope here. Reconstructing them downstream
+ * from the feature values alone would duplicate this module's logic and then
+ * drift from it.
+ *
+ * Each note is capped at NOTE_MAX characters, matching the varchar(24) in
+ * db/016. The cap is the point: a field that cannot hold prose will not
+ * accrete it. They are written for a person reading a row six weeks later,
+ * never parsed by anything.
+ */
+export type SlotNotes = Record<keyof SlotFeatures, string>;
+
+export const NOTE_MAX = 24;
+
+/** Trim to the column width rather than letting the insert fail. */
+function note(s: string): string {
+  return s.length <= NOTE_MAX ? s : s.slice(0, NOTE_MAX);
+}
+
+/** Whole hours where possible ("14h"), one decimal where not ("14.5h"). */
+function h(hour: number): string {
+  const r = Math.round(hour * 10) / 10;
+  return `${Number.isInteger(r) ? r : r.toFixed(1)}h`;
+}
+
+/** Minutes as the shortest readable unit: 45m, 3h, 2.5h. */
+function dur(ms: number): string {
+  const mins = Math.round(ms / MIN);
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.round((mins / 60) * 10) / 10;
+  return `${Number.isInteger(hrs) ? hrs : hrs.toFixed(1)}h`;
+}
+
+export function slotNotes(
+  profile: AgentProfile,
+  ctx: ScoreContext,
+  startMs: number,
+  endMs: number,
+): SlotNotes {
+  const from = hourOf(startMs);
+  const pref = preferredHours(profile, ctx.category);
+  const avoid = avoidedHours(profile, ctx.category);
+
+  // hourFit — the comparison that produced the number: where it landed
+  // against where this category is supposed to go.
+  let hourFit: string;
+  if (pref) hourFit = `${h(from)}/pref${pref.start}-${pref.end}`;
+  else if (avoid.length) hourFit = `${h(from)}/avoid${avoid[0].start}-${avoid[0].end}`;
+  else hourFit = `${h(from)}/nopref`;
+
+  // energy — the band matters more than the value; the hour says which part
+  // of the curve it came from.
+  const e = energyAt(profile, Math.floor(((from % 24) + 24) % 24));
+  const band = e >= 0.7 ? 'peak' : e <= 0.4 ? 'dip' : 'mid';
+  const energy = `${band}@${h(from)}`;
+
+  // fragmentation — what the block leaves behind on each side, which is the
+  // thing the feature is actually about.
+  const gap = containingGap(ctx, startMs, endMs);
+  const before = startMs - gap.s;
+  const after = gap.e - endMs;
+  const fragmentation =
+    before === 0 && after === 0
+      ? 'fills-gap'
+      : before === 0
+        ? `keeps${dur(after)}`
+        : after === 0
+          ? `keeps${dur(before)}`
+          : `splits${dur(before)}+${dur(after)}`;
+
+  // dayLoad — booked against the budget, in the units the feature uses.
+  const d = dayStart(startMs);
+  const ws = d + ctx.dayStartHour * HOUR;
+  const we = d + ctx.dayEndHour * HOUR;
+  let booked = 0;
+  for (const b of ctx.busy) booked += overlapMs(b.s, b.e, ws, we);
+  const budget = Math.max(60, profile.maxDailyFocusMin) * MIN;
+  const dayLoad = `${dur(booked + (endMs - startMs))}/${dur(budget)}`;
+
+  // backToBack — how much air there actually is, not how much was wanted.
+  const buf = effectiveBuffer(profile);
+  const backToBack =
+    buf <= 0
+      ? 'no-buffer-set'
+      : before <= 0 && after <= 0
+        ? 'flush-both'
+        : `${dur(before)}|${dur(after)}·b${buf}m`;
+
+  // earliness — distance from the earliest allowed moment, in days.
+  const days = Math.round(((startMs - ctx.earliest) / DAY) * 10) / 10;
+  const earliness = `+${Number.isInteger(days) ? days : days.toFixed(1)}d`;
+
+  // weekdayFit — the day, and whether anything is actually leaning on it.
+  const wd = weekdayOf(startMs);
+  const lean = weekdayLean(profile, wd);
+  const weekdayFit = `${wd}·${lean > 0.05 ? 'for' : lean < -0.05 ? 'against' : 'neutral'}`;
+
+  return {
+    hourFit: note(hourFit),
+    energy: note(energy),
+    fragmentation: note(fragmentation),
+    dayLoad: note(dayLoad),
+    backToBack: note(backToBack),
+    earliness: note(earliness),
+    weekdayFit: note(weekdayFit),
+  };
 }

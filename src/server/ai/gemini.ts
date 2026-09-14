@@ -24,6 +24,7 @@ export type ToolDef = { name: string; description: string; input_schema: Record<
 
 type GeminiResponse = {
   candidates?: { content?: { parts?: { functionCall?: { name?: string; args?: Record<string, unknown> } }[] } }[];
+  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
 };
 
 /** JSON-Schema (lowercase types) -> Gemini's Schema (UPPERCASE types, narrower field set). */
@@ -120,7 +121,23 @@ export async function extractWithTool(opts: {
 
 export type ChatTurn = { role: 'user' | 'assistant'; text: string };
 
-export type ToolChoice = { name: string; args: Record<string, unknown> };
+/**
+ * The model's choice, plus what it cost and who made it.
+ *
+ * `model` is the RESOLVED id rather than the caller's `opts.model`, which is
+ * usually undefined. It is returned rather than left implicit because
+ * DEFAULT_MODEL is a constant that will change, and a log row written before
+ * the change must still be able to say what actually produced it — otherwise
+ * every comparison across a model swap is unattributable after the fact.
+ */
+export type ToolChoice = {
+  name: string;
+  args: Record<string, unknown>;
+  model: string;
+  latencyMs: number;
+  promptTokens?: number;
+  outputTokens?: number;
+};
 
 /**
  * The conversational counterpart to `extractWithTool`: carries history and
@@ -149,6 +166,7 @@ export async function chatWithTools(opts: {
   const model = opts.model ?? DEFAULT_MODEL;
   const names = opts.tools.map((t) => t.name);
 
+  const startedAt = Date.now();
   const res = await fetch(`${BASE}/${model}:generateContent`, {
     method: 'POST',
     signal: opts.signal,
@@ -185,9 +203,17 @@ export async function chatWithTools(opts: {
   }
 
   const data = (await res.json()) as GeminiResponse;
+  const latencyMs = Date.now() - startedAt;
   const parts = data.candidates?.[0]?.content?.parts ?? [];
   const call = parts.find((p) => p.functionCall?.name && names.includes(p.functionCall.name))
     ?.functionCall;
   if (!call?.name || !call.args) throw new Error('Gemini returned no functionCall.');
-  return { name: call.name, args: call.args };
+  return {
+    name: call.name,
+    args: call.args,
+    model,
+    latencyMs,
+    promptTokens: data.usageMetadata?.promptTokenCount,
+    outputTokens: data.usageMetadata?.candidatesTokenCount,
+  };
 }

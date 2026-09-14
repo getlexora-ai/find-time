@@ -147,6 +147,34 @@ export type RankedSlot = {
  * survives. Nothing here mutates the profile — learning happens later, on
  * feedback, in learn.ts.
  */
+/**
+ * The scoring context for a search: busy intervals clipped to the window, plus
+ * the bounds the features are measured against.
+ *
+ * Exported because the capture layer needs the *same* context the ranking used
+ * in order to describe why a slot scored what it did (`slotNotes`). Rebuilding
+ * it from the spec independently would be two implementations of one thing,
+ * free to drift apart, and the drift would show up as notes that quietly stop
+ * matching the numbers beside them.
+ */
+export function buildScoreContext(busy: Busy[], spec: FindSpec): ScoreContext {
+  const earliest = Date.parse(spec.earliestISO);
+  const latest = Date.parse(spec.latestISO);
+  const blocked: Interval[] = busy
+    .map((b) => ({ s: Date.parse(b.start), e: Date.parse(b.end) }))
+    .filter((b) => Number.isFinite(b.s) && Number.isFinite(b.e) && b.e > earliest && b.s < latest)
+    .sort((a, b) => a.s - b.s);
+
+  return {
+    busy: blocked,
+    earliest,
+    latest,
+    category: spec.category ?? 'deep-work',
+    dayStartHour: spec.dayStartHour,
+    dayEndHour: spec.dayEndHour,
+  };
+}
+
 export function rankFreeSlots(busy: Busy[], spec: FindSpec, profile: AgentProfile): RankedSlot[] {
   const durMs = Math.max(1, Math.round(spec.durationMin)) * MIN;
   const stepMs = STEP_MIN * MIN;
@@ -155,19 +183,8 @@ export function rankFreeSlots(busy: Busy[], spec: FindSpec, profile: AgentProfil
   const latest = Date.parse(spec.latestISO);
   if (!Number.isFinite(earliest) || !Number.isFinite(latest) || latest <= earliest) return [];
 
-  const blocked: Interval[] = busy
-    .map((b) => ({ s: Date.parse(b.start), e: Date.parse(b.end) }))
-    .filter((b) => Number.isFinite(b.s) && Number.isFinite(b.e) && b.e > earliest && b.s < latest)
-    .sort((a, b) => a.s - b.s);
-
-  const ctx: ScoreContext = {
-    busy: blocked,
-    earliest,
-    latest,
-    category: spec.category ?? 'deep-work',
-    dayStartHour: spec.dayStartHour,
-    dayEndHour: spec.dayEndHour,
-  };
+  const ctx = buildScoreContext(busy, spec);
+  const blocked = ctx.busy;
 
   const hardRules = profile.rules.filter((r) => r.hard);
   const out: RankedSlot[] = [];
@@ -222,7 +239,27 @@ export type Selection = {
  */
 export function selectSlots(
   ranked: RankedSlot[],
-  opts: { count: number; maxPerDay?: number; bufferMin: number; alternatives?: number },
+  opts: {
+    count: number;
+    maxPerDay?: number;
+    bufferMin: number;
+    alternatives?: number;
+    /**
+     * How the runners-up are drawn. 'top' takes the best remaining, which is
+     * what a user wants day to day. 'spread' takes them across the whole
+     * ranked range instead — same legality, wider band.
+     *
+     * 'spread' exists to break a confound, not to be nice to the user: if the
+     * scorer only ever offers its own top tier, every observed choice is a
+     * choice among slots it already approved of, and "afternoons don't work"
+     * becomes indistinguishable from "we never offered an afternoon". Rows
+     * collected under 'spread' are the only ones where the choice is
+     * interpretable as being about the slot rather than about the ranking.
+     * Nothing illegal is ever shown — hard rules have already filtered
+     * `ranked` before this runs.
+     */
+    strategy?: 'top' | 'spread';
+  },
 ): Selection {
   const count = Math.max(1, Math.round(opts.count));
   const perDay = opts.maxPerDay && opts.maxPerDay > 0 ? opts.maxPerDay : Infinity;
@@ -254,10 +291,14 @@ export function selectSlots(
   // Runners-up: best remaining slots that clash with nothing we picked. Capped
   // to one per day so the list reads as real options, not a dump of the grid.
   const wanted = opts.alternatives ?? 2;
-  const alternatives: RankedSlot[] = [];
+
+  // Everything that could legitimately be offered: doesn't clash with a pick,
+  // and no more than one per day so the list reads as real options rather than
+  // a dump of the grid. Collected in full first, because 'spread' needs to
+  // know the shape of the whole field before choosing from it.
+  const eligible: RankedSlot[] = [];
   const altDays = new Set<number>();
   for (const r of ranked) {
-    if (alternatives.length >= wanted) break;
     if (chosen.includes(r)) continue;
     const s = Date.parse(r.startISO);
     const e = Date.parse(r.endISO);
@@ -265,8 +306,38 @@ export function selectSlots(
     const d = dayStart(s);
     if (altDays.has(d)) continue;
     altDays.add(d);
-    alternatives.push(r);
+    eligible.push(r);
   }
 
+  const alternatives: RankedSlot[] =
+    opts.strategy === 'spread' ? spreadPick(eligible, wanted) : eligible.slice(0, wanted);
+
   return { chosen, alternatives };
+}
+
+/**
+ * `n` items drawn evenly across `list` rather than off the front, so the set
+ * spans the score range instead of clustering at the top.
+ *
+ * Deterministic on purpose. The *decision to explore* is a coin flip and
+ * belongs at the call site, where it can be recorded on the occasion; once
+ * that flip has come up heads, which slots get offered should be reproducible
+ * from the ranking alone — otherwise a logged occasion cannot be replayed.
+ */
+export function spreadPick<T>(list: T[], n: number): T[] {
+  const want = Math.max(0, Math.round(n));
+  if (want === 0 || list.length === 0) return [];
+  if (list.length <= want) return list.slice();
+
+  const out: T[] = [];
+  const seen = new Set<number>();
+  // The first item is always the best remaining — an exploration set with no
+  // strong option in it reads as the agent having got worse.
+  for (let i = 0; i < want; i++) {
+    const idx = Math.min(list.length - 1, Math.round((i * (list.length - 1)) / (want - 1 || 1)));
+    if (seen.has(idx)) continue;
+    seen.add(idx);
+    out.push(list[idx]);
+  }
+  return out;
 }

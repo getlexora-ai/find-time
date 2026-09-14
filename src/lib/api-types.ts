@@ -148,6 +148,12 @@ export type FeedbackRequest = {
   finalEndISO?: string;
   /** required in practice for outcome='rejected' — see RejectReason */
   reasonCode?: RejectReason;
+  /**
+   * The user's own words on the correction, if the UI offers a free-text box.
+   * Track B: stored only at capture_profile='full' and dropped entirely from
+   * beta onwards — see docs/training-capture.md §3.
+   */
+  reasonNote?: string;
 };
 
 export type FeedbackResponse = {

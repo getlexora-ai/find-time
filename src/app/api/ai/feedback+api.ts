@@ -12,6 +12,12 @@ import {
   saveWeights,
   upsertLearned,
 } from '@/server/ai/repo';
+import {
+  editKind,
+  markChosen,
+  occasionForSuggestion,
+  recordCorrection,
+} from '@/server/ai/capture';
 import { isConfigured } from '@/server/db';
 import { listEvents } from '@/server/events-repo';
 
@@ -131,6 +137,48 @@ export async function POST(request: Request): Promise<Response> {
       return null;
     }
   };
+
+  /**
+   * The capture side, kept separate from the learning side above.
+   *
+   * `learnFrom` asks "how should the scorer change?"; this asks "what was the
+   * choice, and what was passed over?" — the question the factor analysis runs
+   * on. It is deliberately after the outcome is recorded and deliberately
+   * unable to fail the request: a lost capture row costs an observation, a
+   * thrown one costs the user their edit.
+   */
+  const occasionId = await occasionForSuggestion(suggestionId);
+  if (occasionId) {
+    // Which candidate won. A drag to a time that was never ranked leaves every
+    // row unchosen, which is the honest record — the choice happened outside
+    // the offered set, and attributing it to a slot we never proposed would
+    // invent a comparison that did not take place.
+    if (outcome !== 'rejected' && finalStart) await markChosen(occasionId, finalStart);
+    else if (outcome === 'accepted') await markChosen(occasionId, proposedStart);
+  }
+
+  if (outcome !== 'accepted') {
+    await recordCorrection({
+      userId,
+      occasionId,
+      suggestionId,
+      source: 'block',
+      kind:
+        outcome === 'rejected'
+          ? 'rejected'
+          : editKind(
+              { startISO: proposedStart, endISO: proposedEnd },
+              { startISO: finalStart ?? proposedStart, endISO: finalEnd ?? proposedEnd },
+            ),
+      before: { startISO: proposedStart, endISO: proposedEnd, category: suggestion.category },
+      after:
+        finalStart && finalEnd
+          ? { startISO: finalStart, endISO: finalEnd }
+          : {},
+      reasonCode,
+      reasonNote: typeof body.reasonNote === 'string' ? body.reasonNote : null,
+    });
+  }
 
   const fb: Feedback = {
     outcome,
