@@ -68,10 +68,10 @@ export function CommandBar({
         : 'No calendar';
 
   return (
-    <View style={[styles.bar, CHROME_BLUR, { backgroundColor: theme.chrome }]}>
+    <View style={[styles.bar, isPhone && styles.barPhone, CHROME_BLUR, { backgroundColor: theme.chrome }]}>
       {!isDesktop && (
-        <View style={styles.logo}>
-          <Logo size={20} color={C.surface} />
+        <View style={[styles.logo, isPhone && styles.logoPhone]}>
+          <Logo size={isPhone ? 17 : 20} color={C.surface} />
         </View>
       )}
 
@@ -85,6 +85,8 @@ export function CommandBar({
         </Txt>
         {!isDesktop && <Icon name="arrow-down" size={14} color={w(0.4)} />}
       </Press>
+
+      <View style={styles.spacer} />
 
       <View style={styles.group}>
         <Press
@@ -113,58 +115,66 @@ export function CommandBar({
           other three numbers that describe the same period — one instrument,
           not a stray warning bolted to the navigation. */}
 
-      <View style={styles.spacer} />
+      {/*
+        Below 1024px the view tabs, New and Find time live in the bottom nav
+        instead. They are thumb-reachable there, and taking them out is what
+        lets this bar be one clean row on a phone rather than the two ragged
+        wrapped rows it used to be at 390px.
+      */}
+      {isDesktop && (
+        <>
+          <View style={styles.group} accessibilityRole="tablist" aria-label="Calendar view">
+            {VIEWS.map((v) => {
+              const on = state.view === v.key;
+              return (
+                <Press
+                  key={v.key}
+                  onPress={() => actions.setView(v.key)}
+                  hoverBg={on ? undefined : w(0.1)}
+                  accessibilityRole="tab"
+                  aria-selected={on}
+                  style={[styles.tab, on && styles.tabOn]}>
+                  <Txt style={[styles.tabTxt, on && styles.tabTxtOn]}>{v.label}</Txt>
+                </Press>
+              );
+            })}
+          </View>
 
-      <View style={styles.group} accessibilityRole="tablist" aria-label="Calendar view">
-        {VIEWS.map((v) => {
-          const on = state.view === v.key;
-          return (
-            <Press
-              key={v.key}
-              onPress={() => actions.setView(v.key)}
-              hoverBg={on ? undefined : w(0.1)}
-              accessibilityRole="tab"
-              aria-selected={on}
-              style={[styles.tab, on && styles.tabOn]}>
-              <Txt style={[styles.tabTxt, on && styles.tabTxtOn]}>{isPhone ? v.short : v.label}</Txt>
-            </Press>
-          );
-        })}
-      </View>
+          <Txt style={styles.sync}>{syncLabel}</Txt>
 
-      {isDesktop && <Txt style={styles.sync}>{syncLabel}</Txt>}
+          <Press
+            onPress={() => actions.openCompose(null)}
+            hoverBg={w(0.1)}
+            style={styles.newBtn}
+            accessibilityRole="button">
+            <Icon name="add" size={16} color={w(0.7)} />
+            <Txt style={styles.newTxt}>New</Txt>
+          </Press>
 
+          <Press
+            onPress={() => actions.openAI()}
+            hoverBg={C.limeHover}
+            style={styles.findBtn}
+            accessibilityRole="button">
+            <Icon name="magic" size={15} color={C.surface} />
+            <Txt style={styles.findTxt}>Find time</Txt>
+          </Press>
+        </>
+      )}
+
+      {/* The phone reaches the themes from the filter sheet — one 32px button
+          is not worth the width here when the row is already this tight. */}
       {!isPhone && (
         <Press
-          onPress={() => actions.openCompose(null)}
+          ref={themeBtn}
           hoverBg={w(0.1)}
-          style={styles.newBtn}
-          accessibilityRole="button">
-          <Icon name="add" size={16} color={w(0.7)} />
-          <Txt style={styles.newTxt}>New</Txt>
+          style={styles.iconBtn}
+          accessibilityRole="button"
+          aria-label="Change background theme"
+          onPress={() => themeBtn.current?.measureInWindow((x, y) => onOpenTheme({ x, y }))}>
+          <Icon name="palette" size={16} color={w(0.55)} />
         </Press>
       )}
-
-      {!isPhone && (
-        <Press
-          onPress={() => actions.openAI()}
-          hoverBg={C.limeHover}
-          style={styles.findBtn}
-          accessibilityRole="button">
-          <Icon name="magic" size={15} color={C.surface} />
-          <Txt style={styles.findTxt}>Find time</Txt>
-        </Press>
-      )}
-
-      <Press
-        ref={themeBtn}
-        hoverBg={w(0.1)}
-        style={styles.iconBtn}
-        accessibilityRole="button"
-        aria-label="Change background theme"
-        onPress={() => themeBtn.current?.measureInWindow((x, y) => onOpenTheme({ x, y }))}>
-        <Icon name="palette" size={16} color={w(0.55)} />
-      </Press>
 
       {/* Desktop keeps the account control in the sidebar. */}
       {!isDesktop && <AccountButton />}
@@ -184,6 +194,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     zIndex: 40,
   },
+  // One row, no wrapping: the title shrinks and elides before anything is
+  // allowed to fall onto a second line.
+  barPhone: { flexWrap: 'nowrap', gap: 6, paddingHorizontal: 10, paddingVertical: 8 },
   logo: {
     height: 30,
     width: 30,
@@ -192,6 +205,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  logoPhone: { height: 26, width: 26 },
   titleBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, minWidth: 0, flexShrink: 1 },
   title: { color: '#fff', fontSize: 17, lineHeight: 24, fontWeight: '500', letterSpacing: -0.4 },
   titlePhone: { fontSize: 15 },

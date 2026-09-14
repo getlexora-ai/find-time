@@ -22,14 +22,19 @@ import { useResponsive } from '../useResponsive';
  */
 export function KpiStrip({ k, onResolve }: { k: Kpis; onResolve?: () => void }) {
   const { theme } = useCalTheme();
-  const { isDesktop } = useResponsive();
+  const { isDesktop, isPhone } = useResponsive();
   const scope = k.dayCount === 1 ? 'today' : 'this week';
   const wide = isDesktop;
 
   return (
-    <View style={[styles.strip, { borderBottomColor: w(0.1), backgroundColor: theme.chrome }]}>
+    <View
+      style={[
+        styles.strip,
+        isPhone && styles.stripPhone,
+        { borderBottomColor: w(0.1), backgroundColor: theme.chrome },
+      ]}>
       {/* ── 1. where the hours went ── */}
-      <Cell wide={wide} first>
+      <Cell wide={wide} i={0}>
         <Label>Planned</Label>
         <Value n={hLabel(k.plannedH)} unit={`/ ${Math.round(k.targetH)}h target`} />
         <View style={styles.stack}>
@@ -47,7 +52,7 @@ export function KpiStrip({ k, onResolve }: { k: Kpis; onResolve?: () => void }) 
       </Cell>
 
       {/* ── 2. did deep work survive the week ── */}
-      <Cell wide={wide}>
+      <Cell wide={wide} i={1}>
         <Label>Focus protected</Label>
         <Value n={hLabel(k.focusH)} unit={`/ ${Math.round(k.focusGoalH)}h goal`} />
         <Meter value={k.focusH} goal={k.focusGoalH} />
@@ -59,7 +64,7 @@ export function KpiStrip({ k, onResolve }: { k: Kpis; onResolve?: () => void }) 
       </Cell>
 
       {/* ── 3. where the room actually is ── */}
-      <Cell wide={wide}>
+      <Cell wide={wide} i={2}>
         <Label>Open capacity</Label>
         <Value n={hLabel(k.freeH)} unit={`free ${scope}`} />
         <Spark days={k.free} bestDate={k.best?.date} />
@@ -71,7 +76,7 @@ export function KpiStrip({ k, onResolve }: { k: Kpis; onResolve?: () => void }) 
       </Cell>
 
       {/* ── 4. is the plan sound ── */}
-      <Cell wide={wide} last>
+      <Cell wide={wide} i={3}>
         <Label>Plan health</Label>
         <Value
           n={String(k.clashes)}
@@ -109,25 +114,22 @@ export function KpiStrip({ k, onResolve }: { k: Kpis; onResolve?: () => void }) 
  * On desktop the four cells share one row. Below that they wrap to a 2×2 so
  * each value keeps its own line instead of truncating — the panel is useless
  * the moment "18h 30m" becomes "18h…".
+ *
+ * The hairlines follow the layout rather than the reading order: in the 2×2 the
+ * divider belongs between the columns and under the top row, so the four cells
+ * still read as one instrument and no stray line lands on the strip's own edge.
  */
-function Cell({
-  children,
-  wide,
-  first,
-  last,
-}: {
-  children: React.ReactNode;
-  wide: boolean;
-  first?: boolean;
-  last?: boolean;
-}) {
+function Cell({ children, wide, i }: { children: React.ReactNode; wide: boolean; i: number }) {
+  const { isPhone } = useResponsive();
   return (
     <View
       style={[
         styles.cell,
+        isPhone && styles.cellPhone,
         wide ? styles.cellWide : styles.cellHalf,
-        !last && styles.cellDivider,
-        first && styles.cellFirst,
+        (wide ? i < 3 : i % 2 === 0) && styles.cellDivider,
+        !wide && i < 2 && styles.cellRowDivider,
+        wide && i === 0 && styles.cellFirst,
       ]}>
       {children}
     </View>
@@ -202,12 +204,17 @@ function Spark({
 
 const styles = StyleSheet.create({
   strip: { flexDirection: 'row', flexWrap: 'wrap', borderBottomWidth: 1, zIndex: 30 },
+  // The 2×2 is the whole reading on a phone and it is competing with the grid
+  // for a 700px screen, so it gives back what it can without losing a chart.
+  stripPhone: { paddingHorizontal: 2 },
   cell: { minWidth: 0, paddingVertical: 10, paddingHorizontal: 14 },
+  cellPhone: { paddingVertical: 8, paddingHorizontal: 10 },
   cellWide: { flexGrow: 1, flexBasis: 0 },
   cellHalf: { width: '50%' },
   // Hairline between readings — lighter than the strip's own bottom edge so the
   // four cells read as one instrument, not four cards.
   cellDivider: { borderRightWidth: 1, borderRightColor: w(0.05) },
+  cellRowDivider: { borderBottomWidth: 1, borderBottomColor: w(0.05) },
   cellFirst: { paddingLeft: 16 },
 
   label: {

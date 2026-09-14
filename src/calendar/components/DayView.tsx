@@ -4,23 +4,21 @@ import type { CalActions, CalState } from '../state';
 import { useCalTheme } from '../theme-context';
 import { R } from '../tokens';
 import type { CalEvent } from '../types';
-import { useResponsive } from '../useResponsive';
-import { Agenda } from './Agenda';
 import { TimeGrid } from './TimeGrid';
 
 /**
- * One day: the time grid, full width.
+ * One day: the time grid, full width, on every screen size.
  *
- * The right rail is gone. It held a stat card — planned, still free, a capacity
- * bar and a count by kind — which is now three of the four readings in the KPI
- * strip above the grid, computed from the same events and scoped to the same
- * day; and under it a compact agenda, which was a second rendering of the
- * blocks already drawn beside it. Neither told you anything the screen was not
- * already saying, and between them they took 320px off the one surface that
- * benefits from width.
+ * The desktop right rail is gone — it held a stat card (planned, still free, a
+ * capacity bar, a count by kind) which is now three of the four readings in the
+ * KPI strip above the grid, computed from the same events and scoped to the same
+ * day; and under it a compact agenda, a second rendering of the blocks already
+ * drawn beside it.
  *
- * Below the desktop breakpoint there is no grid at all, so the agenda is the
- * day view rather than a duplicate of it.
+ * The phone's agenda list is gone for the same reason it was never right: it was
+ * a *different* view of the day, so the tile taxonomy, the now-line and the
+ * shape of an empty afternoon — the things the grid exists to show — simply did
+ * not exist on a phone.
  */
 export function DayView({
   state,
@@ -32,14 +30,10 @@ export function DayView({
   events: CalEvent[];
 }) {
   const { theme } = useCalTheme();
-  const { isDesktop } = useResponsive();
-  const d = state.selected;
-
-  if (!isDesktop) return <Agenda date={d} actions={actions} events={events} />;
 
   return (
     <View style={[styles.gridCard, { borderColor: theme.panelBorder }]}>
-      <TimeGrid days={[d]} events={events} actions={actions} showNowChip fill />
+      <TimeGrid days={[state.selected]} events={events} actions={actions} showNowChip fill />
     </View>
   );
 }

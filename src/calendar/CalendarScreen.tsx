@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Platform, StyleSheet, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useCalEvents } from './cal-store';
 import { syncNow, useAccounts } from './account-store';
@@ -22,9 +22,10 @@ import { ComposeSheet } from './components/ComposeSheet';
 import { ConflictBanner } from './components/ConflictBanner';
 import { DayView } from './components/DayView';
 import { EventDetail } from './components/EventDetail';
+import { FilterSheet } from './components/FilterSheet';
 import { Frame } from './components/Frame';
 import { KpiStrip } from './components/KpiStrip';
-import { MobileNav } from './components/MobileNav';
+import { MobileNav, NAV_H } from './components/MobileNav';
 import { PickerSheet } from './components/PickerSheet';
 import { Sidebar } from './components/Sidebar';
 import { Skeleton } from './components/Skeleton';
@@ -66,6 +67,7 @@ export function CalendarScreen() {
   const all = useCalEvents();
   const toast = useToast();
   const { isDesktop, isPhone } = useResponsive();
+  const insets = useSafeAreaInsets();
   const { signedIn } = useAccounts();
 
   // Pull Google Calendar on mount (throttled in the store) and once we're signed in.
@@ -125,6 +127,7 @@ export function CalendarScreen() {
   const [detail, setDetail] = useState<{ id: number; anchor: PointAnchor | null } | null>(null);
   const [ai, setAi] = useState<{ prefill?: string } | null>(null);
   const [picker, setPicker] = useState(false);
+  const [filters, setFilters] = useState(false);
   const loadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
     () => () => {
@@ -211,8 +214,11 @@ export function CalendarScreen() {
       const e2 = addDays(wkStart, 6);
       return `${MO[wkStart.getMonth()].slice(0, 3)} ${wkStart.getDate()} – ${MO[e2.getMonth()].slice(0, 3)} ${e2.getDate()}`;
     }
+    // "Monday 14 September" elides to "Monday 14 Septemb…" in a phone bar, which
+    // loses the month — the one part of it you cannot infer from the grid.
+    if (isPhone) return `${WD[wdIndex(s)]} ${s.getDate()} ${MO[s.getMonth()].slice(0, 3)}`;
     return `${WD_LONG[wdIndex(s)]} ${s.getDate()} ${MO[s.getMonth()]}`;
-  }, [state.view, state.cursor, state.selected]);
+  }, [state.view, state.cursor, state.selected, isPhone]);
 
   const hasConflict = scopedConflicts.length > 0;
 
@@ -226,6 +232,7 @@ export function CalendarScreen() {
         setDetail(null);
         setThemeMenu(false);
         setPicker(false);
+        setFilters(false);
         return;
       }
       const t = e.target as HTMLElement | null;
@@ -302,27 +309,38 @@ export function CalendarScreen() {
           )}
 
           {/*
-            Desktop: the grid IS the page. It fills whatever is left below the
-            bar rather than living inside a padded scroll view sized to 58% of
-            the window, which is what kept the week grid at roughly half the
-            screen no matter how tall the display was.
+            The grid IS the page, at every width. It fills whatever is left
+            below the bar rather than living inside a padded scroll view sized
+            to 58% of the window, which is what kept the week grid at roughly
+            half the screen no matter how tall the display was.
 
-            Below the breakpoint every view is a list, so it still scrolls.
+            The phone used to put the whole surface — KPI panel included —
+            inside a page ScrollView, so the instrument panel scrolled away and
+            the calendar was a short window in the middle of a long page. Now
+            only the hours scroll, exactly as on desktop, and the panel above
+            them stays put. The bottom padding is the nav's own height, so the
+            last hour of the day is never parked underneath it.
           */}
-          {isDesktop ? (
-            <View style={[styles.gridFill, hasConflict && styles.gridFillTight]}>{grid}</View>
-          ) : (
-            <ScrollView
-              style={{ flex: 1 }}
-              contentContainerStyle={{ padding: isPhone ? 12 : 16, paddingBottom: 112 }}>
-              {grid}
-            </ScrollView>
-          )}
+          <View
+            style={[
+              styles.gridFill,
+              isPhone && styles.gridFillPhone,
+              hasConflict && styles.gridFillTight,
+              !isDesktop && { paddingBottom: NAV_H + Math.max(12, insets.bottom) },
+            ]}>
+            {grid}
+          </View>
         </View>
       </View>
 
       {!isDesktop && (
-        <MobileNav onCompose={() => actions.openCompose(null)} onOpenAI={() => actions.openAI()} />
+        <MobileNav
+          view={state.view}
+          onSetView={actions.setView}
+          onCompose={() => actions.openCompose(null)}
+          onOpenAI={() => actions.openAI()}
+          onOpenFilters={() => setFilters(true)}
+        />
       )}
 
       <ThemeMenu visible={themeMenu} onClose={() => setThemeMenu(false)} />
@@ -368,6 +386,18 @@ export function CalendarScreen() {
           toast={toast}
         />
       )}
+      {filters && (
+        <FilterSheet
+          events={all}
+          hidden={hidden}
+          onToggleKind={toggleKind}
+          onOpenTheme={() => {
+            setFilters(false);
+            setThemeMenu(true);
+          }}
+          onClose={() => setFilters(false)}
+        />
+      )}
       {picker && (
         <PickerSheet
           cursor={state.cursor}
@@ -394,6 +424,7 @@ const styles = StyleSheet.create({
   row: { flex: 1, flexDirection: 'row', width: '100%' },
   main: { flex: 1, minWidth: 0 },
   gridFill: { flex: 1, minHeight: 0, padding: 14 },
+  gridFillPhone: { padding: 8 },
   // The banner already carries its own bottom margin; don't pay for it twice.
   gridFillTight: { paddingTop: 0 },
   bannerWrap: { paddingHorizontal: 14, paddingTop: 14 },
