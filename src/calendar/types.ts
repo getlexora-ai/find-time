@@ -24,6 +24,12 @@ export type CalEvent = {
   conflict?: boolean;
   /** AI may move this block */
   flexible?: boolean;
+  /**
+   * Synced from Google Calendar. Google owns its title, times, notes and
+   * whether it exists — sync overwrites them and nothing is pushed back — so
+   * the calendar shows those read-only (src/lib/synced-fields.ts).
+   */
+  imported?: boolean;
 };
 
 /** A laid-out block: source event + its column slot within an overlap cluster. */

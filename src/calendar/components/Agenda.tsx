@@ -1,6 +1,6 @@
 import { StyleSheet, View } from 'react-native';
 
-import { acceptEvent, byDate } from '../cal-store';
+import { acceptEvent, byDate, SAVE_FAILED } from '../cal-store';
 import { fromMin, iso, MO, sameDay, today, toMin, wdIndex, WD_LONG } from '../cal-date';
 import { Icon } from '../Icon';
 import type { CalActions } from '../state';
@@ -131,8 +131,7 @@ export function Agenda({
           compact={compact}
           onPress={() => actions.openEvent(ev.id)}
           onAccept={() => {
-            acceptEvent(ev.id);
-            actions.toast('Block accepted');
+            void acceptEvent(ev.id).then((ok) => actions.toast(ok ? 'Block accepted' : SAVE_FAILED));
           }}
         />
       </Row>,

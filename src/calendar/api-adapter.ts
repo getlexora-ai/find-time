@@ -1,5 +1,10 @@
 import type { ApiEvent, EventInput } from '@/lib/api-types';
 
+// Relative with the extension, unlike the '@/lib' type import above: this is a
+// value import, and the check harness loads this file directly in node, which
+// resolves neither the alias nor an extensionless path.
+import { isImported } from '../lib/synced-fields.ts';
+
 import type { CatKey } from './tokens';
 import type { CalEvent, EventKind } from './types';
 
@@ -75,6 +80,9 @@ export function toCalEvent(e: ApiEvent): CalEvent {
     notes: e.notes ?? '',
   };
   if (e.flexibility === 'flexible') cal.flexible = true;
+  // Dropped on the floor before this, so the calendar offered Edit and Delete
+  // on events it had no way to change.
+  if (isImported(e.origin)) cal.imported = true;
   return cal;
 }
 
@@ -96,6 +104,50 @@ export function toEventInput(c: Partial<CalEvent>): Partial<EventInput> {
     else out.flexibility = 'flexible';
   } else if (c.flexible !== undefined) {
     out.flexibility = c.flexible ? 'flexible' : 'fixed';
+  }
+  return out;
+}
+
+/**
+ * The PATCH body for applying `patch` to `current`.
+ *
+ * Not simply `toEventInput(patch)`, for two reasons.
+ *
+ * Times are sent whole. `start` and `end` are instants built from `date` plus
+ * `HH:MM`, and `toEventInput` only builds one when both halves are in the patch
+ * — so a patch that moved `start` alone produced no time at all and saved
+ * nothing. Any change to date, start or end now sends both instants, taken from
+ * the merged event.
+ *
+ * An imported event keeps its origin and its `fixed` flexibility. `toEventInput`
+ * derives origin from kind, so protecting and then unprotecting a Google event
+ * rewrote it as a manual, movable block — which both removed it from the locks
+ * in synced-fields.ts and told the scheduler it was free to plan over it.
+ */
+export function toEventPatch(current: CalEvent, patch: Partial<CalEvent>): Partial<EventInput> {
+  const merged: CalEvent = { ...current, ...patch };
+  const out: Partial<EventInput> = {};
+
+  if (patch.title !== undefined) out.title = patch.title;
+  if (patch.date !== undefined || patch.start !== undefined || patch.end !== undefined) {
+    out.start = partsToIso(merged.date, merged.start);
+    out.end = partsToIso(merged.date, merged.end);
+  }
+  if (patch.cat !== undefined) out.category = CAT_TO_CATEGORY[patch.cat];
+  if (patch.notes !== undefined) out.notes = patch.notes || null;
+  if (patch.project !== undefined) out.projectLabel = patch.project || null;
+
+  if (patch.kind !== undefined) {
+    const k = toEventInput({ kind: patch.kind, flexible: merged.flexible });
+    out.itemType = k.itemType;
+    out.flexibility = k.flexibility;
+    if (current.imported) {
+      if (patch.kind !== 'focus') out.flexibility = 'fixed';
+    } else {
+      out.origin = k.origin;
+    }
+  } else if (patch.flexible !== undefined) {
+    out.flexibility = patch.flexible ? 'flexible' : 'fixed';
   }
   return out;
 }

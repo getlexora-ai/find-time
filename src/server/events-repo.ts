@@ -99,6 +99,15 @@ const PATCHABLE: Record<string, string> = {
   notes: 'description',
 };
 
+/** An event's origin, or null when it does not exist for this user. */
+export async function getEventOrigin(userId: string, id: string): Promise<string | null> {
+  const row = await queryOne<{ origin: string }>(
+    `select origin from calendar_events where id = $1 and user_id = $2 and deleted_at is null`,
+    [id, userId],
+  );
+  return row?.origin ?? null;
+}
+
 export async function updateEvent(
   userId: string,
   id: string,

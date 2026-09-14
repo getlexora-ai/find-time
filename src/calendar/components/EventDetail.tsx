@@ -1,6 +1,6 @@
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-import { acceptEvent, deleteEvent, toggleProtected } from '../cal-store';
+import { acceptEvent, deleteEvent, SAVE_FAILED, toggleProtected } from '../cal-store';
 import { fromIso, MO, toMin, wdIndex, WD_LONG } from '../cal-date';
 import { Icon } from '../Icon';
 import type { CalActions, PointAnchor } from '../state';
@@ -85,11 +85,21 @@ export function EventDetail({
               ? 'Protected — Find time will not move this'
               : ev.kind === 'ai'
                 ? 'Proposed by Find time — not accepted yet'
-                : 'Flexible — Find time may move this'}
+                : ev.imported
+                  ? 'From Google Calendar — Find time plans around it'
+                  : 'Flexible — Find time may move this'}
           </Line>
           {!!ev.notes && (
             <View style={styles.notes}>
               <Txt style={styles.notesTxt}>{ev.notes}</Txt>
+            </View>
+          )}
+          {ev.imported && (
+            <View style={styles.notes}>
+              <Txt style={styles.notesTxt}>
+                Synced from Google Calendar. Change its title, time or notes in Google — Find time only reads
+                them, so an edit made here would never reach your calendar.
+              </Txt>
             </View>
           )}
         </View>
@@ -109,9 +119,8 @@ export function EventDetail({
         {ev.kind === 'ai' && (
           <Press
             onPress={() => {
-              acceptEvent(ev.id);
               onClose();
-              toast('Block accepted');
+              void acceptEvent(ev.id).then((ok) => toast(ok ? 'Block accepted' : SAVE_FAILED));
             }}
             hoverBg={C.limeHover}
             style={styles.acceptBtn}>
@@ -120,55 +129,67 @@ export function EventDetail({
           </Press>
         )}
 
-        <View style={styles.actionsGrid}>
+        {/* Edit and Reschedule change title and time, which Google owns on an
+            imported event (src/lib/synced-fields.ts). */}
+        {!ev.imported && (
+          <View style={styles.actionsGrid}>
+            <Press
+              onPress={() => {
+                onClose();
+                actions.openCompose(ev.id);
+              }}
+              hoverBg={w(0.1)}
+              style={styles.ghostBtn}>
+              <Icon name="pen" size={16} color={w(0.75)} />
+              <Txt style={styles.ghostTxt}>Edit</Txt>
+            </Press>
+            {/* Opens the compose sheet on THIS block, where "Let AI place it"
+                moves it to the next free slot on the day. It used to open the AI
+                panel with a prefill, which created a SECOND block and left the
+                original exactly where it was. */}
+            <Press
+              onPress={() => {
+                onClose();
+                actions.openCompose(ev.id, undefined, undefined, true);
+              }}
+              hoverBg={C.limeHover}
+              style={styles.limeBtn}>
+              <Icon name="magic" size={16} color={C.surface} />
+              <Txt style={styles.limeTxt}>Reschedule</Txt>
+            </Press>
+          </View>
+        )}
+        {/* Protect stays on imported events: it is Find time's own planning
+            metadata, which sync never touches. */}
+        <View style={[styles.actionsRow, ev.imported && styles.actionsRowAlone]}>
           <Press
             onPress={() => {
+              const done =
+                ev.kind !== 'focus'
+                  ? 'Block protected — AI will not move it'
+                  : ev.imported
+                    ? 'Protection removed'
+                    : 'Block is flexible again';
               onClose();
-              actions.openCompose(ev.id);
-            }}
-            hoverBg={w(0.1)}
-            style={styles.ghostBtn}>
-            <Icon name="pen" size={16} color={w(0.75)} />
-            <Txt style={styles.ghostTxt}>Edit</Txt>
-          </Press>
-          {/* Opens the compose sheet on THIS block, where "Let AI place it"
-              moves it to the next free slot on the day. It used to open the AI
-              panel with a prefill, which created a SECOND block and left the
-              original exactly where it was. */}
-          <Press
-            onPress={() => {
-              onClose();
-              actions.openCompose(ev.id, undefined, undefined, true);
-            }}
-            hoverBg={C.limeHover}
-            style={styles.limeBtn}>
-            <Icon name="magic" size={16} color={C.surface} />
-            <Txt style={styles.limeTxt}>Reschedule</Txt>
-          </Press>
-        </View>
-        <View style={styles.actionsRow}>
-          <Press
-            onPress={() => {
-              toggleProtected(ev.id);
-              onClose();
-              toast(ev.kind === 'focus' ? 'Block is flexible again' : 'Block protected — AI will not move it');
+              void toggleProtected(ev.id).then((ok) => toast(ok ? done : SAVE_FAILED));
             }}
             hoverBg={w(0.1)}
             style={styles.protectBtn}>
             <Icon name="shield" size={16} color={w(0.6)} />
             <Txt style={styles.protectTxt}>{ev.kind === 'focus' ? 'Unprotect' : 'Protect'}</Txt>
           </Press>
-          <Press
-            onPress={() => {
-              deleteEvent(ev.id);
-              onClose();
-              toast('Event removed');
-            }}
-            hoverBg={rgba('#ff4400', 0.1)}
-            style={styles.delBtn}
-            aria-label="Delete event">
-            <Icon name="trash" size={16} color={C.orange} />
-          </Press>
+          {!ev.imported && (
+            <Press
+              onPress={() => {
+                onClose();
+                void deleteEvent(ev.id).then((ok) => toast(ok ? 'Event removed' : SAVE_FAILED));
+              }}
+              hoverBg={rgba('#ff4400', 0.1)}
+              style={styles.delBtn}
+              aria-label="Delete event">
+              <Icon name="trash" size={16} color={C.orange} />
+            </Press>
+          )}
         </View>
       </ScrollView>
     </View>
@@ -282,6 +303,7 @@ const styles = StyleSheet.create({
   },
   limeTxt: { color: C.surface, fontSize: 12 },
   actionsRow: { marginTop: 8, flexDirection: 'row', gap: 8 },
+  actionsRowAlone: { marginTop: 20 },
   protectBtn: {
     flex: 1,
     height: 40,

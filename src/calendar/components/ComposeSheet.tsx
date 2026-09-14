@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
-import { allEvents, byDate, createEvent, deleteEvent, updateEvent } from '../cal-store';
+import { IMPORTED_LOCKED_MESSAGE } from '@/lib/synced-fields';
+
+import { allEvents, byDate, createEventAsync, deleteEvent, SAVE_FAILED, updateEvent } from '../cal-store';
 import { fromMin, iso, toMin, today } from '../cal-date';
 import { Icon } from '../Icon';
 import { useCalTheme } from '../theme-context';
@@ -58,6 +60,12 @@ export function ComposeSheet({
       toast('Give the block a name');
       return;
     }
+    // EventDetail does not offer Edit on a Google event, and the store and the
+    // API both refuse the write — this just says why if something opens it anyway.
+    if (editing?.imported) {
+      toast(IMPORTED_LOCKED_MESSAGE);
+      return;
+    }
     const d = date || iso(today());
     let s = start || '09:00';
     let placed = false;
@@ -77,8 +85,12 @@ export function ComposeSheet({
       }
     }
     const proj = project === 'No project' ? '' : project;
+    // The sheet closes straight away — the store updates optimistically — but
+    // the confirmation waits for the server. It used to fire immediately, so a
+    // write that failed still said "Event updated" and then quietly reverted.
     if (composeId) {
-      updateEvent(composeId, {
+      const done = placed ? `Moved to ${s}. No conflicts.` : 'Event updated';
+      void updateEvent(composeId, {
         title: t,
         date: d,
         start: s,
@@ -86,11 +98,21 @@ export function ComposeSheet({
         cat,
         project: proj,
         notes: notes.trim(),
-      });
-      toast(placed ? `Moved to ${s}. No conflicts.` : 'Event updated');
+      }).then((ok) => toast(ok ? done : SAVE_FAILED));
     } else {
-      createEvent({ date: d, start: s, end: fromMin(toMin(s) + dur), title: t, cat, project: proj, notes: notes.trim() });
-      toast(placed ? `Time found at ${s}. No conflicts.` : `Added at ${s}`);
+      const done = placed ? `Time found at ${s}. No conflicts.` : `Added at ${s}`;
+      createEventAsync({
+        date: d,
+        start: s,
+        end: fromMin(toMin(s) + dur),
+        title: t,
+        cat,
+        project: proj,
+        notes: notes.trim(),
+      }).then(
+        () => toast(done),
+        () => toast(SAVE_FAILED),
+      );
     }
     onSaved(d);
   }
@@ -209,12 +231,11 @@ export function ComposeSheet({
                 <Icon name="check" size={18} color={C.surface} />
                 <Txt style={styles.saveTxt}>Save event</Txt>
               </Press>
-              {editing && (
+              {editing && !editing.imported && (
                 <Press
                   onPress={() => {
-                    deleteEvent(editing.id);
                     onClose();
-                    toast('Event removed');
+                    void deleteEvent(editing.id).then((ok) => toast(ok ? 'Event removed' : SAVE_FAILED));
                   }}
                   hoverBg="rgba(255,68,0,0.1)"
                   style={styles.delBtn}>

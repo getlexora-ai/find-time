@@ -13,9 +13,31 @@ const BASE = process.env.EXPO_PUBLIC_API_URL ?? '';
 
 type TokenGetter = () => Promise<string | null>;
 let getToken: TokenGetter | null = null;
+const tokenListeners = new Set<() => void>();
 
 export function setTokenGetter(fn: TokenGetter | null): void {
   getToken = fn;
+  if (fn) tokenListeners.forEach((l) => l());
+}
+
+export function hasTokenGetter(): boolean {
+  return getToken !== null;
+}
+
+/**
+ * Run `listener` each time a token getter is installed — on first mount and
+ * again whenever Clerk hands AuthBridge a new one (sign-in, account switch).
+ *
+ * For stores that load at import time. Those run before AuthBridge has
+ * mounted, so their first request goes out without a token and 401s; this is
+ * how they retry once a token exists, instead of waiting for some unrelated
+ * screen action to happen to refresh them.
+ */
+export function onTokenGetter(listener: () => void): () => void {
+  tokenListeners.add(listener);
+  return () => {
+    tokenListeners.delete(listener);
+  };
 }
 
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {

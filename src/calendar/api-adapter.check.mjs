@@ -4,7 +4,7 @@
  */
 import assert from 'node:assert/strict';
 
-import { hashId, toCalEvent, toEventInput } from './api-adapter.ts';
+import { hashId, toCalEvent, toEventInput, toEventPatch } from './api-adapter.ts';
 
 const api = {
   id: 'evt_abc',
@@ -52,5 +52,34 @@ assert.equal(toCalEvent({ ...api, category: 'wat' }).cat, 'admin');
 const ids = ['evt_1', 'evt_2', 'evt_abc', 'evt_abd', 'u1', 'evt_' + 'x'.repeat(40)];
 assert.equal(new Set(ids.map(hashId)).size, ids.length);
 assert.equal(hashId('evt_abc'), hashId('evt_abc'));
+
+// imported events are flagged, and a kind change never un-imports them
+const g = toCalEvent({ ...api, origin: 'imported', flexibility: 'fixed' });
+assert.equal(g.imported, true);
+assert.equal(g.kind, 'event');
+assert.equal(toCalEvent(api).imported, undefined);
+
+const protect = toEventPatch(g, { kind: 'focus' });
+assert.equal(protect.flexibility, 'protected');
+assert.equal('origin' in protect, false, 'protecting a Google event must not rewrite it as manual');
+const unprotect = toEventPatch({ ...g, kind: 'focus' }, { kind: 'event' });
+assert.equal(unprotect.flexibility, 'fixed', 'unprotecting returns it to fixed, not movable');
+assert.equal('origin' in unprotect, false);
+
+// accepting an AI block still makes it manual
+const proposed = toCalEvent({ ...api, origin: 'ai', flexibility: 'flexible' });
+assert.equal(toEventPatch(proposed, { kind: 'event' }).origin, 'manual');
+
+// a patch that touches one time field still sends whole instants
+assert.equal(toEventInput({ start: '14:00' }).start, undefined, 'the old path sent no time at all');
+const onlyStart = toEventPatch(cal, { start: '14:00' });
+assert.equal(onlyStart.start, '2026-09-09T14:00:00.000Z');
+assert.equal(onlyStart.end, '2026-09-09T12:30:00.000Z');
+const newDay = toEventPatch(cal, { date: '2026-09-10' });
+assert.equal(newDay.start, '2026-09-10T11:00:00.000Z');
+assert.equal(newDay.end, '2026-09-10T12:30:00.000Z');
+
+// untouched fields are not sent
+assert.deepEqual(Object.keys(toEventPatch(cal, { title: 'x' })), ['title']);
 
 console.log('api-adapter.check: ok');
