@@ -79,13 +79,13 @@ fixture are ported exactly so the board mockups line up.
   looked inconsistent. Body lifts with the theme (`recessed`); "Protected" blue is
   lightened to `C.protectedOnDark` and "Overlaps" uses `C.orange` (not the on-light
   variants).
-- **Day view agenda placement** also deviates, by request. The mockup stacks the dark time
-  grid and the agenda in one column. Here `≥1280` puts the time grid alone in the left
-  column and moves the agenda into the right rail beside "AI insight" / "Protected", where
-  it renders `<Agenda compact />` — same dark palette, stripped and gutterless: title ·
-  category spine and the "free — 45m" gap rows; notes + the meta row are left to the
-  event-detail popover. Below `1280` the full-width agenda (with gutter + full detail) is
-  used, on phone and below the time grid on narrow desktop.
+- **Day view is the grid alone** on desktop. It used to carry a 320px right rail holding a
+  stat card (planned / still free / capacity bar / count by kind) above `<Agenda compact />`.
+  Both were removed as repeats: the stat card is now three of the four readings in the KPI
+  strip, scoped to the same day and computed from the same events, and the compact agenda
+  was a second rendering of the blocks drawn beside it. Below the desktop breakpoint there
+  is no grid, so the full-width agenda (gutter + full detail) *is* the day view.
+  `Agenda`'s `compact` variant is now reachable only through its `false` default.
 - `app.json` web output switched `static` → `single` (SPA): this is an interactive app
   with no SSR/SEO need, and it removes the static-render hydration mismatch.
 
