@@ -2,16 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { byDate, useCalEvents } from './cal-store';
+import { useCalEvents } from './cal-store';
 import { syncNow, useAccounts } from './account-store';
 import {
   addDays,
   addMonths,
   fromIso,
   iso,
-  isoWeek,
   MO,
-  sameDay,
   startOfWeek,
   today,
   toMin,
@@ -20,12 +18,12 @@ import {
   WD_LONG,
 } from './cal-date';
 import { AiPanel } from './components/AiPanel';
+import { CommandBar } from './components/CommandBar';
 import { ComposeSheet } from './components/ComposeSheet';
 import { ConflictBanner } from './components/ConflictBanner';
 import { DayView } from './components/DayView';
 import { EventDetail } from './components/EventDetail';
 import { Frame } from './components/Frame';
-import { Header } from './components/Header';
 import { MobileNav } from './components/MobileNav';
 import { MonthView } from './components/MonthView';
 import { PickerSheet } from './components/PickerSheet';
@@ -33,10 +31,9 @@ import { Sidebar } from './components/Sidebar';
 import { Skeleton } from './components/Skeleton';
 import { ThemeMenu } from './components/ThemeMenu';
 import { useToast } from './components/Toast';
-import { Toolbar } from './components/Toolbar';
 import { WeekView } from './components/WeekView';
 import type { CalActions, CalState, PointAnchor, ViewKind } from './state';
-import type { CalEvent } from './types';
+import type { CalEvent, EventKind } from './types';
 import { DESKTOP_BP } from './tokens';
 import { useResponsive } from './useResponsive';
 
@@ -67,7 +64,7 @@ function overlapping(list: CalEvent[]): { a: CalEvent; b: CalEvent }[] {
 }
 
 export function CalendarScreen() {
-  const events = useCalEvents();
+  const all = useCalEvents();
   const toast = useToast();
   const { width, isDesktop, isPhone } = useResponsive();
   const { signedIn } = useAccounts();
@@ -93,6 +90,27 @@ export function CalendarScreen() {
     loading: false,
   }));
 
+  /**
+   * Kinds hidden from every surface. The sidebar legend doubles as the filter,
+   * which is what makes the taxonomy worth having: "show me only what I
+   * committed to" and "hide the routines" are one click each.
+   */
+  const [hidden, setHidden] = useState<Set<EventKind>>(() => new Set());
+  const events = useMemo(
+    () => (hidden.size ? all.filter((e) => !hidden.has(e.kind)) : all),
+    [all, hidden],
+  );
+  const toggleKind = useCallback(
+    (k: EventKind) =>
+      setHidden((prev) => {
+        const next = new Set(prev);
+        if (next.has(k)) next.delete(k);
+        else next.add(k);
+        return next;
+      }),
+    [],
+  );
+
   const [themeMenu, setThemeMenu] = useState(false);
   const [compose, setCompose] = useState<{
     id: number | null;
@@ -111,21 +129,23 @@ export function CalendarScreen() {
     [],
   );
 
-  const step = useCallback(
-    (dir: -1 | 1) => {
-      setState((s) => ({ ...s, loading: true }));
-      if (loadTimer.current) clearTimeout(loadTimer.current);
-      loadTimer.current = setTimeout(() => {
-        setState((s) => {
-          if (s.view === 'month') return { ...s, loading: false, cursor: addMonths(s.cursor, dir) };
-          if (s.view === 'week')
-            return { ...s, loading: false, cursor: addDays(s.cursor, dir * 7), selected: addDays(s.selected, dir * 7) };
-          return { ...s, loading: false, cursor: addDays(s.cursor, dir), selected: addDays(s.selected, dir) };
-        });
-      }, 280);
-    },
-    [],
-  );
+  const step = useCallback((dir: -1 | 1) => {
+    setState((s) => ({ ...s, loading: true }));
+    if (loadTimer.current) clearTimeout(loadTimer.current);
+    loadTimer.current = setTimeout(() => {
+      setState((s) => {
+        if (s.view === 'month') return { ...s, loading: false, cursor: addMonths(s.cursor, dir) };
+        if (s.view === 'week')
+          return {
+            ...s,
+            loading: false,
+            cursor: addDays(s.cursor, dir * 7),
+            selected: addDays(s.selected, dir * 7),
+          };
+        return { ...s, loading: false, cursor: addDays(s.cursor, dir), selected: addDays(s.selected, dir) };
+      });
+    }, 200);
+  }, []);
 
   const actions = useMemo<CalActions>(
     () => ({
@@ -156,7 +176,7 @@ export function CalendarScreen() {
     [step, toast, width],
   );
 
-  /* ── real clashes, scoped to whatever the toolbar is showing ── */
+  /* ── real clashes, scoped to whatever the bar is showing ── */
   const conflicts = useMemo(() => overlapping(events), [events]);
   const scopedConflicts = useMemo(() => {
     const c = state.cursor;
@@ -170,58 +190,26 @@ export function CalendarScreen() {
     });
   }, [conflicts, state.view, state.cursor, state.selected]);
 
-  const clashTxt = (n: number) => (n ? `${n} clash${n > 1 ? 'es' : ''}` : 'no conflicts');
-
-  /* ── derived toolbar copy ── */
-  const { eyebrow, title, sub } = useMemo(() => {
+  /**
+   * The bar's title. The eyebrow ("SEP 2026 · 14 events · no conflicts") and
+   * the sentence of prose under it are gone — both restated counts the grid
+   * already shows, and between them they pushed the calendar ~120px down.
+   */
+  const title = useMemo(() => {
     const c = state.cursor;
     const s = state.selected;
-    const wkStart = startOfWeek(c);
-    const nClash = scopedConflicts.length;
-    if (state.view === 'month') {
-      const n = events.filter(
-        (e) => fromIso(e.date).getMonth() === c.getMonth() && fromIso(e.date).getFullYear() === c.getFullYear(),
-      ).length;
-      return {
-        title: `${MO[c.getMonth()]} ${c.getFullYear()}`,
-        eyebrow: `${MO[c.getMonth()].slice(0, 3).toUpperCase()} ${c.getFullYear()} · ${n} events · ${clashTxt(nClash)}`,
-        sub: n
-          ? `${n} block${n > 1 ? 's' : ''} this month${nClash ? `, ${clashTxt(nClash)} to resolve` : ', nothing double-booked'}.`
-          : 'Nothing scheduled yet. A clean month is a planning opportunity, not a problem.',
-      };
-    }
+    if (state.view === 'month') return `${MO[c.getMonth()]} ${c.getFullYear()}`;
     if (state.view === 'week') {
+      const wkStart = startOfWeek(c);
       const e2 = addDays(wkStart, 6);
-      const n = events.filter((e) => {
-        const d = fromIso(e.date);
-        return d >= wkStart && d <= e2;
-      }).length;
-      return {
-        title: `${MO[wkStart.getMonth()].slice(0, 3)} ${wkStart.getDate()} – ${MO[e2.getMonth()].slice(0, 3)} ${e2.getDate()}`,
-        eyebrow: `Week ${isoWeek(wkStart)} · ${n} events · ${clashTxt(nClash)}`,
-        sub: n
-          ? `${n} block${n > 1 ? 's' : ''} this week${nClash ? `, ${clashTxt(nClash)} to resolve` : ', none overlapping'}.`
-          : 'This week is empty. Tell Find time what it needs to make room for.',
-      };
+      return `${MO[wkStart.getMonth()].slice(0, 3)} ${wkStart.getDate()} – ${MO[e2.getMonth()].slice(0, 3)} ${e2.getDate()}`;
     }
-    const doy = Math.round((s.getTime() - new Date(s.getFullYear(), 0, 0).getTime()) / 86400000);
-    const n = byDate(events, iso(s)).length;
-    return {
-      title: `${WD_LONG[wdIndex(s)]} ${s.getDate()} ${MO[s.getMonth()]}`,
-      eyebrow: `Day ${doy} · ${n} block${n === 1 ? '' : 's'} · ${clashTxt(nClash)}`,
-      sub: sameDay(s, today())
-        ? n
-          ? 'Today as it stands. Anything flexible can still be moved.'
-          : 'Nothing booked today. That is space, not a gap.'
-        : n
-          ? 'Planned around what was already on this day.'
-          : 'Nothing booked on this day yet.',
-    };
-  }, [state.view, state.cursor, state.selected, events, scopedConflicts]);
+    return `${WD_LONG[wdIndex(s)]} ${s.getDate()} ${MO[s.getMonth()]}`;
+  }, [state.view, state.cursor, state.selected]);
 
   const hasConflict = scopedConflicts.length > 0;
 
-  /* ── web keyboard shortcuts (spec §5) ── */
+  /* ── web keyboard shortcuts ── */
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const onKey = (e: KeyboardEvent) => {
@@ -231,11 +219,6 @@ export function CalendarScreen() {
         setDetail(null);
         setThemeMenu(false);
         setPicker(false);
-        return;
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        toast('Search is not built yet');
         return;
       }
       const t = e.target as HTMLElement | null;
@@ -254,50 +237,71 @@ export function CalendarScreen() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [actions, toast]);
+  }, [actions]);
 
-  const pad = isPhone ? 16 : isDesktop ? 32 : 24;
-  const detailEvent = detail ? events.find((e) => e.id === detail.id) ?? null : null;
+  const detailEvent = detail ? all.find((e) => e.id === detail.id) ?? null : null;
+
+  const grid = state.loading ? (
+    <Skeleton />
+  ) : state.view === 'month' ? (
+    <MonthView state={state} actions={actions} events={events} />
+  ) : state.view === 'week' ? (
+    <WeekView state={state} actions={actions} events={events} />
+  ) : (
+    <DayView state={state} actions={actions} events={events} />
+  );
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <Frame />
-      <View style={styles.rowWrap}>
-        <View style={styles.row}>
-          {isDesktop && (
-            <Sidebar selected={state.selected} events={events} onPick={(d) => actions.pick(d)} />
+      <View style={styles.row}>
+        {isDesktop && (
+          <Sidebar
+            selected={state.selected}
+            events={all}
+            hidden={hidden}
+            onToggleKind={toggleKind}
+            onPick={(d) => actions.pick(d)}
+          />
+        )}
+        <View style={styles.main}>
+          <CommandBar
+            state={state}
+            actions={actions}
+            title={title}
+            clashes={scopedConflicts.length}
+            onOpenTheme={() => setThemeMenu(true)}
+          />
+          {hasConflict && (
+            <View style={styles.bannerWrap}>
+              <ConflictBanner
+                a={scopedConflicts[0].a}
+                b={scopedConflicts[0].b}
+                onResolve={() => actions.openCompose(scopedConflicts[0].b.id, undefined, undefined, true)}
+              />
+            </View>
           )}
-          <View style={styles.main}>
-            <Header
-              onOpenTheme={() => setThemeMenu(true)}
-              onOpenAI={() => actions.openAI()}
-            />
+
+          {/*
+            Desktop: the grid IS the page. It fills whatever is left below the
+            bar rather than living inside a padded scroll view sized to 58% of
+            the window, which is what kept the week grid at roughly half the
+            screen no matter how tall the display was.
+
+            Below the breakpoint every view is a list, so it still scrolls.
+          */}
+          {isDesktop ? (
+            <View style={[styles.gridFill, hasConflict && styles.gridFillTight]}>{grid}</View>
+          ) : (
             <ScrollView
               style={{ flex: 1 }}
-              contentContainerStyle={{ padding: pad, paddingBottom: isDesktop ? 32 : 112 }}>
-              <Toolbar state={state} actions={actions} eyebrow={eyebrow} title={title} sub={sub} />
-              {hasConflict && (
-                <ConflictBanner
-                  a={scopedConflicts[0].a}
-                  b={scopedConflicts[0].b}
-                  onResolve={() => actions.openCompose(scopedConflicts[0].b.id, undefined, undefined, true)}
-                />
-              )}
-              {state.loading ? (
-                <Skeleton />
-              ) : state.view === 'month' ? (
-                <MonthView state={state} actions={actions} events={events} />
-              ) : state.view === 'week' ? (
-                <WeekView state={state} actions={actions} events={events} />
-              ) : (
-                <DayView state={state} actions={actions} events={events} />
-              )}
+              contentContainerStyle={{ padding: isPhone ? 12 : 16, paddingBottom: 112 }}>
+              {grid}
             </ScrollView>
-          </View>
+          )}
         </View>
       </View>
 
-      {/* calendar.html shows this fixed 5-item nav at every width below lg */}
       {!isDesktop && (
         <MobileNav onCompose={() => actions.openCompose(null)} onOpenAI={() => actions.openAI()} />
       )}
@@ -368,7 +372,10 @@ export function CalendarScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  rowWrap: { flex: 1, alignItems: 'center' },
-  row: { flex: 1, flexDirection: 'row', width: '100%', maxWidth: 1720 },
+  row: { flex: 1, flexDirection: 'row', width: '100%' },
   main: { flex: 1, minWidth: 0 },
+  gridFill: { flex: 1, minHeight: 0, padding: 14 },
+  // The banner already carries its own bottom margin; don't pay for it twice.
+  gridFillTight: { paddingTop: 0 },
+  bannerWrap: { paddingHorizontal: 14, paddingTop: 14 },
 });

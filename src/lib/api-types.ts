@@ -14,6 +14,8 @@ export type ApiEvent = {
   flexibility: string;
   origin: string;
   isDraft: boolean;
+  /** RFC 5545 rule body, no "RRULE:" prefix. null = a one-off. */
+  rrule: string | null;
   projectLabel: string | null;
   notes: string | null;
 };
@@ -27,6 +29,7 @@ export type EventInput = {
   flexibility?: string;
   origin?: string;
   isDraft?: boolean;
+  rrule?: string | null;
   projectLabel?: string | null;
   notes?: string | null;
 };

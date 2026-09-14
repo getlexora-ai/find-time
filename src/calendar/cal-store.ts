@@ -4,7 +4,7 @@ import { useSyncExternalStore } from 'react';
 import type { FindTimeProposal } from '@/lib/api-types';
 import { apiFetch } from '@/lib/api';
 
-import { toCalEvent, toEventInput } from './api-adapter';
+import { DEFAULT_RRULE, toCalEvent, toEventInput } from './api-adapter';
 import { toMin } from './cal-date';
 import { seedEvents } from './seed';
 import type { CatKey } from './tokens';
@@ -112,6 +112,7 @@ export type NewEvent = {
   project?: string;
   notes?: string;
   kind?: CalEvent['kind'];
+  rrule?: string;
 };
 
 function optimistic(input: NewEvent): CalEvent {
@@ -203,11 +204,19 @@ export function deleteEvent(id: number) {
   })();
 }
 
-/** Toggle a block between protected (`focus`) and flexible (`event`). */
-export function toggleProtected(id: number) {
+/**
+ * Change what a block *is*. Replaces the old binary protect/unprotect toggle,
+ * which could only ever say `focus` or `event` and so had no way to express
+ * the task and routine kinds the grid now draws differently.
+ *
+ * Routine is the presence of a recurrence rule rather than a column of its own
+ * (see api-adapter), so the rule is set and cleared alongside the kind here —
+ * otherwise a block moved out of Routine keeps repeating on the server.
+ */
+export function setKind(id: number, kind: CalEvent['kind']) {
   const cur = events.find((e) => e.id === id);
-  if (!cur) return;
-  updateEvent(id, { kind: cur.kind === 'focus' ? 'event' : 'focus' });
+  if (!cur || cur.kind === kind) return;
+  updateEvent(id, { kind, rrule: kind === 'routine' ? cur.rrule ?? DEFAULT_RRULE : undefined });
 }
 
 const API_CAT_TO_CAT: Record<string, CatKey> = {

@@ -157,5 +157,12 @@ export const THEME_BY_KEY: Record<ThemeKey, Theme> = THEMES.reduce(
   {} as Record<ThemeKey, Theme>,
 );
 
-export const DEFAULT_THEME: ThemeKey = 'navy';
+/**
+ * Near-black, not blue. The ground's job in this layout is to disappear: the
+ * grid is the brightest, densest object on screen and everything else has to
+ * sit behind it. A saturated ground competes with the category hues inside the
+ * blocks — on `ink` those are the only real colour anywhere, which is what
+ * makes the calendar read as the app rather than as one panel among several.
+ */
+export const DEFAULT_THEME: ThemeKey = 'ink';
 export const STORAGE_KEY = 'ft-theme';

@@ -1,10 +1,11 @@
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-import { acceptEvent, deleteEvent, toggleProtected } from '../cal-store';
+import { acceptEvent, deleteEvent, setKind } from '../cal-store';
 import { fromIso, MO, toMin, wdIndex, WD_LONG } from '../cal-date';
 import { Icon } from '../Icon';
 import type { CalActions, PointAnchor } from '../state';
 import { useCalTheme } from '../theme-context';
+import { KIND_KEYS, KINDS, paint } from '../kinds';
 import { CATS, C, durLabel, R, rgba, w } from '../tokens';
 import type { CalEvent } from '../types';
 import { Press, Txt } from '../ui';
@@ -34,6 +35,7 @@ export function EventDetail({
   if (!event) return null;
   const ev = event;
   const c = CATS[ev.cat];
+  const p = paint(ev, ev.conflict);
   const date = fromIso(ev.date);
 
   const W = 336;
@@ -54,13 +56,13 @@ export function EventDetail({
         <View style={styles.top}>
           <View style={{ flex: 1, minWidth: 0 }}>
             <View style={styles.eyebrowRow}>
+              {/* Kind first, category second — the same order the block is
+                  read in: what it is, then what it is about. */}
+              <Icon name={p.spec.icon} size={13} color={p.tint} />
+              <Txt style={[styles.eyebrow, { color: p.tint }]}>{p.spec.label}</Txt>
+              <Txt style={styles.eyebrowSep}>·</Txt>
               <View style={[styles.dot, { backgroundColor: c.color }]} />
               <Txt style={styles.eyebrow}>{c.label}</Txt>
-              {ev.kind === 'focus' && (
-                <View style={styles.tagLime}>
-                  <Txt style={styles.tagLimeTxt}>Protected</Txt>
-                </View>
-              )}
               {ev.conflict && (
                 <View style={styles.tagOrange}>
                   <Txt style={styles.tagOrangeTxt}>Clash</Txt>
@@ -80,13 +82,7 @@ export function EventDetail({
             {durLabel(toMin(ev.end) - toMin(ev.start))}
           </Line>
           {!!ev.project && <Line icon="folder">{ev.project}</Line>}
-          <Line icon="bolt">
-            {ev.kind === 'focus'
-              ? 'Protected — Find time will not move this'
-              : ev.kind === 'ai'
-                ? 'Proposed by Find time — not accepted yet'
-                : 'Flexible — Find time may move this'}
-          </Line>
+          <Line icon="bolt">{p.spec.blurb}</Line>
           {!!ev.notes && (
             <View style={styles.notes}>
               <Txt style={styles.notesTxt}>{ev.notes}</Txt>
@@ -146,18 +142,32 @@ export function EventDetail({
             <Txt style={styles.limeTxt}>Reschedule</Txt>
           </Press>
         </View>
+        {/* Was a single Protect/Unprotect switch, which could only ever say
+            `focus` or `event` — there was no way to tell the app that a block
+            is a task or a routine, so the grid could not draw it as one. */}
+        <Txt style={styles.kindLabel}>Change kind</Txt>
+        <View style={styles.kindGrid}>
+          {KIND_KEYS.filter((k) => k !== 'ai').map((k) => {
+            const on = ev.kind === k;
+            return (
+              <Press
+                key={k}
+                onPress={() => {
+                  setKind(ev.id, k);
+                  toast(`Now a ${KINDS[k].label.toLowerCase()}`);
+                }}
+                hoverBg={w(0.1)}
+                accessibilityRole="radio"
+                aria-checked={on}
+                style={[styles.kindChip, on && styles.kindChipOn]}>
+                <Icon name={KINDS[k].icon} size={13} color={on ? '#fff' : w(0.45)} />
+                <Txt style={[styles.kindChipTxt, on && styles.kindChipTxtOn]}>{KINDS[k].label}</Txt>
+              </Press>
+            );
+          })}
+        </View>
+
         <View style={styles.actionsRow}>
-          <Press
-            onPress={() => {
-              toggleProtected(ev.id);
-              onClose();
-              toast(ev.kind === 'focus' ? 'Block is flexible again' : 'Block protected — AI will not move it');
-            }}
-            hoverBg={w(0.1)}
-            style={styles.protectBtn}>
-            <Icon name="shield" size={16} color={w(0.6)} />
-            <Txt style={styles.protectTxt}>{ev.kind === 'focus' ? 'Unprotect' : 'Protect'}</Txt>
-          </Press>
           <Press
             onPress={() => {
               deleteEvent(ev.id);
@@ -222,9 +232,24 @@ const styles = StyleSheet.create({
   top: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   dot: { height: 6, width: 6, borderRadius: 3 },
+  eyebrowSep: { color: w(0.25), fontSize: 11 },
+  kindLabel: { marginTop: 18, color: w(0.35), fontSize: 10, letterSpacing: 1.2, textTransform: 'uppercase' },
+  kindGrid: { marginTop: 8, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  kindChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: R.md,
+    borderWidth: 1,
+    borderColor: w(0.1),
+    backgroundColor: w(0.05),
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+  },
+  kindChipOn: { borderColor: w(0.4), backgroundColor: w(0.16) },
+  kindChipTxt: { color: w(0.5), fontSize: 11 },
+  kindChipTxtOn: { color: '#fff', fontWeight: '500' },
   eyebrow: { color: w(0.4), fontSize: 12, textTransform: 'uppercase', letterSpacing: 1.2 },
-  tagLime: { borderRadius: R.full, backgroundColor: rgba('#ccff00', 0.15), paddingHorizontal: 8, paddingVertical: 2 },
-  tagLimeTxt: { color: C.lime, fontSize: 12 },
   tagOrange: { borderRadius: R.full, backgroundColor: rgba('#ff4400', 0.2), paddingHorizontal: 8, paddingVertical: 2 },
   tagOrangeTxt: { color: C.orange, fontSize: 12 },
   title: { marginTop: 8, color: '#fff', fontSize: 16, lineHeight: 22, fontWeight: '500', letterSpacing: -0.3 },
@@ -282,18 +307,6 @@ const styles = StyleSheet.create({
   },
   limeTxt: { color: C.surface, fontSize: 12 },
   actionsRow: { marginTop: 8, flexDirection: 'row', gap: 8 },
-  protectBtn: {
-    flex: 1,
-    height: 40,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderRadius: R.lg,
-    borderWidth: 1,
-    borderColor: w(0.1),
-  },
-  protectTxt: { color: w(0.6), fontSize: 12 },
   delBtn: {
     height: 40,
     paddingHorizontal: 16,

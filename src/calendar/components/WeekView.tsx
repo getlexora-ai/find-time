@@ -1,10 +1,9 @@
 import { StyleSheet, View } from 'react-native';
 
 import { addDays, iso, isoWeek, sameDay, startOfWeek, today, WD, wdIndex } from '../cal-date';
-import { Icon } from '../Icon';
 import type { CalActions, CalState } from '../state';
 import { useCalTheme } from '../theme-context';
-import { C, R, w } from '../tokens';
+import { R, w } from '../tokens';
 import type { CalEvent } from '../types';
 import { Txt } from '../ui';
 import { useResponsive } from '../useResponsive';
@@ -28,7 +27,7 @@ export function WeekView({
     return (
       <View>
         <DayPillStrip weekStart={start} selected={state.selected} events={events} onPick={(d) => actions.pick(d)} />
-        <View style={{ marginTop: 16 }}>
+        <View style={{ marginTop: 12 }}>
           <Agenda date={state.selected} actions={actions} events={events} />
         </View>
       </View>
@@ -37,6 +36,16 @@ export function WeekView({
   return <DesktopWeek state={state} actions={actions} events={events} start={start} />;
 }
 
+/**
+ * The desktop week. The card is now a flex child that fills the screen rather
+ * than a fixed-height panel: the old version capped the grid at 58% of the
+ * window height and then sat inside a scrolling, padded page, so on a tall
+ * display most of the calendar was empty canvas.
+ *
+ * The footer strip ("Drag any empty slot to block time · Snaps to 15 min")
+ * advertised a drag interaction that does not exist here, and cost a row of
+ * height on every screen; it is gone.
+ */
 function DesktopWeek({
   state,
   actions,
@@ -49,12 +58,10 @@ function DesktopWeek({
   start: Date;
 }) {
   const { theme } = useCalTheme();
-  const { height } = useResponsive();
   const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
 
   return (
     <View style={[styles.card, { borderColor: theme.panelBorder }]}>
-      {/* header row */}
       <View style={[styles.row, { backgroundColor: theme.panelBorder }]}>
         <View style={[styles.gutterCell, { backgroundColor: theme.recessed }]}>
           <Txt style={styles.gutterHead}>W{isoWeek(start)}</Txt>
@@ -63,88 +70,29 @@ function DesktopWeek({
           const isToday = sameDay(d, today());
           return (
             <View key={iso(d)} style={[styles.col, styles.dayHead, { backgroundColor: theme.recessed }]}>
-              <Txt style={[styles.dayHeadWd, { color: isToday ? C.lime : w(0.4) }]}>{WD[wdIndex(d)]}</Txt>
-              <View style={isToday ? styles.dayHeadNumToday : undefined}>
-                <Txt style={[styles.dayHeadNum, isToday ? styles.dayHeadNumTodayTxt : styles.dayHeadNumTxt]}>
-                  {d.getDate()}
-                </Txt>
-              </View>
+              <Txt style={[styles.dayHeadWd, isToday && styles.dayHeadWdToday]}>{WD[wdIndex(d)]}</Txt>
+              <Txt style={[styles.dayHeadNum, isToday && styles.dayHeadNumToday]}>{d.getDate()}</Txt>
             </View>
           );
         })}
       </View>
 
-      {/* all-day row */}
-      <View style={[styles.row, { backgroundColor: theme.panelBorder }]}>
-        <View style={[styles.gutterCell, styles.allDayGutter, { backgroundColor: theme.recessed }]}>
-          <Txt style={styles.gutterHead}>All day</Txt>
-        </View>
-        {/* All-day events are not imported yet (google/map.ts stores them, the
-            grid has nowhere to draw them). The row stays as the placeholder it
-            is — it used to show two hardcoded fake badges pinned to Sep 2026. */}
-        {days.map((d) => (
-          <View key={iso(d)} style={[styles.col, styles.allDayCell, { backgroundColor: theme.panel }]} />
-        ))}
-      </View>
-
-      <TimeGrid days={days} events={events} actions={actions} maxHeight={Math.max(360, height * 0.58)} />
-
-      <View style={[styles.footer, { backgroundColor: theme.recessed }]}>
-        <View style={styles.footerLeft}>
-          <Icon name="cursor" size={13} color={C.lime} />
-          <Txt style={styles.footerTxt}>Drag any empty slot to block time</Txt>
-        </View>
-        <Txt style={styles.footerHint}>Snaps to 15 min · release to name it</Txt>
-      </View>
+      <TimeGrid days={days} events={events} actions={actions} fill />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: R.xl2,
-    borderWidth: 1,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.5,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-  },
+  card: { flex: 1, minHeight: 0, borderRadius: R.xl, borderWidth: 1, overflow: 'hidden' },
   row: { flexDirection: 'row', gap: 1 },
-  gutterCell: { width: 64, padding: 8, justifyContent: 'flex-end', alignItems: 'flex-end' },
-  allDayGutter: { justifyContent: 'center' },
-  gutterHead: { fontSize: 10, lineHeight: 14, textTransform: 'uppercase', letterSpacing: 1.2, color: w(0.25) },
+  gutterCell: { width: 52, padding: 6, justifyContent: 'flex-end', alignItems: 'flex-end' },
+  gutterHead: { fontSize: 10, lineHeight: 14, letterSpacing: 1, color: w(0.25) },
   col: { flex: 1, minWidth: 0 },
-  dayHead: { alignItems: 'center', gap: 4, paddingVertical: 12 },
-  dayHeadWd: { fontSize: 12, textTransform: 'uppercase', letterSpacing: 2.56 },
-  dayHeadNum: { fontSize: 14 },
-  dayHeadNumTxt: { color: w(0.7) },
-  dayHeadNumToday: {
-    height: 28,
-    minWidth: 28,
-    paddingHorizontal: 4,
-    borderRadius: R.md,
-    backgroundColor: C.lime,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: C.lime,
-    shadowOpacity: 0.55,
-    shadowRadius: 16,
-  },
-  dayHeadNumTodayTxt: { color: C.surface, fontWeight: '500' },
-  allDayCell: { minHeight: 36, padding: 4, gap: 4 },
-  allDayBadge: { borderRadius: R.sm, paddingHorizontal: 6, paddingVertical: 4 },
-  allDayBadgeTxt: { fontSize: 12 },
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: w(0.1),
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  footerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  footerTxt: { color: w(0.35), fontSize: 12 },
-  footerHint: { color: w(0.35), fontSize: 12 },
+  dayHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: 6, paddingVertical: 9 },
+  dayHeadWd: { fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.6, color: w(0.35) },
+  dayHeadWdToday: { color: '#fff' },
+  dayHeadNum: { fontSize: 14, color: w(0.6) },
+  // Today is marked by weight, not by a glowing lime chip on every view — the
+  // grid reads better when only the now-line is loud.
+  dayHeadNumToday: { color: '#fff', fontWeight: '500' },
 });

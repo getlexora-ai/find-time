@@ -5,6 +5,8 @@ import { allEvents, byDate, createEvent, deleteEvent, updateEvent } from '../cal
 import { fromMin, iso, toMin, today } from '../cal-date';
 import { Icon } from '../Icon';
 import { useCalTheme } from '../theme-context';
+import { KIND_KEYS, KINDS } from '../kinds';
+import type { EventKind } from '../types';
 import { CATS, CAT_KEYS, type CatKey, C, R, w } from '../tokens';
 import { MONO, Press, Txt } from '../ui';
 import { useResponsive } from '../useResponsive';
@@ -48,6 +50,7 @@ export function ComposeSheet({
   const [start, setStart] = useState(editing?.start ?? defaultStart);
   const [dur, setDur] = useState(editing ? toMin(editing.end) - toMin(editing.start) : 60);
   const [cat, setCat] = useState<CatKey>(editing?.cat ?? 'deep');
+  const [kind, setKindState] = useState<EventKind>(editing?.kind ?? 'event');
   const [project, setProject] = useState(editing?.project || 'No project');
   const [ai, setAi] = useState(autoPlace ?? !editing);
   const [notes, setNotes] = useState(editing?.notes ?? '');
@@ -84,12 +87,22 @@ export function ComposeSheet({
         start: s,
         end: fromMin(toMin(s) + dur),
         cat,
+        kind,
         project: proj,
         notes: notes.trim(),
       });
       toast(placed ? `Moved to ${s}. No conflicts.` : 'Event updated');
     } else {
-      createEvent({ date: d, start: s, end: fromMin(toMin(s) + dur), title: t, cat, project: proj, notes: notes.trim() });
+      createEvent({
+        date: d,
+        start: s,
+        end: fromMin(toMin(s) + dur),
+        title: t,
+        cat,
+        kind,
+        project: proj,
+        notes: notes.trim(),
+      });
       toast(placed ? `Time found at ${s}. No conflicts.` : `Added at ${s}`);
     }
     onSaved(d);
@@ -146,9 +159,28 @@ export function ComposeSheet({
               />
             </Field>
 
-            {/* "Repeats" lived here with Every weekday / Weekly / Every 2 weeks.
-                Nothing read the value — save() never looked at it — so the chips
-                were decorative. Removed until recurrence is actually stored. */}
+            {/* "Repeats" lived here as three decorative chips that save() never
+                read. Recurrence is real now, but it is not a separate control:
+                picking Routine is what writes the rule (see api-adapter). */}
+            <Field label="Kind">
+              <View style={styles.chips}>
+                {KIND_KEYS.filter((k) => k !== 'ai').map((k) => {
+                  const on = k === kind;
+                  return (
+                    <Press
+                      key={k}
+                      onPress={() => setKindState(k)}
+                      accessibilityRole="radio"
+                      aria-checked={on}
+                      style={[styles.catChip, on ? styles.catChipOn : styles.catChipOff]}>
+                      <Icon name={KINDS[k].icon} size={13} color={on ? '#fff' : w(0.45)} />
+                      <Txt style={[styles.catChipTxt, { color: on ? '#fff' : w(0.5) }]}>{KINDS[k].label}</Txt>
+                    </Press>
+                  );
+                })}
+              </View>
+              <Txt style={styles.kindHint}>{KINDS[kind].blurb}</Txt>
+            </Field>
 
             <Field label="Category">
               <View style={styles.chips}>
@@ -207,7 +239,7 @@ export function ComposeSheet({
             <View style={styles.footer}>
               <Press onPress={save} hoverBg={C.limeHover} style={styles.saveBtn}>
                 <Icon name="check" size={18} color={C.surface} />
-                <Txt style={styles.saveTxt}>Save event</Txt>
+                <Txt style={styles.saveTxt}>Save {KINDS[kind].label.toLowerCase()}</Txt>
               </Press>
               {editing && (
                 <Press
@@ -284,6 +316,7 @@ const styles = StyleSheet.create({
   eyebrow: { color: C.lime, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1.2 },
   title: { marginTop: 4, color: '#fff', fontSize: 20, fontWeight: '500', letterSpacing: -0.4 },
   close: { height: 36, width: 36, alignItems: 'center', justifyContent: 'center', borderRadius: R.lg, borderWidth: 1, borderColor: w(0.1) },
+  kindHint: { marginTop: 8, color: w(0.35), fontSize: 11, lineHeight: 16 },
   fieldLabel: { color: w(0.5), fontSize: 12 },
   input: {
     height: 44,

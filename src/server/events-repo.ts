@@ -16,12 +16,13 @@ type Row = {
   flexibility: string;
   origin: string;
   is_draft: boolean;
+  rrule: string | null;
   project_label: string | null;
   description: string | null;
 };
 
 const COLS = `id, title, start_at, end_at, category, item_type, flexibility,
-              origin, is_draft, project_label, description`;
+              origin, is_draft, rrule, project_label, description`;
 
 function toApi(r: Row): ApiEvent {
   return {
@@ -34,6 +35,7 @@ function toApi(r: Row): ApiEvent {
     flexibility: r.flexibility,
     origin: r.origin,
     isDraft: r.is_draft,
+    rrule: r.rrule,
     projectLabel: r.project_label,
     notes: r.description,
   };
@@ -65,8 +67,8 @@ export async function createEvent(userId: string, input: EventInput): Promise<Ap
   const row = await queryOne<Row>(
     `insert into calendar_events
        (id, user_id, title, start_at, end_at, time_zone, category, item_type,
-        flexibility, origin, is_draft, project_label, description)
-     values ($1,$2,$3,$4,$5,'Europe/Berlin',$6,$7,$8,$9,$10,$11,$12)
+        flexibility, origin, is_draft, rrule, project_label, description)
+     values ($1,$2,$3,$4,$5,'Europe/Berlin',$6,$7,$8,$9,$10,$11,$12,$13)
      returning ${COLS}`,
     [
       `evt_${randomUUID()}`,
@@ -79,6 +81,7 @@ export async function createEvent(userId: string, input: EventInput): Promise<Ap
       input.flexibility ?? 'flexible',
       input.origin ?? 'manual',
       input.isDraft ?? false,
+      input.rrule ?? null,
       input.projectLabel ?? null,
       input.notes ?? null,
     ],
@@ -95,6 +98,7 @@ const PATCHABLE: Record<string, string> = {
   flexibility: 'flexibility',
   origin: 'origin',
   isDraft: 'is_draft',
+  rrule: 'rrule',
   projectLabel: 'project_label',
   notes: 'description',
 };

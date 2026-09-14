@@ -53,12 +53,31 @@ function partsToIso(date: string, hhmm: string): string {
   return `${date}T${hhmm}:00.000Z`;
 }
 
+/**
+ * Wire row -> kind. Order matters, most-specific first: a proposal is a
+ * proposal even if it also repeats, and a protected block outranks the fact
+ * that it is on a weekly rule.
+ */
 function kindFromApi(e: ApiEvent): EventKind {
-  if (e.itemType === 'break') return 'break';
   if (e.origin === 'ai' || e.isDraft) return 'ai';
-  if (e.flexibility === 'protected') return 'focus';
+  if (e.itemType === 'break') return 'break';
+  if (e.itemType === 'task') return 'task';
+  if (e.itemType === 'deepwork' || e.flexibility === 'protected') return 'focus';
+  if (e.rrule) return 'routine';
   return 'event';
 }
+
+/** The weekly rule a block written as a routine gets. */
+export const DEFAULT_RRULE = 'FREQ=WEEKLY';
+
+const KIND_TO_ITEM_TYPE: Record<EventKind, string> = {
+  event: 'event',
+  task: 'task',
+  routine: 'event',
+  focus: 'deepwork',
+  ai: 'event',
+  break: 'break',
+};
 
 export function toCalEvent(e: ApiEvent): CalEvent {
   const s = isoToParts(e.start);
@@ -74,6 +93,7 @@ export function toCalEvent(e: ApiEvent): CalEvent {
     kind: kindFromApi(e),
     notes: e.notes ?? '',
   };
+  if (e.rrule) cal.rrule = e.rrule;
   if (e.flexibility === 'flexible') cal.flexible = true;
   return cal;
 }
@@ -89,11 +109,15 @@ export function toEventInput(c: Partial<CalEvent>): Partial<EventInput> {
   if (c.project !== undefined) out.projectLabel = c.project || null;
 
   if (c.kind !== undefined) {
-    out.itemType = c.kind === 'break' ? 'break' : 'event';
+    out.itemType = KIND_TO_ITEM_TYPE[c.kind];
     out.origin = c.kind === 'ai' ? 'ai' : 'manual';
-    if (c.kind === 'focus') out.flexibility = 'protected';
-    else if (c.flexible) out.flexibility = 'flexible';
-    else out.flexibility = 'flexible';
+    out.flexibility = c.kind === 'focus' ? 'protected' : 'flexible';
+    // "Routine" is not a column — it is the presence of a recurrence rule. Send
+    // one when the block becomes a routine and clear it when it stops being
+    // one, or a block edited out of Routine keeps repeating on the server.
+    out.rrule = c.kind === 'routine' ? c.rrule ?? DEFAULT_RRULE : null;
+  } else if (c.rrule !== undefined) {
+    out.rrule = c.rrule || null;
   } else if (c.flexible !== undefined) {
     out.flexibility = c.flexible ? 'flexible' : 'fixed';
   }

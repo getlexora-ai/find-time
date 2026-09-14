@@ -33,6 +33,12 @@ export const C = {
   lightRecessed: '#ececec',
   lime: '#ccff00',
   limeHover: '#d7ff33',
+  /**
+   * The neutral a block is drawn in when its colour should say "backdrop"
+   * rather than name a category — routines and breaks. Cool grey so it reads
+   * as deliberately muted next to the five category hues, not as a sixth one.
+   */
+  steel: '#8e94a3',
   orange: '#ff4400',
   orangeOnLight: '#cc3600',
   /** "Protected" blue, lightened so it reads on the dark agenda (was #2047e6 on white). */

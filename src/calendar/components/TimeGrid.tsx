@@ -23,12 +23,17 @@ export function TimeGrid({
   events,
   actions,
   showNowChip,
+  /** Take every pixel the parent has left, instead of a fixed ceiling. This is
+   *  what lets the grid own the viewport on desktop; the scrolling list views
+   *  below the breakpoint still pass a maxHeight. */
+  fill,
   maxHeight = 480,
 }: {
   days: Date[];
   events: CalEvent[];
   actions: CalActions;
   showNowChip?: boolean;
+  fill?: boolean;
   maxHeight?: number;
 }) {
   const { theme } = useCalTheme();
@@ -45,7 +50,7 @@ export function TimeGrid({
   return (
     <ScrollView
       ref={scroller}
-      style={{ maxHeight }}
+      style={fill ? styles.fill : { maxHeight }}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={[styles.body, { backgroundColor: theme.panelBorder, minHeight: bh }]}>
       <View style={[styles.gutter, { backgroundColor: theme.recessed, height: bh }]}>
@@ -97,10 +102,11 @@ function HourLines({ start, end }: { start: number; end: number }) {
 }
 
 const styles = StyleSheet.create({
+  fill: { flex: 1, minHeight: 0 },
   body: { flexDirection: 'row', gap: 1 },
-  gutter: { width: 64, paddingTop: 8 },
+  gutter: { width: 52, paddingTop: 8 },
   gutterHour: { height: ROW, position: 'relative' },
-  gutterTxt: { position: 'absolute', right: 8, top: -6, color: w(0.25), fontSize: 12, textAlign: 'right' },
+  gutterTxt: { position: 'absolute', right: 8, top: -6, color: w(0.25), fontSize: 11, textAlign: 'right' },
   col: { flex: 1, minWidth: 0, position: 'relative' },
   hourLine: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: 'rgba(255,255,255,0.09)' },
   halfLine: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: 'rgba(255,255,255,0.035)' },

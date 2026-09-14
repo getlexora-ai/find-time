@@ -3,10 +3,11 @@ import { StyleSheet, View } from 'react-native';
 import { byDate } from '../cal-store';
 import { iso, isoWeek, sameDay, today, WD } from '../cal-date';
 import { Icon } from '../Icon';
+import { paint } from '../kinds';
 import { monthCells } from '../layout';
 import type { CalActions, CalState } from '../state';
 import { useCalTheme } from '../theme-context';
-import { CATS, C, R, w } from '../tokens';
+import { R, w } from '../tokens';
 import type { CalEvent } from '../types';
 import { Press, Txt } from '../ui';
 import { useResponsive } from '../useResponsive';
@@ -43,7 +44,7 @@ function DesktopMonth({ state, actions, events }: { state: CalState; actions: Ca
     <View style={[styles.card, { borderColor: theme.panelBorder }]}>
       <View style={[styles.grid, { backgroundColor: theme.panelBorder }]}>
         {/* header row */}
-        <View style={styles.row}>
+        <View style={styles.headRow}>
           <View style={[styles.wkGutter, styles.headCell, { backgroundColor: theme.recessed }]}>
             <Txt style={styles.wkHead}>Wk</Txt>
           </View>
@@ -63,7 +64,7 @@ function DesktopMonth({ state, actions, events }: { state: CalState; actions: Ca
               const list = byDate(events, iso(d));
               const isToday = sameDay(d, today());
               const other = d.getMonth() !== mo;
-              const shown = list.slice(0, 3);
+              const shown = list.slice(0, 4);
               const rest = list.length - shown.length;
               return (
                 <Press
@@ -154,7 +155,7 @@ function MobileMonth({ state, actions, events }: { state: CalState; actions: Cal
                   </View>
                   <View style={styles.mDots}>
                     {dots.map((e) => (
-                      <View key={e.id} style={[styles.mDot, { backgroundColor: CATS[e.cat].color }]} />
+                      <View key={e.id} style={[styles.mDot, { backgroundColor: paint(e).tint }]} />
                     ))}
                   </View>
                 </Press>
@@ -171,51 +172,35 @@ function MobileMonth({ state, actions, events }: { state: CalState; actions: Cal
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: R.xl2,
-    borderWidth: 1,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.5,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-  },
-  grid: { gap: 1 },
-  row: { flexDirection: 'row', gap: 1 },
-  wkGutter: { width: 36 },
+  // A flex column of flex rows: the month fills whatever height the page has,
+  // instead of every tile being a fixed 140px and the grid ending wherever
+  // that happened to land.
+  card: { flex: 1, minHeight: 0, borderRadius: R.xl, borderWidth: 1, overflow: 'hidden' },
+  grid: { flex: 1, minHeight: 0, gap: 1 },
+  headRow: { flexDirection: 'row', gap: 1 },
+  row: { flex: 1, minHeight: 0, flexDirection: 'row', gap: 1 },
+  wkGutter: { width: 30 },
   col: { flex: 1, minWidth: 0 },
-  headCell: { paddingVertical: 10, alignItems: 'center', justifyContent: 'center' },
-  wkHead: { fontSize: 10, lineHeight: 14, textTransform: 'uppercase', letterSpacing: 1.2, color: w(0.25) },
-  dayHead: { fontSize: 12, textTransform: 'uppercase', letterSpacing: 2.56, color: w(0.4) },
-  wkNumCell: { alignItems: 'center', paddingTop: 12 },
+  headCell: { paddingVertical: 8, alignItems: 'center', justifyContent: 'center' },
+  wkHead: { fontSize: 10, lineHeight: 14, textTransform: 'uppercase', letterSpacing: 1, color: w(0.25) },
+  dayHead: { fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.6, color: w(0.4) },
+  wkNumCell: { alignItems: 'center', paddingTop: 10 },
   wkNum: { fontSize: 10, lineHeight: 14, color: w(0.2), letterSpacing: -0.3 },
-  tile: { minHeight: 140, padding: 8, gap: 4 },
+  // Low floor on purpose: the rows flex to fill the page, and six of them
+  // still fit a short viewport now that the page itself does not scroll.
+  tile: { minHeight: 72, padding: 6, gap: 3, overflow: 'hidden' },
   tileTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
   numWrap: { height: 24, minWidth: 24, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center' },
-  numToday: {
-    borderRadius: R.md,
-    backgroundColor: C.lime,
-    shadowColor: C.lime,
-    shadowOpacity: 0.55,
-    shadowRadius: 16,
-  },
+  numToday: { borderRadius: R.sm, backgroundColor: w(0.18) },
   num: { fontSize: 12, lineHeight: 16 },
   numIn: { color: w(0.55) },
   numOther: { color: w(0.2) },
-  numTodayTxt: { color: C.surface, fontWeight: '500' },
+  numTodayTxt: { color: '#fff', fontWeight: '500' },
   addBtn: { height: 20, width: 20, alignItems: 'center', justifyContent: 'center', borderRadius: R.sm },
   more: { marginTop: 'auto', width: '100%', borderRadius: R.sm, paddingHorizontal: 6, paddingVertical: 4 },
   moreTxt: { color: w(0.4), fontSize: 12 },
   // mobile
-  mCard: {
-    borderRadius: R.xl2,
-    borderWidth: 1,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.5,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-  },
+  mCard: { borderRadius: R.xl, borderWidth: 1, overflow: 'hidden' },
   mGridBg: { gap: 1 },
   mRow: { flexDirection: 'row', gap: 1 },
   mHeadCell: { flex: 1, paddingVertical: 8, alignItems: 'center' },
@@ -229,12 +214,12 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 6,
   },
-  mCellSel: { borderWidth: 1, borderColor: C.lime },
+  mCellSel: { borderWidth: 1, borderColor: w(0.45) },
   mNumWrap: { height: 24, width: 24, alignItems: 'center', justifyContent: 'center' },
-  mNumToday: { borderRadius: R.md, backgroundColor: C.lime, shadowColor: C.lime, shadowOpacity: 0.5, shadowRadius: 14 },
+  mNumToday: { borderRadius: R.sm, backgroundColor: w(0.18) },
   mNum: { fontSize: 12, lineHeight: 16 },
   mNumIn: { color: w(0.65) },
-  mNumTodayTxt: { color: C.surface, fontWeight: '500' },
+  mNumTodayTxt: { color: '#fff', fontWeight: '500' },
   mDots: { flexDirection: 'row', gap: 2, height: 4, alignItems: 'center' },
   mDot: { height: 4, width: 4, borderRadius: 2 },
 });
