@@ -18,7 +18,7 @@ the mobile nav's "Ask AI". `src/lib/*` is now unreferenced but left on disk.
 | Geometry | `layout.ts` (`monthCells`, `laidOut` overlap split, block px), `useResponsive.ts` (1024px breakpoint) |
 | Icons | `Icon.tsx` + `solar-icons.ts` — the **real** Solar glyphs, rendered with `SvgXml` |
 | Screen | `CalendarScreen.tsx` (orchestrator: state, nav model, derived toolbar copy, web keyboard shortcuts) |
-| Surfaces | `components/` — Frame, Marquee, Header, MobileNav, Toolbar, ConflictBanner, Sidebar, TelemetryColumn, MiniMonth, MonthView, WeekView, DayView, TimeGrid, EventBlock, EventChip, Agenda, DayPillStrip, EventDetail, ComposeSheet, AiPanel, PickerSheet, ThemeMenu, Toast, Skeleton |
+| Surfaces | `components/` — Frame, Header, MobileNav, Toolbar, ConflictBanner, Sidebar, MiniMonth, MonthView, WeekView, DayView, TimeGrid, EventBlock, EventChip, Agenda, DayPillStrip, EventDetail, ComposeSheet, AiPanel, PickerSheet, ThemeMenu, Toast, Skeleton |
 
 `src/app/index.tsx` wraps `CalendarScreen` in `CalendarThemeProvider` + `ToastProvider`.
 
@@ -60,12 +60,14 @@ fixture are ported exactly so the board mockups line up.
   (Today · Projects · lime ⊕ · Calendar · Ask AI), rendered by `CalendarScreen` only when
   `!isDesktop` — matching `lg:hidden`. Today / Projects are the same out-of-scope toast
   stubs the prototype ships. There is no floating FAB: the ⊕ lives in the nav.
-- **`backdrop-blur-xl`** on the three chrome surfaces (Marquee / Header / MobileNav) is
-  `CHROME_BLUR` in `ui.tsx` — a web-only `backdropFilter`, since `backdrop-filter` is
-  CSS. On native the ~90%-opaque chrome colour renders unblurred.
+- **`backdrop-blur-xl`** on the chrome surfaces (Header / MobileNav) is `CHROME_BLUR` in
+  `ui.tsx` — a web-only `backdropFilter`, since `backdrop-filter` is CSS. On native the
+  ~90%-opaque chrome colour renders unblurred.
 - **Sticky agenda date header** is rendered as a normal block (RN nested-scroll sticky is
   unreliable). Everything else — anchored popover vs. bottom sheet, centred modal vs.
-  sheet, the 280ms nav skeleton, the marquee, `prefers-reduced-motion` — matches.
+  sheet, the 280ms nav skeleton, `prefers-reduced-motion` — matches. (The top marquee
+  ticker and the decorative side telemetry column were removed in the 2026-09-14
+  redesign — pure noise, nothing functional lived behind either.)
 - **The agenda is dark**, deviating from spec §7.3's "one light reading surface", by
   request: an empty day already rendered on `#121212`, so a populated one on `#f4f4f4`
   looked inconsistent. Body lifts with the theme (`recessed`); "Protected" blue is

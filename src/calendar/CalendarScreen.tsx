@@ -26,13 +26,11 @@ import { DayView } from './components/DayView';
 import { EventDetail } from './components/EventDetail';
 import { Frame } from './components/Frame';
 import { Header } from './components/Header';
-import { Marquee } from './components/Marquee';
 import { MobileNav } from './components/MobileNav';
 import { MonthView } from './components/MonthView';
 import { PickerSheet } from './components/PickerSheet';
 import { Sidebar } from './components/Sidebar';
 import { Skeleton } from './components/Skeleton';
-import { TelemetryColumn } from './components/TelemetryColumn';
 import { ThemeMenu } from './components/ThemeMenu';
 import { useToast } from './components/Toast';
 import { Toolbar } from './components/Toolbar';
@@ -71,7 +69,7 @@ function overlapping(list: CalEvent[]): { a: CalEvent; b: CalEvent }[] {
 export function CalendarScreen() {
   const events = useCalEvents();
   const toast = useToast();
-  const { width, isDesktop, isWide, isPhone } = useResponsive();
+  const { width, isDesktop, isPhone } = useResponsive();
   const { signedIn } = useAccounts();
 
   // Pull Google Calendar on mount (throttled in the store) and once we're signed in.
@@ -264,13 +262,11 @@ export function CalendarScreen() {
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <Frame />
-      <Marquee />
       <View style={styles.rowWrap}>
         <View style={styles.row}>
           {isDesktop && (
             <Sidebar selected={state.selected} events={events} onPick={(d) => actions.pick(d)} />
           )}
-          {isWide && <TelemetryColumn />}
           <View style={styles.main}>
             <Header
               onOpenTheme={() => setThemeMenu(true)}

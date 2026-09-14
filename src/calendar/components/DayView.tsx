@@ -66,7 +66,7 @@ export function DayView({
 
         {isWide && (
           <View style={styles.rail}>
-            <View style={[styles.railCard, styles.telemetry]}>
+            <View style={[styles.railCard, { backgroundColor: theme.panel, borderColor: theme.panelBorder }]}>
               <View style={styles.railHead}>
                 <Txt style={styles.railLabel}>Day telemetry</Txt>
                 <Icon name="chart" size={18} color={C.lime} />
@@ -90,10 +90,10 @@ export function DayView({
               </Txt>
             </View>
 
-            <View style={[styles.railCard, styles.insight]}>
+            <View style={[styles.railCard, { backgroundColor: theme.panel, borderColor: theme.panelBorder }]}>
               <View style={styles.railHead}>
-                <Txt style={styles.insightLabel}>AI insight</Txt>
-                <Icon name="bulb" size={20} color={C.surface} />
+                <Txt style={styles.railLabel}>AI insight</Txt>
+                <Icon name="bulb" size={18} color={C.lime} />
               </View>
               {/* Was a fixed sentence naming fixture events and people ("Maya is
                   free Thursday 14:00"), under two inert Views styled as buttons. */}
@@ -153,22 +153,20 @@ function EnergyBand({ theme }: { theme: { panel: string; panelBorder: string } }
     <View style={[styles.energy, { backgroundColor: theme.panel, borderColor: theme.panelBorder }]}>
       <View style={styles.energyHead}>
         <View style={styles.energyHeadLeft}>
-          <Icon name="bolt" size={18} color="#ff7040" />
+          <Icon name="bolt" size={18} color={C.lime} />
           <Txt style={styles.energyLabel}>Energy forecast</Txt>
         </View>
-        <Txt style={styles.energyHint}>Learned from 6 weeks of your completions</Txt>
+        <Txt style={styles.energyHint}>A typical curve, not tracked from your data</Txt>
       </View>
       <View style={styles.energyBarWrap}>
         <Svg style={StyleSheet.absoluteFill} width="100%" height="100%">
           <Defs>
             <LinearGradient id="energy" x1="0" y1="0" x2="1" y2="0">
-              <Stop offset="0" stopColor={rgba('#ccff00', 0.55)} />
-              <Stop offset="0.18" stopColor={rgba('#ccff00', 0.75)} />
-              <Stop offset="0.38" stopColor={rgba('#ffd600', 0.5)} />
-              <Stop offset="0.52" stopColor={rgba('#ff7040', 0.35)} />
-              <Stop offset="0.7" stopColor={rgba('#ffd600', 0.4)} />
-              <Stop offset="0.88" stopColor={rgba('#c8c8ff', 0.35)} />
-              <Stop offset="1" stopColor={rgba('#c8c8ff', 0.2)} />
+              <Stop offset="0" stopColor={rgba('#ccff00', 0.5)} />
+              <Stop offset="0.25" stopColor={rgba('#ccff00', 0.28)} />
+              <Stop offset="0.45" stopColor={rgba(C.lime, 0.08)} />
+              <Stop offset="0.65" stopColor={rgba('#ccff00', 0.22)} />
+              <Stop offset="1" stopColor={rgba('#ccff00', 0.12)} />
             </LinearGradient>
           </Defs>
           <Rect x={0} y={0} width="100%" height="100%" fill="url(#energy)" />
@@ -178,9 +176,8 @@ function EnergyBand({ theme }: { theme: { panel: string; panelBorder: string } }
         </View>
       </View>
       <View style={styles.energyScale}>
-        <Txt style={styles.energyScaleTxt}>07:00 peak</Txt>
-        <Txt style={styles.energyScaleTxt}>12:30 dip</Txt>
-        <Txt style={styles.energyScaleTxt}>15:00 second wind</Txt>
+        <Txt style={styles.energyScaleTxt}>07:00 usually sharpest</Txt>
+        <Txt style={styles.energyScaleTxt}>12:30 usually lowest</Txt>
         <Txt style={styles.energyScaleTxt}>21:00</Txt>
       </View>
     </View>
@@ -211,8 +208,7 @@ const styles = StyleSheet.create({
   gridHeadLabel: { color: w(0.4), fontSize: 12, textTransform: 'uppercase', letterSpacing: 1.2 },
   gridHeadHint: { color: w(0.3), fontSize: 12 },
 
-  railCard: { borderRadius: R.xl2, borderWidth: 1, borderColor: w(0.1), padding: 20 },
-  telemetry: { backgroundColor: 'rgba(255,255,255,0.07)' },
+  railCard: { borderRadius: R.xl2, borderWidth: 1, padding: 20 },
   railHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   railLabel: { color: w(0.45), fontSize: 12, textTransform: 'uppercase', letterSpacing: 1.2 },
   telRow: { flexDirection: 'row', gap: 16, marginTop: 20 },
@@ -222,14 +218,7 @@ const styles = StyleSheet.create({
   barFill: { height: '100%', borderRadius: R.full, backgroundColor: C.lime },
   telNote: { marginTop: 12, color: w(0.4), fontSize: 12, lineHeight: 18 },
 
-  insight: { backgroundColor: '#c8c8ff', borderColor: 'rgba(255,255,255,0.15)' },
-  insightLabel: { color: 'rgba(18,18,18,0.5)', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1.2 },
-  insightBody: { marginTop: 20, color: C.surface, fontSize: 16, lineHeight: 24, fontWeight: '500', letterSpacing: -0.3 },
-  insightBtns: { marginTop: 20, flexDirection: 'row', gap: 8 },
-  insightPrimary: { borderRadius: R.lg, backgroundColor: C.surface, paddingHorizontal: 16, paddingVertical: 10 },
-  insightPrimaryTxt: { color: '#fff', fontSize: 12 },
-  insightGhost: { borderRadius: R.lg, borderWidth: 1, borderColor: 'rgba(18,18,18,0.15)', paddingHorizontal: 16, paddingVertical: 10 },
-  insightGhostTxt: { color: C.surface, fontSize: 12 },
+  insightBody: { marginTop: 20, color: w(0.85), fontSize: 16, lineHeight: 24, fontWeight: '500', letterSpacing: -0.3 },
 
   protectedTitle: { color: '#fff', fontSize: 14, fontWeight: '500' },
   protectedEmpty: { color: w(0.4), fontSize: 12 },
