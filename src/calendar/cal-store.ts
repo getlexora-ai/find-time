@@ -252,3 +252,22 @@ export async function applyProposals(proposals: FindTimeProposal[]): Promise<num
   return results.filter(Boolean).length;
 }
 
+/** Create one agent-proposed block at an explicit time. Used by the chat panel,
+ *  which accepts proposals one at a time so each one can carry its own outcome
+ *  back to the learner (src/calendar/agent-store.ts). */
+export function createAgentBlock(input: {
+  title: string;
+  category: string;
+  startISO: string;
+  endISO: string;
+}): Promise<unknown> {
+  return createEventAsync({
+    date: input.startISO.slice(0, 10),
+    start: input.startISO.slice(11, 16),
+    end: input.endISO.slice(11, 16),
+    title: input.title,
+    cat: API_CAT_TO_CAT[input.category] ?? 'deep',
+    kind: 'ai',
+  });
+}
+

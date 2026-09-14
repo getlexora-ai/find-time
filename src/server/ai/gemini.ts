@@ -20,7 +20,7 @@ export function aiConfigured(): boolean {
   return Boolean(process.env.GEMINI_API_KEY);
 }
 
-type ToolDef = { name: string; description: string; input_schema: Record<string, unknown> };
+export type ToolDef = { name: string; description: string; input_schema: Record<string, unknown> };
 
 type GeminiResponse = {
   candidates?: { content?: { parts?: { functionCall?: { name?: string; args?: Record<string, unknown> } }[] } }[];
@@ -114,4 +114,80 @@ export async function extractWithTool(opts: {
   const call = parts.find((p) => p.functionCall?.name === opts.tool.name)?.functionCall;
   if (!call?.args) throw new Error('Gemini returned no functionCall.');
   return call.args;
+}
+
+// ── multi-turn, multi-tool ──────────────────────────────────────────────────
+
+export type ChatTurn = { role: 'user' | 'assistant'; text: string };
+
+export type ToolChoice = { name: string; args: Record<string, unknown> };
+
+/**
+ * The conversational counterpart to `extractWithTool`: carries history and
+ * offers several tools, of which the model must pick exactly one.
+ *
+ * Forcing a function call (mode ANY over every declared tool) rather than
+ * allowing free prose is deliberate. It keeps the "model proposes, code
+ * disposes" split that the rest of this directory relies on — the model chooses
+ * an *action* and fills in its arguments; deterministic code decides whether
+ * and how to carry it out. It also means untrusted calendar text read into the
+ * prompt can never come back out as an unframed instruction, because every
+ * reply is a typed object rather than free text.
+ */
+export async function chatWithTools(opts: {
+  system: string;
+  history: ChatTurn[];
+  tools: ToolDef[];
+  model?: string;
+  maxTokens?: number;
+  signal?: AbortSignal;
+}): Promise<ToolChoice> {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) throw new Error('GEMINI_API_KEY is not set.');
+  if (opts.tools.length === 0) throw new Error('chatWithTools needs at least one tool.');
+
+  const model = opts.model ?? DEFAULT_MODEL;
+  const names = opts.tools.map((t) => t.name);
+
+  const res = await fetch(`${BASE}/${model}:generateContent`, {
+    method: 'POST',
+    signal: opts.signal,
+    headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: opts.system }] },
+      contents: opts.history.map((m) => ({
+        // Gemini's wire format calls the assistant side "model".
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.text }],
+      })),
+      tools: [
+        {
+          functionDeclarations: opts.tools.map((t) => ({
+            name: t.name,
+            description: t.description,
+            parameters: toGeminiSchema(t.input_schema),
+          })),
+        },
+      ],
+      toolConfig: { functionCallingConfig: { mode: 'ANY', allowedFunctionNames: names } },
+      generationConfig: {
+        maxOutputTokens: opts.maxTokens ?? 1024,
+        // A shade above zero: a pure-greedy chat repeats the same clarifying
+        // question verbatim when a user rephrases, which reads as broken.
+        temperature: 0.2,
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Gemini ${res.status}: ${body.slice(0, 300)}`);
+  }
+
+  const data = (await res.json()) as GeminiResponse;
+  const parts = data.candidates?.[0]?.content?.parts ?? [];
+  const call = parts.find((p) => p.functionCall?.name && names.includes(p.functionCall.name))
+    ?.functionCall;
+  if (!call?.name || !call.args) throw new Error('Gemini returned no functionCall.');
+  return { name: call.name, args: call.args };
 }

@@ -18,6 +18,7 @@ Calendar-specific design: [../docs/db/calendar-schema.md](../docs/db/calendar-sc
 | `010_oauth_tokens.sql` | `oauth_tokens` — AES-256-GCM-encrypted Google tokens (src/server/crypto.ts) |
 | `013_rate_limits.sql` | `rate_limits`, `rate_limit_blocks` — public-API fixed-window limiter (src/server/rate-limit.ts) |
 | `014_waitlist_details.sql` | `waitlist.name`, `waitlist.reason` — optional fields from the `/waitlist` page (also folded into `schema.sql`) |
+| `015_agent_learning.sql` | `learned_preferences`; outcome + feature columns on `ai_suggestions`; `scheduler_profiles.learning`. The agent's feedback loop — see [../docs/ai-learning.md](../docs/ai-learning.md) |
 | `schema.sql` | **generated** — `001`–`007` + `001_waitlist` (incl. the `014` columns) concatenated; what a fresh DB gets. **Run `010` and `013` after it.** |
 
 Each file is idempotent (`create table if not exists`, `do $$ … exception when duplicate_object`), so re-running one is safe.
@@ -35,9 +36,10 @@ export DATABASE_URL_UNPOOLED='postgresql://...direct-host.neon.tech/find_time?ss
 psql "$DATABASE_URL_UNPOOLED" -v ON_ERROR_STOP=1 -f db/schema.sql
 psql "$DATABASE_URL_UNPOOLED" -v ON_ERROR_STOP=1 -f db/010_oauth_tokens.sql
 psql "$DATABASE_URL_UNPOOLED" -v ON_ERROR_STOP=1 -f db/013_rate_limits.sql
+psql "$DATABASE_URL_UNPOOLED" -v ON_ERROR_STOP=1 -f db/015_agent_learning.sql
 
 # or file by file, in order:
-for f in db/00[1-7]_*.sql db/010_*.sql db/013_*.sql; do psql "$DATABASE_URL_UNPOOLED" -v ON_ERROR_STOP=1 -f "$f"; done
+for f in db/00[1-7]_*.sql db/010_*.sql db/013_*.sql db/015_*.sql; do psql "$DATABASE_URL_UNPOOLED" -v ON_ERROR_STOP=1 -f "$f"; done
 ```
 
 `NOTICE: … does not exist, skipping` on the first run is the `drop trigger if exists`

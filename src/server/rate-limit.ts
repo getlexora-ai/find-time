@@ -16,13 +16,17 @@ import { decide, windowStart, type Pair, type Window } from '@/server/rate-limit
  * a limiter/DB outage (or DATABASE_URL unset) must never take a route down.
  */
 
-export type RateRoute = 'waitlist' | 'ai-find-time' | 'google-connect';
+export type RateRoute = 'waitlist' | 'ai-find-time' | 'ai-chat' | 'google-connect';
 
 const LIMITS: Record<RateRoute, Pair> = {
   // unauthenticated — spammable to junk; keep tight
   waitlist: { hour: 5, day: 20 },
   // authed, burns Gemini tokens per hit
   'ai-find-time': { hour: 15, day: 40 },
+  // authed, also burns tokens — but a *conversation* legitimately takes several
+  // turns to land on the right slot, so the per-request cap has to be looser
+  // than the one-shot planner's or normal use hits a wall mid-thread.
+  'ai-chat': { hour: 60, day: 200 },
   // authed, kicks off a Google OAuth round trip
   'google-connect': { hour: 10, day: 30 },
 };
