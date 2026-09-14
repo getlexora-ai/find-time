@@ -35,7 +35,7 @@ assert.equal(back.start, '2026-09-09T11:00:00.000Z');
 assert.equal(back.end, '2026-09-09T12:30:00.000Z');
 assert.equal(back.category, 'deep-work');
 assert.equal(back.flexibility, 'protected');
-assert.equal(back.itemType, 'event');
+assert.equal(back.itemType, 'deepwork', 'focus is written as deep work (calendar-kpi taxonomy)');
 assert.equal(back.projectLabel, 'Mobile launch');
 
 // kind derivation precedence
@@ -65,6 +65,14 @@ assert.equal('origin' in protect, false, 'protecting a Google event must not rew
 const unprotect = toEventPatch({ ...g, kind: 'focus' }, { kind: 'event' });
 assert.equal(unprotect.flexibility, 'fixed', 'unprotecting returns it to fixed, not movable');
 assert.equal('origin' in unprotect, false);
+
+// routine is the recurrence rule: a kind patch sets and clears it on Find time's
+// own blocks, and never touches the recurrence of a Google event
+const plain = toCalEvent({ ...api, flexibility: 'flexible' });
+assert.equal(toEventPatch(plain, { kind: 'routine' }).rrule, 'FREQ=WEEKLY');
+assert.equal(toEventPatch({ ...plain, kind: 'routine', rrule: 'FREQ=DAILY' }, { kind: 'routine', rrule: 'FREQ=DAILY' }).rrule, 'FREQ=DAILY');
+assert.equal(toEventPatch({ ...plain, kind: 'routine', rrule: 'FREQ=WEEKLY' }, { kind: 'event', rrule: undefined }).rrule, null);
+assert.equal('rrule' in toEventPatch(g, { kind: 'focus' }), false);
 
 // accepting an AI block still makes it manual
 const proposed = toCalEvent({ ...api, origin: 'ai', flexibility: 'flexible' });

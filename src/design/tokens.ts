@@ -33,6 +33,12 @@ export const C = {
   lightRecessed: '#ececec',
   lime: '#ccff00',
   limeHover: '#d7ff33',
+  /**
+   * The neutral a block is drawn in when its colour should say "backdrop"
+   * rather than name a category — routines and breaks. Cool grey so it reads
+   * as deliberately muted next to the five category hues, not as a sixth one.
+   */
+  steel: '#8e94a3',
   orange: '#ff4400',
   orangeOnLight: '#cc3600',
   /** "Protected" blue, lightened so it reads on the dark agenda (was #2047e6 on white). */
@@ -73,6 +79,19 @@ export const DAY_START = 7;
 export const DAY_END = 21;
 export const ROW = 56; // px per hour
 export const SNAP = 15; // minutes
+
+/**
+ * Hour-gutter width in the time grid. Narrower on phones, where every pixel it
+ * takes is a pixel off the day columns beside it — "07:00" still fits at 40.
+ */
+export const GUTTER = 52;
+export const GUTTER_PHONE = 40;
+/**
+ * Narrowest a day column may get before the week grid stops showing all seven
+ * days and starts scrolling three at a time. Below this a block is a coloured
+ * sliver with an elided title, which is not a calendar you can read.
+ */
+export const MIN_COL = 88;
 
 /** Type scale (spec §1.3). fontFamily is applied globally in the screen. */
 export const T = {

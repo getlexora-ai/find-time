@@ -98,10 +98,12 @@ raise it with the user — don't "improve" it in the implementation.
 - **Three views:** Month (default ≥1024), Week, Day. Plus a mobile week-strip that is the
   default `<640px`.
 - **7 switchable backgrounds**, persisted. Values are in `calendar.html`
-  `body[data-theme=…]` CSS and the `THEMES` array: `electric` (current), `ink`, `navy`
-  (recommended default), `slate`, `eclipse`, `carbon`, `graphite`. On every non-`electric`
-  ground the `#121212` panels must lift to ~`#17181d` with a lighter border + shadow or
-  they vanish — make that a real theme token, not a one-off.
+  `body[data-theme=…]` CSS and the `THEMES` array: `electric`, `ink`, `navy` (**default**,
+  since the 2026-09-14 redesign — the loud pure-blue `electric` ground made the lifted
+  black panels look mismatched instead of layered), `slate`, `eclipse`, `carbon`,
+  `graphite`. On every non-`electric` ground the `#121212` panels must lift to ~`#17181d`
+  with a lighter border + shadow or they vanish — make that a real theme token, not a
+  one-off.
 - **Responsive:** breakpoint is **1024px**. Both layouts stay in the DOM/tree, toggled —
   never a width-driven re-render except the initial default view and popover-vs-sheet.
   Full rules in spec §4.

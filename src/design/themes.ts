@@ -47,9 +47,9 @@ const FLAT = {
 export const THEMES: Theme[] = [
   {
     key: 'electric',
-    name: 'Electric (current)',
+    name: 'Electric',
     sw: '#2047e6',
-    tag: 'Current',
+    tag: 'Loud',
     note: 'Maximum energy — the loud one',
     ground: '#2047e6',
     gradTop: 'rgba(9,26,102,0.12)',
@@ -79,7 +79,7 @@ export const THEMES: Theme[] = [
     key: 'navy',
     name: 'Deep Navy',
     sw: '#0a1126',
-    tag: 'Pick',
+    tag: 'Current',
     note: 'Still a blue app — calm, easy on the eyes',
     ground: '#0a1126',
     gradTop: '#0c1531',
@@ -157,5 +157,12 @@ export const THEME_BY_KEY: Record<ThemeKey, Theme> = THEMES.reduce(
   {} as Record<ThemeKey, Theme>,
 );
 
-export const DEFAULT_THEME: ThemeKey = 'electric';
+/**
+ * Near-black, not blue. The ground's job in this layout is to disappear: the
+ * grid is the brightest, densest object on screen and everything else has to
+ * sit behind it. A saturated ground competes with the category hues inside the
+ * blocks — on `ink` those are the only real colour anywhere, which is what
+ * makes the calendar read as the app rather than as one panel among several.
+ */
+export const DEFAULT_THEME: ThemeKey = 'ink';
 export const STORAGE_KEY = 'ft-theme';

@@ -5,7 +5,7 @@ import type { FindTimeProposal } from '@/lib/api-types';
 import { apiFetch, hasTokenGetter, onTokenGetter } from '@/lib/api';
 import { IMPORTED_ORIGIN, lockedFields } from '@/lib/synced-fields';
 
-import { toCalEvent, toEventInput, toEventPatch } from './api-adapter';
+import { DEFAULT_RRULE, toCalEvent, toEventInput, toEventPatch } from './api-adapter';
 import { toMin } from './cal-date';
 import { PendingSaves } from './pending-saves';
 import { seedEvents } from './seed';
@@ -151,6 +151,7 @@ export type NewEvent = {
   project?: string;
   notes?: string;
   kind?: CalEvent['kind'];
+  rrule?: string;
 };
 
 function optimistic(input: NewEvent): CalEvent {
@@ -341,12 +342,23 @@ export function deleteEvent(id: number): Promise<boolean> {
   return sendDelete(id, serverId);
 }
 
-/** Toggle a block between protected (`focus`) and flexible (`event`). Allowed
- *  on imported events: protection is Find time's metadata, not Google's. */
-export function toggleProtected(id: number): Promise<boolean> {
+/**
+ * Change what a block *is*. Replaces the old binary protect/unprotect toggle,
+ * which could only ever say `focus` or `event` and so had no way to express
+ * the task and routine kinds the grid now draws differently.
+ *
+ * Routine is the presence of a recurrence rule rather than a column of its own
+ * (see api-adapter), so the rule is set and cleared alongside the kind here —
+ * otherwise a block moved out of Routine keeps repeating on the server.
+ *
+ * Allowed on imported events: kind is Find time's metadata, not Google's.
+ * Resolves true once the server has the change.
+ */
+export function setKind(id: number, kind: CalEvent['kind']): Promise<boolean> {
   const cur = events.find((e) => e.id === id);
   if (!cur) return Promise.resolve(false);
-  return updateEvent(id, { kind: cur.kind === 'focus' ? 'event' : 'focus' });
+  if (cur.kind === kind) return Promise.resolve(true);
+  return updateEvent(id, { kind, rrule: kind === 'routine' ? cur.rrule ?? DEFAULT_RRULE : undefined });
 }
 
 const API_CAT_TO_CAT: Record<string, CatKey> = {
