@@ -16,6 +16,17 @@
 const BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const DEFAULT_MODEL = 'gemini-3.6-flash';
 
+/** The model to call: GEMINI_MODEL when set, so it can be swapped without a deploy of code. */
+function primaryModel(): string {
+  return process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;
+}
+
+/** Optional second model, tried only when the primary is overloaded or answers without a tool call. */
+function fallbackModel(): string | null {
+  const m = process.env.GEMINI_FALLBACK_MODEL?.trim();
+  return m && m !== primaryModel() ? m : null;
+}
+
 export function aiConfigured(): boolean {
   return Boolean(process.env.GEMINI_API_KEY);
 }
@@ -75,7 +86,7 @@ export async function extractWithTool(opts: {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error('GEMINI_API_KEY is not set.');
 
-  const model = opts.model ?? DEFAULT_MODEL;
+  const model = opts.model ?? primaryModel();
   const res = await fetch(`${BASE}/${model}:generateContent`, {
     method: 'POST',
     signal: opts.signal,
@@ -170,18 +181,28 @@ class GeminiCallError extends Error {
 const RETRY_DELAY_MS = 800;
 
 /**
- * Retries once. Both failures seen in production were one-offs — a 503 "high
- * demand" and a reply with no function call — and the user's next message
- * worked each time, so a single retry turns them into a slower reply instead
- * of "could not read that".
+ * Retries once on the same model, then — if GEMINI_FALLBACK_MODEL is set — once
+ * on the fallback. A single retry was not enough: 3 of the first 8 production
+ * turns still failed on 503 "high demand" or a reply with no function call,
+ * and an overloaded model tends to stay overloaded for longer than 800 ms.
+ * `ToolChoice.model` carries whichever model actually answered, so the log
+ * shows how often the fallback is doing the work.
  */
 export async function chatWithTools(opts: Parameters<typeof chatWithToolsOnce>[0]): Promise<ToolChoice> {
+  const retryable = (err: unknown) =>
+    err instanceof GeminiCallError && err.retryable && !opts.signal?.aborted;
   try {
     return await chatWithToolsOnce(opts);
   } catch (err) {
-    if (!(err instanceof GeminiCallError) || !err.retryable || opts.signal?.aborted) throw err;
-    await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
-    return chatWithToolsOnce(opts);
+    if (!retryable(err)) throw err;
+  }
+  await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+  try {
+    return await chatWithToolsOnce(opts);
+  } catch (err) {
+    const fallback = opts.model ? null : fallbackModel();
+    if (!fallback || !retryable(err)) throw err;
+    return chatWithToolsOnce({ ...opts, model: fallback });
   }
 }
 
@@ -197,7 +218,7 @@ async function chatWithToolsOnce(opts: {
   if (!key) throw new Error('GEMINI_API_KEY is not set.');
   if (opts.tools.length === 0) throw new Error('chatWithTools needs at least one tool.');
 
-  const model = opts.model ?? DEFAULT_MODEL;
+  const model = opts.model ?? primaryModel();
   const names = opts.tools.map((t) => t.name);
 
   const startedAt = Date.now();

@@ -13,8 +13,15 @@
 export const WEEKDAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 export type Weekday = (typeof WEEKDAYS)[number];
 
-export const CATEGORIES = ['deep-work', 'design', 'research', 'meeting', 'admin'] as const;
+/** `personal` is life outside work — gym, errands, a haircut. It searches the
+ *  whole waking day and the weekend rather than working hours (see
+ *  `personalDayWindow`), and is stored on the calendar as `admin` until the
+ *  calendar has a colour for it. */
+export const CATEGORIES = ['deep-work', 'design', 'research', 'meeting', 'admin', 'personal'] as const;
 export type Category = (typeof CATEGORIES)[number];
+
+/** Search window for personal time when the user didn't name one. */
+export const PERSONAL_DAY_WINDOW = { start: 7, end: 22 } as const;
 
 /**
  * Scorer weights. Every feature is normalised to [0, 1] and every weight is

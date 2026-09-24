@@ -367,6 +367,8 @@ const API_CAT_TO_CAT: Record<string, CatKey> = {
   research: 'research',
   meeting: 'sync',
   admin: 'admin',
+  // No calendar colour for personal time yet; admin is the neutral one.
+  personal: 'admin',
 };
 
 /** Accept an AI-proposed block: `kind: 'ai'` is what renders the dashed lime

@@ -32,7 +32,7 @@ import { CATEGORIES } from './preferences.ts';
  * a change in the prompt rather than guessed at. Without it, "the agent got
  * worse last week" has no answerable form.
  */
-export const PROMPT_VERSION = 'p2';
+export const PROMPT_VERSION = 'p3';
 
 export const TOOL_PROPOSE = 'propose_blocks';
 export const TOOL_ASK = 'ask_clarification';
@@ -57,7 +57,13 @@ export const PROPOSE_TOOL: ToolDef = {
         type: 'string',
         description: 'Short calendar title for the block(s), e.g. "Deep work — onboarding spec". No quotes.',
       },
-      category: { type: 'string', enum: CATS },
+      category: {
+        type: 'string',
+        enum: CATS,
+        description:
+          'personal for life outside work: gym, sport, errands, appointments, family, hobbies. ' +
+          'The others are kinds of work.',
+      },
       durationMin: {
         type: 'integer',
         minimum: 15,
@@ -94,8 +100,26 @@ export const PROPOSE_TOOL: ToolDef = {
       weekdaysOnly: {
         type: 'boolean',
         description:
-          'True (the default) to keep blocks on Mon–Fri. False only when the user explicitly invites ' +
-          'weekend time, e.g. "including the weekend" or "on Saturday".',
+          'True to keep blocks on Mon–Fri. For work categories true is the default, false only when the ' +
+          'user invites weekend time ("including the weekend", "on Saturday"). For category personal ' +
+          'the default is false.',
+      },
+      whenFrom: {
+        type: 'string',
+        enum: ['user', 'conversation', 'guessed'],
+        description:
+          'Where the day or date range came from. "user": their latest message names it ("today", ' +
+          '"tomorrow evening", "this week", "before Friday"). "conversation": they said it earlier in ' +
+          'this conversation or answered your question about it. "guessed": they did not say — ' +
+          '"when can I do it?" is asking you, not telling you. Be honest: guessed makes the app ask ' +
+          'them instead of placing anything.',
+      },
+      durationFrom: {
+        type: 'string',
+        enum: ['user', 'conversation', 'guessed'],
+        description:
+          'Where durationMin came from, same meanings as whenFrom. "It takes 2 hours" is user. ' +
+          'A length you picked yourself is guessed.',
       },
       reply: {
         type: 'string',
@@ -132,16 +156,19 @@ export const PROPOSE_TOOL: ToolDef = {
           'Only when revisesPrevious is true: what you got wrong the first time, in the user\'s terms.',
       },
     },
-    required: ['title', 'category', 'durationMin', 'count', 'earliestISO', 'latestISO', 'oneBlockPerDay', 'weekdaysOnly', 'reply'],
+    required: [
+      'title', 'category', 'durationMin', 'count', 'earliestISO', 'latestISO',
+      'oneBlockPerDay', 'weekdaysOnly', 'whenFrom', 'durationFrom', 'reply',
+    ],
   },
 };
 
 export const ASK_TOOL: ToolDef = {
   name: TOOL_ASK,
   description:
-    'Ask ONE short clarifying question, but only when the request is genuinely ambiguous in a way ' +
-    'that would change where the blocks go (e.g. no duration and no way to infer one). If a sensible ' +
-    'default exists, use propose_blocks instead and say what you assumed — do not interrogate the user.',
+    'Ask ONE short question when you are missing something you need before placing time: roughly ' +
+    'when (a day or range) or how long. Never ask about something they already told you, and ask ' +
+    'about one thing at a time — when first, then how long.',
   input_schema: {
     type: 'object',
     additionalProperties: false,
@@ -286,8 +313,12 @@ export function buildSystemPrompt(opts: {
       'till the 22nd" is time away even though it never says "vacation" or "block".',
     '- Never invent slots for work you place. Give bounds; the scheduler picks the times. Times the user ' +
       'stated themselves, like when they are away, are not invented — pass them through.',
-    '- Prefer acting on a sensible default over asking. Ask at most one question, and only when ' +
-      'the answer would actually change where a block goes.',
+    '- Before placing time you need two things from the user: roughly WHEN (a day or range — "today", ' +
+      '"tomorrow evening", "this week", "before Friday") and HOW LONG. If either is missing from the ' +
+      'conversation, ask with ask_clarification instead of guessing. "When can I do it?" is them asking ' +
+      'you, not telling you. Ask one thing per turn and never re-ask what they already said.',
+    '- Once you have both, place it without further questions. A time of day they did not give is ' +
+      'fine to leave to the scheduler.',
     '- When the user pushes back ("too early", "not Tuesday", "make it shorter"), re-propose with ' +
       'adjusted bounds rather than defending your previous answer.',
     '- Keep replies short and first person. Never list the times in your reply text; the UI renders them.',

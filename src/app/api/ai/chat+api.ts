@@ -33,6 +33,7 @@ import { buildScoreContext, rankFreeSlots, selectSlots, type RankedSlot } from '
 import { SCORER_VERSION, slotNotes } from '@/server/ai/scoring';
 import { describeClaim } from '@/server/ai/learn';
 import { adjustDuration, effectiveBuffer, type AgentProfile } from '@/server/ai/preferences';
+import { dayWindowFor, durationOptions, missingInfo, questionFor, whenOptions } from '@/server/ai/clarify';
 import {
   appendMessage,
   createSession,
@@ -72,22 +73,6 @@ const WEEKDAY_CODES = new Set(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])
 
 const iso = (d: Date) => d.toISOString().replace(/\.\d{3}Z$/, '.000Z');
 const laterOf = (a: string, b: string) => (Date.parse(a) > Date.parse(b) ? a : b);
-
-/**
- * The day window to search when the model didn't name one — taken from the
- * user's own working hours rather than a hardcoded 9–18, so a user who told the
- * agent they start at 11 doesn't get 9am proposals forever.
- */
-function defaultDayWindow(profile: AgentProfile): { start: number; end: number } {
-  const days = Object.values(profile.workHours).filter(
-    (d): d is { start: number; end: number } => Boolean(d),
-  );
-  if (!days.length) return { start: 9, end: 18 };
-  return {
-    start: Math.min(...days.map((d) => d.start)),
-    end: Math.max(...days.map((d) => d.end)),
-  };
-}
 
 /** The structured preference card shown to the model — never any event text. */
 function preferenceCard(profile: AgentProfile): { learned: string[]; rules: string[] } {
@@ -248,6 +233,14 @@ export async function POST(request: Request): Promise<Response> {
 
   const args = choice.args;
 
+  /**
+   * The clarification policy. A proposal whose day or length the model had to
+   * guess is not placed — it becomes a question (src/server/ai/clarify.ts).
+   * Decided here, before the turn is logged, so the log records what the user
+   * actually saw rather than what the model first reached for.
+   */
+  const missing = choice.name === TOOL_PROPOSE ? missingInfo(args) : null;
+
   const ACTION_BY_TOOL: Record<string, 'propose' | 'ask' | 'record_rule' | 'time_off' | 'answer'> = {
     [TOOL_PROPOSE]: 'propose',
     [TOOL_ASK]: 'ask',
@@ -260,7 +253,7 @@ export async function POST(request: Request): Promise<Response> {
   const turnId = await recordTurn({
     userId,
     sessionId,
-    action: ACTION_BY_TOOL[choice.name] ?? 'answer',
+    action: missing ? 'ask' : ACTION_BY_TOOL[choice.name] ?? 'answer',
     modelId: choice.model,
     promptVersion: PROMPT_VERSION,
     scorerVersion: SCORER_VERSION,
@@ -277,7 +270,24 @@ export async function POST(request: Request): Promise<Response> {
   let timeOff: ChatMessage['timeOff'];
   let kind = 'text';
 
-  if (choice.name === TOOL_PROPOSE) {
+  if (choice.name === TOOL_PROPOSE && missing) {
+    kind = 'question';
+    const category = asString(args.category, 'deep-work');
+    const title = asString(args.title, '');
+    const options =
+      missing === 'duration'
+        ? durationOptions(category)
+        : whenOptions({
+            busy,
+            profile,
+            category,
+            durationMin: clampInt(args.durationMin, 15, 480, 60),
+            nowMs: now.getTime(),
+            horizonMs: Date.parse(horizonISO),
+          });
+    question = { text: questionFor(missing, title, options.length > 0), options };
+    reply = question.text;
+  } else if (choice.name === TOOL_PROPOSE) {
     kind = 'plan';
     const category = asString(args.category, 'deep-work');
     const title = asString(args.title, 'Focus block');
@@ -288,7 +298,10 @@ export async function POST(request: Request): Promise<Response> {
     const askedMin = clampInt(args.durationMin, 15, 480, 60);
     const durationMin = adjustDuration(profile, category, askedMin);
 
-    const win = defaultDayWindow(profile);
+    const win = dayWindowFor(profile, category);
+    // Personal time lives in evenings and weekends; work stays on weekdays
+    // unless the user invited the weekend.
+    const skipWeekends = category === 'personal' ? args.weekdaysOnly === true : args.weekdaysOnly !== false;
     const earliestISO = laterOf(
       typeof args.earliestISO === 'string' && Number.isFinite(Date.parse(args.earliestISO))
         ? args.earliestISO
@@ -310,7 +323,7 @@ export async function POST(request: Request): Promise<Response> {
       dayStartHour: clampInt(args.dayStartHour, 0, 23, win.start),
       dayEndHour: clampInt(args.dayEndHour, 1, 24, win.end),
       bufferMin: effectiveBuffer(profile),
-      skipWeekends: args.weekdaysOnly !== false,
+      skipWeekends,
       category,
     }, profile);
 
@@ -385,7 +398,7 @@ export async function POST(request: Request): Promise<Response> {
         dayStartHour: clampInt(args.dayStartHour, 0, 23, win.start),
         dayEndHour: clampInt(args.dayEndHour, 1, 24, win.end),
         bufferMin: effectiveBuffer(profile),
-        skipWeekends: args.weekdaysOnly !== false,
+        skipWeekends,
         category,
       });
       const notesFor = (r: RankedSlot) =>
