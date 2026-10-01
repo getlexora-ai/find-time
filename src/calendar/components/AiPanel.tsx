@@ -464,7 +464,7 @@ function Rich({ text }: { text: string }) {
 }
 
 /** A one-line, centred note that something happened ("Rule saved"). */
-function Status({ icon, children }: { icon: 'check' | 'stars' | 'calendar-mark'; children: React.ReactNode }) {
+function Status({ icon, children }: { icon: 'check' | 'stars' | 'calendar-mark' | 'trash'; children: React.ReactNode }) {
   return (
     <View style={styles.status}>
       <Icon name={icon} size={14} color={BREAK_COLOR} />
@@ -526,6 +526,10 @@ function MessageRow({
           <Status icon="calendar-mark">
             {`${message.timeOff.title} blocked · ${fmtAway(message.timeOff.startISO, message.timeOff.endISO)}`}
           </Status>
+        )}
+
+        {message.deleted && message.deleted.count > 0 && (
+          <Status icon="trash">{`${message.deleted.count} block${message.deleted.count === 1 ? '' : 's'} deleted`}</Status>
         )}
 
         {message.text.length > 0 && <Rich text={message.text} />}

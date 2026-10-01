@@ -14,6 +14,7 @@ import {
   TOOL_PLACE_AT,
   TOOL_PROPOSE,
   TOOL_RULE,
+  TOOL_DELETE,
   TOOL_TIME_OFF,
   asString,
   clampInt,
@@ -49,6 +50,7 @@ import { isConfigured } from '@/server/db';
 import { enforceRateLimit } from '@/server/rate-limit';
 import { checkTimeOff, splitByDay } from '@/server/ai/time-off';
 import { createEvent, deleteEvent, listEvents } from '@/server/events-repo';
+import { IMPORTED_ORIGIN } from '@/lib/synced-fields';
 
 /**
  * POST /api/ai/chat — one turn of a conversation with the scheduling agent.
@@ -303,7 +305,13 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
   const turnId = await recordTurn({
     userId,
     sessionId,
-    action: missing || ampm ? 'ask' : ACTION_BY_TOOL[choice.name] ?? 'answer',
+    // Deleting has no action of its own in ai_turns' CHECK: the list is a question, the yes an answer.
+    action:
+      missing || ampm
+        ? 'ask'
+        : choice.name === TOOL_DELETE
+          ? args.confirm === true ? 'answer' : 'ask'
+          : ACTION_BY_TOOL[choice.name] ?? 'answer',
     modelId: PARSER_ID,
     promptVersion: PARSER_VERSION,
     scorerVersion: SCORER_VERSION,
@@ -316,6 +324,9 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
   let question: ChatMessage['question'];
   let savedRule: ChatMessage['savedRule'];
   let timeOff: ChatMessage['timeOff'];
+  let deleted: ChatMessage['deleted'];
+  /** the blocks a delete question listed — kept server-side, deleted only on a yes */
+  let pendingDeleteIds: string[] | undefined;
   let kind = 'text';
 
   if (choice.name === TOOL_PROPOSE && missing) {
@@ -637,6 +648,59 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
         reply = "I couldn't block that time just now, so nothing was added. Try telling me again in a moment.";
       }
     }
+  } else if (choice.name === TOOL_DELETE && args.confirm === true) {
+    // The ids come from this conversation's own stored draft, never from the
+    // client, and deleteEvent is scoped to the user.
+    const ids = Array.isArray(args.ids) ? args.ids.filter((x): x is string => typeof x === 'string') : [];
+    let n = 0;
+    for (const id of ids) if (await deleteEvent(userId, id).catch(() => false)) n++;
+    deleted = { count: n };
+    step({ tool: TOOL_DELETE, label: 'Deleted blocks', detail: `${n} of ${ids.length}` });
+    const s = n === 1 ? '' : 's';
+    reply =
+      n === ids.length
+        ? `Deleted ${n} block${s}.`
+        : n > 0
+          ? `Deleted ${n} of ${ids.length} — the rest were already gone.`
+          : 'Those blocks were already gone, so nothing was deleted.';
+  } else if (choice.name === TOOL_DELETE) {
+    const lo = typeof args.earliestISO === 'string' ? Date.parse(args.earliestISO) : now.getTime();
+    const hi = typeof args.latestISO === 'string' ? Date.parse(args.latestISO) : Date.parse(horizonISO);
+    const match = asString(args.match).toLowerCase();
+    const hits = events.filter(
+      (e) =>
+        Date.parse(e.start) < hi &&
+        Date.parse(e.end) > Math.max(lo, now.getTime()) &&
+        (!match || e.title.toLowerCase().includes(match)),
+    );
+    // Google's events come back on the next sync, so only Find Time's own blocks are offered.
+    const own = hits.filter((e) => e.origin !== IMPORTED_ORIGIN);
+    const fromGoogle = hits.length - own.length;
+    const what = match ? `"${match}"` : 'blocks';
+    const googleNote = fromGoogle
+      ? ` ${fromGoogle} more ${fromGoogle === 1 ? 'is' : 'are'} from Google Calendar — delete ${fromGoogle === 1 ? 'it' : 'them'} there, or the next sync brings ${fromGoogle === 1 ? 'it' : 'them'} back.`
+      : '';
+    step({ tool: TOOL_DELETE, label: 'Found matching blocks', detail: `${own.length} yours · ${fromGoogle} from Google` });
+    if (own.length === 0) {
+      reply = fromGoogle ? `Nothing of Find Time's to delete for ${what}.${googleNote}` : `I couldn't find any ${what} to delete in that time.`;
+    } else {
+      const when = (iso: string) => {
+        const d = new Date(iso);
+        return `${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()]} ${d.getUTCDate()} ${iso.slice(11, 16)}`;
+      };
+      const list = own
+        .slice(0, 6)
+        .map((e) => `${e.title} (${when(e.start)}${e.rrule ? ', repeating' : ''})`)
+        .join(', ');
+      const more = own.length > 6 ? ` and ${own.length - 6} more` : '';
+      kind = 'question';
+      question = {
+        text: `Delete ${own.length} block${own.length === 1 ? '' : 's'}: ${list}${more}?${googleNote}`,
+        options: ['Delete them', 'Keep them'],
+      };
+      reply = question.text;
+      pendingDeleteIds = own.map((e) => e.id);
+    }
   } else if (choice.name === TOOL_ANSWER) {
     reply = reply || "I'm not sure how to help with that one.";
   }
@@ -646,12 +710,14 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
   if (question) extras.question = question;
   if (savedRule) extras.savedRule = savedRule;
   if (timeOff) extras.timeOff = timeOff;
+  if (deleted) extras.deleted = deleted;
   extras.trace = trace;
 
   // Stored with the reply, never sent: what the next turn continues from.
   const draft: Draft | null = choice.draft && {
     ...choice.draft,
     placed: kind === 'plan',
+    ...(pendingDeleteIds ? { deleteIds: pendingDeleteIds } : {}),
     ...(proposals?.length ? { lastStartISO: proposals[0].startISO } : {}),
   };
 

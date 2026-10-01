@@ -59,6 +59,14 @@ export const AGENT_TOOLS: ToolUi[] = [
     color: 'admin',
     shortcut: { label: 'Time off', seed: "I'm away " },
   },
+  {
+    key: 'delete_blocks',
+    label: 'Delete blocks',
+    running: 'Finding the blocks',
+    icon: 'trash',
+    color: 'admin',
+    shortcut: { label: 'Delete', seed: 'Delete ' },
+  },
   { key: 'ask_clarification', label: 'Ask you', running: 'Working out what to ask', icon: 'chat', color: 'admin' },
   { key: 'answer', label: 'Answer', running: 'Writing an answer', icon: 'chat', color: 'sync' },
 

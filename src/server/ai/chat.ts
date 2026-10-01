@@ -42,6 +42,8 @@ export const TOOL_RULE = 'record_rule';
 export const TOOL_ANSWER = 'answer';
 export const TOOL_TIME_OFF = 'block_time_off';
 export const TOOL_PLACE_AT = 'place_at';
+/** Rule-read only (src/server/ai/understand.ts): remove Find Time blocks, always after a yes. */
+export const TOOL_DELETE = 'delete_blocks';
 
 const CATS = [...CATEGORIES];
 

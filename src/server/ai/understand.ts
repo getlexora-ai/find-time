@@ -25,7 +25,7 @@
  * the rest of the app (find-time.ts).
  */
 
-import { TOOL_ANSWER, TOOL_ASK, TOOL_PLACE_AT, TOOL_PROPOSE, TOOL_RULE, TOOL_TIME_OFF } from './chat.ts';
+import { TOOL_ANSWER, TOOL_ASK, TOOL_DELETE, TOOL_PLACE_AT, TOOL_PROPOSE, TOOL_RULE, TOOL_TIME_OFF } from './chat.ts';
 import { durationOptions } from './clarify.ts';
 import { ambiguousTime } from './place-at.ts';
 
@@ -39,7 +39,11 @@ const MIN = 60_000;
 
 /** What the planner has understood so far in a conversation. Stored on the assistant message. */
 export type Draft = {
-  tool: typeof TOOL_PROPOSE | typeof TOOL_PLACE_AT | typeof TOOL_TIME_OFF;
+  tool: typeof TOOL_PROPOSE | typeof TOOL_PLACE_AT | typeof TOOL_TIME_OFF | typeof TOOL_DELETE;
+  /** delete: the title words to match ('' = every block in the range) */
+  match?: string;
+  /** delete: the exact blocks listed in the question, set by the route; a yes deletes these and only these */
+  deleteIds?: string[];
   title?: string;
   category?: string;
   durationMin?: number;
@@ -640,6 +644,53 @@ function readTimeOff(raw: string, nowMs: number): { startISO: string; endISO: st
   return { startISO: at(first.day, first.part), endISO: ymd(first.day) };
 }
 
+/* ───────────────────────── deleting ───────────────────────── */
+
+const DELETE = /^\s*(?:please\s+|can\s+you\s+|could\s+you\s+)?(?:delete|remove|cancel|clear|drop|scrap|get\s+rid\s+of)\b\s*(.*)$/i;
+const CONFIRM_YES = /^\s*(?:delete(?:\s+(?:them|it|all|both))?|yes|yep|yeah|confirm|do\s+it|go\s+ahead|sure)\b[\s.!]*$/i;
+const CONFIRM_NO = /^\s*(?:keep(?:\s+(?:them|it))?|no|nope|don'?t|cancel|stop|never\s*mind)\b/i;
+const ALL_WORDS = new Set(['all', 'everything', 'events', 'event', 'anything', 'whole', 'entire', 'schedule', 'calendar']);
+
+/**
+ * "Delete work", "cancel gym tomorrow", "clear everything on Friday". This only
+ * says what to look for; the route finds the blocks, lists them, and deletes
+ * nothing until the user says yes to that exact list.
+ */
+function readDelete(target: string, prev: Draft | null, nowMs: number, today: number): Understood {
+  const f = readFacets(target, nowMs);
+  const words = titleFrom(f.rest)
+    .toLowerCase()
+    .split(' ')
+    .filter((w) => w && !ALL_WORDS.has(w) && !EDGE.has(w));
+  const match = prev ? prev.match ?? '' : words.join(' ');
+  const from = f.when ? f.when.from : prev?.from ? fromYmd(prev.from) : NaN;
+  const to = f.when ? f.when.to : prev?.to ? fromYmd(prev.to) : NaN;
+  const draft: Draft = {
+    tool: TOOL_DELETE,
+    match,
+    ...(Number.isFinite(from) ? { from: ymd(from), to: ymd(to) } : {}),
+  };
+  // "Clear everything" with no day would be the whole calendar: ask which day.
+  if (!match && !Number.isFinite(from)) {
+    return ask('Which day should I clear?', ['Today', 'Tomorrow'], draft, 'delete · day missing');
+  }
+  const when = Number.isFinite(from)
+    ? to - from === DAY
+      ? dayLabel(from, today)
+      : `${dayLabel(from, today)} – ${dayLabel(to - DAY, today)}`
+    : 'next 3 weeks';
+  return {
+    name: TOOL_DELETE,
+    args: {
+      confirm: false,
+      match,
+      ...(Number.isFinite(from) ? { earliestISO: iso(from), latestISO: iso(to) } : {}),
+    },
+    draft,
+    summary: `delete · ${match ? `"${match}"` : 'everything'} · ${when}`,
+  };
+}
+
 /* ───────────────────────── the turn ───────────────────────── */
 
 const HELP =
@@ -701,6 +752,28 @@ export function understand(text: string, ctx: UnderstandContext): Understood {
   if (GREETING.test(raw)) return answer(HELP, prev);
   if (THANKS.test(raw)) return answer('Glad that works. Tap Add on anything you want to keep.', prev);
   if (/\bwhy\b/.test(low)) return answer(why(ctx.lastProposals, today), prev);
+
+  // Deleting: a yes or no to the list it just showed, or a new "delete …".
+  if (prev?.tool === TOOL_DELETE && prev.deleteIds?.length) {
+    if (CONFIRM_YES.test(raw)) {
+      const n = prev.deleteIds.length;
+      return { name: TOOL_DELETE, args: { confirm: true, ids: prev.deleteIds }, draft: null, summary: `delete ${n} block${n === 1 ? '' : 's'}` };
+    }
+    if (CONFIRM_NO.test(raw)) return answer('Okay — nothing deleted.', null);
+  }
+  const del = DELETE.exec(raw);
+  if (del) {
+    const target = readFacets(del[1], nowMs);
+    // "Cancel that" right after a plan: the blocks were only proposed, never saved.
+    if (prev?.placed && !target.when && !titleFrom(target.rest)) {
+      return answer("Okay — I won't add it. Nothing was saved; the blocks were only proposed.", null);
+    }
+    return readDelete(del[1], null, nowMs, today);
+  }
+  // Answering "which day should I clear?" — but a new request starts fresh.
+  if (prev?.tool === TOOL_DELETE && !prev.deleteIds?.length && !titleFrom(readFacets(raw, nowMs).rest)) {
+    return readDelete(raw, prev, nowMs, today);
+  }
 
   // Answering "which dates are you away?"
   if (prev?.tool === TOOL_TIME_OFF) {

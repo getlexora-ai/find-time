@@ -148,6 +148,8 @@ export type ChatMessage = {
   /** present when the turn blocked out time away (vacation, travel, a day off).
    *  Wall-clock span as the user said it; `days` is how many calendar blocks it made. */
   timeOff?: { title: string; startISO: string; endISO: string; days: number };
+  /** present when the turn deleted blocks, after the user said yes to the list */
+  deleted?: { count: number };
   /** the user has reported this reply (POST /api/ai/report) */
   reported?: boolean;
   /** what the agent actually did for this turn, in order — never invented client-side */

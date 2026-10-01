@@ -200,8 +200,8 @@ export async function sendMessage(text: string, onEvent?: (e: TurnEvent) => void
   if (!data.message) {
     throw new AgentError(data.error ?? 'Find time hit a snag. Try again.');
   }
-  // Time off is written server-side, so the calendar has not seen it yet.
-  if (data.message.timeOff) void refresh();
+  // Time off and deletions are written server-side, so the calendar has not seen them yet.
+  if (data.message.timeOff || data.message.deleted) void refresh();
   return data.message;
 }
 

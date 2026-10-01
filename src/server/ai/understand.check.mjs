@@ -149,6 +149,28 @@ r = talk("I'm on vacation", 'the 12th to the 16th');
 assert.deepEqual([r.name, r.args.startISO, r.args.endISO, r.args.title], ['block_time_off', '2026-10-12', '2026-10-16', 'Vacation']);
 assert.equal(say('kick-off meeting tomorrow 1h').name, 'propose_blocks', 'kick-off is not time off');
 
+// ── deleting: always a list first, then a yes ──
+r = say('delete work');
+assert.deepEqual([r.name, r.args.confirm, r.args.match, r.args.earliestISO], ['delete_blocks', false, 'work', undefined]);
+r = say('cancel gym tomorrow');
+assert.deepEqual([r.args.match, r.args.earliestISO, r.args.latestISO], ['gym', '2026-10-02T00:00:00.000Z', '2026-10-03T00:00:00.000Z']);
+r = say('clear everything on Friday');
+assert.deepEqual([r.name, r.args.match, r.args.earliestISO], ['delete_blocks', '', '2026-10-02T00:00:00.000Z']);
+r = say('remove all my events');
+assert.equal(r.name, 'ask_clarification', 'clearing everything needs a day');
+r = talk('remove all my events', 'Tomorrow');
+assert.deepEqual([r.name, r.args.match, r.args.earliestISO], ['delete_blocks', '', '2026-10-02T00:00:00.000Z']);
+const listed = { tool: 'delete_blocks', match: 'work', deleteIds: ['evt_1', 'evt_2'] };
+r = say('Delete them', listed);
+assert.deepEqual([r.name, r.args.confirm, r.args.ids], ['delete_blocks', true, ['evt_1', 'evt_2']]);
+assert.equal(say('yes', listed).args.confirm, true);
+r = say('Keep them', listed);
+assert.deepEqual([r.name, r.draft], ['answer', null]);
+assert.notEqual(say('gym tomorrow 1h', listed).name, 'delete_blocks', 'a new request is not a yes');
+r = say('cancel that', { tool: 'propose_blocks', title: 'X', placed: true });
+assert.equal(r.name, 'answer', 'cancelling a proposal deletes nothing');
+assert.equal(say('keep Friday clear').name, 'block_time_off', '"clear" mid-sentence is not a delete');
+
 // ── answers ──
 assert.equal(say('hi').name, 'answer');
 assert.equal(say("what's on my calendar tomorrow?").name, 'answer');
