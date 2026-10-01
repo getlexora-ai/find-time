@@ -368,30 +368,35 @@ separate event).
 - **Targets**: weekly planned-hours target and focus goal come from settings;
   the defaults (40 h, 14 h) apply until you set them.
 
-## 12. Colour (decided 2026-10-01: "add some nice colours")
+## 12. Colour (decided 2026-10-01)
 
-The structure stays Nexus: white surfaces, hairlines, ink type, three shadows.
-Colour now carries **category**, and kind still carries **shape**. Each category
-has three tones in `tokens.ts` `CATS`: `tint` (fill), `line` (edges, marks),
-`ink` (text on the tint, AA). Orange stays reserved for proposals and now. Never
-a fill.
+User: "the color needs to be solids and can replace the black or grey calendar
+tiles." So the tiles that were black (focus) or grey (routine, break) become
+**solid category colours with white text**. The white tiles stay as they are:
+events (white + `sm` shadow), tasks (white, hairline) and proposals (white,
+dashed orange). The solid blocks pop against the white ones, and kind still
+reads from the shape.
 
-| Category | tint | line | ink | solid (focus) |
-|---|---|---|---|---|
-| Deep work | #EAF1FF | #3B82F6 | #1E3A8A | #2563EB |
-| Meetings | #EFEEFF | #6366F1 | #312E81 | #4F46E5 |
-| Design | #FCEEF5 | #DB2777 | #831843 | #BE185D |
-| Research | #E7F6F3 | #0D9488 | #134E4A | #0F766E |
-| Admin | #FEF6DC | #CA8A04 | #713F12 | #A16207 |
+One solid per category in `tokens.ts` `CATS[k].color`. Every one carries white
+text at AA (≥ 4.5:1). Orange is still reserved for proposals and the now-line,
+never a fill.
+
+| Category | solid | white text contrast |
+|---|---|---|
+| Deep work | #2563EB blue | 5.2 |
+| Meetings | #7C3AED violet | 5.7 |
+| Design | #BE185D rose | 6.0 |
+| Research | #0F766E teal | 5.5 |
+| Admin | #A16207 mustard | 4.9 |
 
 How kinds use it:
-- focus: solid category colour, white text.
-- event: the category tint, `sm` shadow, ink text.
-- task: white, the category line as the checkbox and hairline.
-- routine: the tint with the hatch.
-- break: neutral grey hatch, no colour (recovery is not a category).
-- proposal: white, dashed orange.
+- focus: the solid, white text, lock glyph.
+- routine: the solid with a white 45° hatch on top (still "repeats, backdrop").
+- break: the solid at 75%, with the hatch (quieter than routine).
+- event, task, proposal: unchanged, white. A small square in the category
+  colour sits before the meta line, so the category is still visible.
+- declined events and past blocks: past keeps its colour at 55% opacity;
+  declined goes grey.
 
-Declined events lose their colour (grey). The KPI planned bar, the legend and the
-week's mini-month dots use the same category colours. The Google calendar
-square stays the calendar's own colour.
+The KPI planned bar, the legend and the mini-month dots use the same solids.
+The Google calendar square stays the calendar's own colour.
