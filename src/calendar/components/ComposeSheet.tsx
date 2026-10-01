@@ -4,15 +4,15 @@ import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react
 import { IMPORTED_LOCKED_MESSAGE } from '@/lib/synced-fields';
 
 import { allEvents, createEventAsync, deleteEvent, SAVE_FAILED, updateEvent } from '../cal-store';
-import { fromIso, fromMin, iso, MO, pad, toMin, today, WD, wdIndex } from '../cal-date';
+import { addDays, fromIso, fromMin, iso, MO, pad, toMin, today, WD, wdIndex } from '../cal-date';
 import { getHours, workFor } from '../hours';
 import { Icon } from '../Icon';
 import { KINDS, PICKABLE } from '../kinds';
 import { sliceOn } from '../layout';
 import type { ComposePreset } from '../state';
 import { CATS, CAT_KEYS, type CatKey, durLabel, MONO, N, R, SANS, SHADOW, SNAP, T } from '../tokens';
-import type { EventKind } from '../types';
-import { Button, Label, Mono, Press, Txt } from '../ui';
+import type { CalEvent, EventKind } from '../types';
+import { Button, Label, Mono, NEXUS_SURFACE, Press, Txt } from '../ui';
 import { useResponsive } from '../useResponsive';
 
 const DURATIONS = [15, 30, 45, 60, 90, 120, 180];
@@ -26,6 +26,17 @@ export const DEFAULT_CAT: Record<EventKind, CatKey> = {
   break: 'admin',
   ai: 'deep',
 };
+
+/**
+ * Length of a timed block in minutes, across midnight when it ends on a later
+ * day. `end − start` alone made a 21:00 → 01:00 block −1200 min, which the
+ * sheet then floored to 15: editing it would have cut it to a quarter hour.
+ */
+export function spanMin(ev: Pick<CalEvent, 'date' | 'start' | 'end' | 'endDate' | 'allDay'>): number {
+  const days =
+    ev.endDate && !ev.allDay ? Math.round((fromIso(ev.endDate).getTime() - fromIso(ev.date).getTime()) / 86_400_000) : 0;
+  return days * 1440 + toMin(ev.end) - toMin(ev.start);
+}
 
 const isDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(fromIso(s).getTime());
 const isTime = (s: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(s);
@@ -80,7 +91,7 @@ export function ComposeSheet({
   const hours = getHours();
 
   const initialDur = editing
-    ? toMin(editing.end) - toMin(editing.start)
+    ? spanMin(editing)
     : preset?.end
       ? toMin(preset.end) - toMin(defaultStart)
       : 60;
@@ -108,7 +119,9 @@ export function ComposeSheet({
     if (editing?.imported) return toast(IMPORTED_LOCKED_MESSAGE);
     if (!isDate(date)) return setError('Date must look like 2026-10-05.');
     if (!find && !isTime(start)) return setError('Start must look like 09:30 (24-hour).');
-    if (!find && s + dur > 24 * 60) return setError('That runs past midnight — make it shorter or start earlier.');
+    // A repeat is drawn as a same-day block on each of its days.
+    if (!find && kind === 'routine' && s + dur >= 24 * 60)
+      return setError('A routine has to end before midnight — make it shorter or start earlier.');
     if (outside && !confirmOutside) {
       setConfirmOutside(true);
       return setError(null);
@@ -121,8 +134,12 @@ export function ComposeSheet({
       if (m == null) return setError(`No free ${durLabel(dur)} in working hours that day. Pick another day or a time.`);
       at = fromMin(m);
     }
-    const end = fromMin(toMin(at) + dur);
-    const fields = { title: t, date, start: at, end, cat, kind, project: project.trim(), notes: notes.trim() };
+    // Past midnight is allowed (a release night, a late flight): it ends on the
+    // next day, and the grid draws it on both.
+    const endAbs = toMin(at) + dur;
+    const end = fromMin(endAbs % 1440);
+    const endDate = endAbs >= 1440 ? iso(addDays(fromIso(date), 1)) : undefined;
+    const fields = { title: t, date, start: at, end, endDate, cat, kind, project: project.trim(), notes: notes.trim() };
     const when = `${WD[wdIndex(fromIso(date))]} ${at}`;
 
     if (editing) {
@@ -144,6 +161,7 @@ export function ComposeSheet({
         onPress={onClose}
         style={[styles.backdrop, isPhone ? styles.backdropSheet : styles.backdropCenter]}>
         <Pressable
+          {...NEXUS_SURFACE}
           onPress={(e) => e.stopPropagation()}
           style={[styles.panel, SHADOW.lg, isPhone ? styles.panelSheet : styles.panelModal]}>
           <ScrollView contentContainerStyle={styles.pad} keyboardShouldPersistTaps="handled">
@@ -152,7 +170,9 @@ export function ComposeSheet({
                 <Label>{editing ? 'Edit block' : 'New block'}</Label>
                 <Txt style={styles.title}>
                   {d ? `${WD[wdIndex(d)]} ${d.getDate()} ${MO[d.getMonth()].slice(0, 3)}` : 'Pick a date'}
-                  {!find && isTime(start) ? ` · ${start}–${fromMin(Math.min(1440, toMin(start) + dur))}` : ''}
+                  {!find && isTime(start)
+                    ? ` · ${start}–${fromMin((toMin(start) + dur) % 1440)}${toMin(start) + dur >= 1440 ? ' next day' : ''}`
+                    : ''}
                 </Txt>
               </View>
               <Button variant="ghost" onPress={onClose} accessibilityLabel="Close" icon={<Icon name="close" size={18} color={N.muted} />} />

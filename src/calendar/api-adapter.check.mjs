@@ -87,6 +87,19 @@ const newDay = toEventPatch(cal, { date: '2026-09-10' });
 assert.equal(newDay.start, '2026-09-10T11:00:00.000Z');
 assert.equal(newDay.end, '2026-09-10T12:30:00.000Z');
 
+// an overnight block ends on its end day, both ways — `end` alone would put
+// 01:00 before 21:00 on the start day
+const night = toCalEvent({ ...api, start: '2026-10-02T21:00:00.000Z', end: '2026-10-03T01:00:00.000Z' });
+assert.equal(night.endDate, '2026-10-03');
+assert.equal(toEventInput(night).end, '2026-10-03T01:00:00.000Z');
+assert.equal(toEventPatch(night, { title: 'x', start: '20:00' }).end, '2026-10-03T01:00:00.000Z');
+// edited to end the same day: endDate cleared, and that alone sends the times
+const sameDay = toEventPatch(night, { end: '23:00', endDate: undefined });
+assert.equal(sameDay.end, '2026-10-02T23:00:00.000Z');
+// a multi-day all-day event keeps its exclusive end date
+const offsite = toCalEvent({ ...api, allDay: true, start: '2026-09-30T00:00:00.000Z', end: '2026-10-02T00:00:00.000Z' });
+assert.equal(toEventInput(offsite).end, '2026-10-02T00:00:00.000Z');
+
 // untouched fields are not sent
 assert.deepEqual(Object.keys(toEventPatch(cal, { title: 'x' })), ['title']);
 

@@ -114,7 +114,8 @@ export function toEventInput(c: Partial<CalEvent>): Partial<EventInput> {
   const out: Partial<EventInput> = {};
   if (c.title !== undefined) out.title = c.title;
   if (c.date !== undefined && c.start !== undefined) out.start = partsToIso(c.date, c.start);
-  if (c.date !== undefined && c.end !== undefined) out.end = partsToIso(c.date, c.end);
+  // An overnight block ends on the next day; `end` alone would put it before its start.
+  if (c.date !== undefined && c.end !== undefined) out.end = partsToIso(c.endDate ?? c.date, c.end);
   if (c.cat !== undefined) out.category = CAT_TO_CATEGORY[c.cat];
   if (c.notes !== undefined) out.notes = c.notes || null;
   if (c.project !== undefined) out.projectLabel = c.project || null;
@@ -156,9 +157,9 @@ export function toEventPatch(current: CalEvent, patch: Partial<CalEvent>): Parti
   const out: Partial<EventInput> = {};
 
   if (patch.title !== undefined) out.title = patch.title;
-  if (patch.date !== undefined || patch.start !== undefined || patch.end !== undefined) {
+  if (patch.date !== undefined || patch.start !== undefined || patch.end !== undefined || 'endDate' in patch) {
     out.start = partsToIso(merged.date, merged.start);
-    out.end = partsToIso(merged.date, merged.end);
+    out.end = partsToIso(merged.endDate ?? merged.date, merged.end);
   }
   if (patch.cat !== undefined) out.category = CAT_TO_CATEGORY[patch.cat];
   if (patch.notes !== undefined) out.notes = patch.notes || null;

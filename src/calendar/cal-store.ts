@@ -164,6 +164,8 @@ export type NewEvent = {
   notes?: string;
   kind?: CalEvent['kind'];
   rrule?: string;
+  /** set only when the block runs past midnight (see CalEvent.endDate) */
+  endDate?: string;
 };
 
 function optimistic(input: NewEvent): CalEvent {

@@ -2,14 +2,14 @@ import { StyleSheet, View } from 'react-native';
 
 import { useAccounts } from '../account-store';
 import { acceptEvent, deleteEvent, SAVE_FAILED, setKind } from '../cal-store';
-import { fromIso, MO, toMin, wdIndex, WD_LONG } from '../cal-date';
+import { fromIso, MO, wdIndex, WD_LONG } from '../cal-date';
 import { Icon, type IconName } from '../Icon';
 import { KINDS, paint, PICKABLE } from '../kinds';
 import type { CalActions, PointAnchor } from '../state';
 import { CATS, durLabel, N, R, SANS, T } from '../tokens';
 import type { CalEvent } from '../types';
 import { Button, CalSwatch, Label, Mono, Txt } from '../ui';
-import { Chip } from './ComposeSheet';
+import { Chip, spanMin } from './ComposeSheet';
 import { Popover } from './Popover';
 import { useToast } from './Toast';
 
@@ -51,7 +51,7 @@ export function EventDetail({
     ? accounts.flatMap((a) => a.calendars).find((c) => c.id === ev.calendarId)
     : undefined;
 
-  const dur = ev.endDate && !ev.allDay ? 1440 - toMin(ev.start) + toMin(ev.end) : toMin(ev.end) - toMin(ev.start);
+  const dur = spanMin(ev);
   const when = ev.allDay
     ? `${WD_LONG[wdIndex(date)]} ${date.getDate()} ${MO[date.getMonth()].slice(0, 3)} · all day`
     : `${WD_LONG[wdIndex(date)]} ${date.getDate()} ${MO[date.getMonth()].slice(0, 3)} · ${ev.start}–${ev.end}${ev.endDate ? ' next day' : ''} · ${durLabel(dur)}`;
