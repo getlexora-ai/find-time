@@ -28,14 +28,12 @@ export function MiniMonth({
   weekOf?: Date;
 }) {
   // Follows the grid: stepping into October turns this page to October too.
-  const [shown, setShown] = useState<{ key: string; cursor: Date }>(() => ({
-    key: `${selected.getFullYear()}-${selected.getMonth()}`,
-    cursor: selected,
-  }));
-  const selKey = `${selected.getFullYear()}-${selected.getMonth()}`;
-  const cursor = shown.key === selKey || shown.key.startsWith('manual') ? shown.cursor : selected;
-  if (shown.key !== selKey && !shown.key.startsWith('manual')) setShown({ key: selKey, cursor: selected });
-  const move = (n: number) => setShown({ key: `manual-${Date.now()}`, cursor: addMonths(cursor, n) });
+  // Paging with ‹ › browses away until the grid moves, then it follows again
+  // (it used to stay on the browsed page for good).
+  const selKey = iso(selected);
+  const [paged, setPaged] = useState<{ from: string; cursor: Date } | null>(null);
+  const cursor = paged && paged.from === selKey ? paged.cursor : selected;
+  const move = (n: number) => setPaged({ from: selKey, cursor: addMonths(cursor, n) });
 
   const cells = monthCells(cursor);
   const band = weekOf ? iso(startOfWeek(weekOf)) : null;

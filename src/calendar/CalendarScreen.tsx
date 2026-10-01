@@ -248,10 +248,16 @@ export function CalendarScreen() {
   const resolve =
     clashes.pairs.length > 0
       ? () => {
-          const { a, b } = clashes.pairs[0];
-          // Move whichever of the two can move: not imported, not protected.
-          const movable = [b, a].find((e) => !e.imported && e.kind !== 'focus') ?? b;
-          actions.openCompose(movable.id, undefined, undefined, true);
+          // Move one that can move — not imported, not protected — from the
+          // first clash that has one. It used to take the first clash only and
+          // fall back to its second event, so a Google meeting over a focus
+          // block opened the edit sheet on a read-only Google event.
+          const all = clashes.pairs.flatMap(({ a, b }) => [b, a]);
+          const movable = all.find((e) => !e.imported && e.kind !== 'focus');
+          if (movable) return actions.openCompose(movable.id, undefined, undefined, true);
+          // Nothing the AI may move: show the clash so you can decide.
+          const own = all.find((e) => !e.imported) ?? all[0];
+          actions.openEvent(own.id);
         }
       : undefined;
 
