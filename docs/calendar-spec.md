@@ -392,7 +392,7 @@ never a fill.
 How kinds use it:
 - focus: the solid, white text, lock glyph.
 - routine: the solid with a white 45° hatch on top (still "repeats, backdrop").
-- break: the solid at 75%, with the hatch (quieter than routine).
+- break: its own calm green #047857, no hatch — recovery is not a category.
 - event, task, proposal: unchanged, white. A small square in the category
   colour sits before the meta line, so the category is still visible.
 - declined events and past blocks: past keeps its colour at 55% opacity;
