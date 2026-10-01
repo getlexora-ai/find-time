@@ -6,7 +6,8 @@ import type { TraceStep } from '@/lib/api-types';
 import { useCalEvents } from '../cal-store';
 import { fromMin } from '../cal-date';
 import { useHours } from '../hours';
-import { Icon, type IconName } from '../Icon';
+import { useAgentTools } from '../agent-store';
+import { Icon, type IconName, SOLAR_ID } from '../Icon';
 import { paint } from '../kinds';
 import { slicesIn } from '../kpi';
 import { BREAK_COLOR, CATS, N, R, SANS, tint } from '../tokens';
@@ -15,9 +16,11 @@ import { Press, Txt } from '../ui';
 /**
  * The moving parts of Plan with AI (quiet calendar, 2026-10-01).
  *
- * Everything here shows real work. `Working` walks the stages every turn
- * really runs, in the order they run; `Trace` is the server's own record of
- * what it did, with its counts; `DayStrip` is drawn from your events. The
+ * Everything here shows real work, and nothing here knows a tool by name:
+ * icons, colours and labels come from the server's tool registry
+ * (GET /api/ai/tools). `Working` draws the steps the server streams as it runs
+ * them; `Trace` is its record of what it did, with its counts; `DayStrip` is
+ * drawn from your events. The
  * flourish is the category palette in motion, not invented progress.
  */
 
@@ -83,8 +86,7 @@ export function FadeIn({ children, delay = 0 }: { children: React.ReactNode; del
             }),
           },
         ],
-      }}
-    >
+      }}>
       {children}
     </Animated.View>
   );
@@ -92,71 +94,73 @@ export function FadeIn({ children, delay = 0 }: { children: React.ReactNode; del
 
 /* ───────────────────────── steps ───────────────────────── */
 
-const STEP: Record<TraceStep['tool'], { icon: IconName; color: string }> = {
-  read_calendar: { icon: 'calendar', color: CATS.deep.color },
-  apply_rules: { icon: 'shield', color: CATS.research.color },
-  model: { icon: 'magic', color: CATS.sync.color },
-  rank_slots: { icon: 'chart', color: CATS.design.color },
-  check_time: { icon: 'clock', color: CATS.deep.color },
-  save_rule: { icon: 'stars', color: CATS.research.color },
-  block_time: { icon: 'calendar-mark', color: CATS.admin.color },
-  ask: { icon: 'chat', color: CATS.admin.color },
-};
+/** How a tool or step looks: from the server's registry, with a safe fallback for anything unknown. */
+export function useToolLook() {
+  const tools = useAgentTools();
+  return (key: string) => {
+    const t = tools.find((x) => x.key === key);
+    const icon = (t && t.icon in SOLAR_ID ? t.icon : 'magic') as IconName;
+    const color = t && t.color in CATS ? CATS[t.color].color : CATS.deep.color;
+    return { icon, color, ui: t };
+  };
+}
 
-function StepIcon({ tool, size = 26 }: { tool: TraceStep['tool']; size?: number }) {
-  const s = STEP[tool];
+export function StepIcon({ tool, size = 26 }: { tool: string; size?: number }) {
+  const s = useToolLook()(tool);
   return (
     <View
       style={[
         styles.stepIcon,
-        {
-          width: size,
-          height: size,
-          borderRadius: size / 3,
-          backgroundColor: tint(s.color, 0.14),
-        },
-      ]}
-    >
+        { width: size, height: size, borderRadius: size / 3, backgroundColor: tint(s.color, 0.14) },
+      ]}>
       <Icon name={s.icon} size={size * 0.55} color={s.color} />
     </View>
   );
 }
 
-/**
- * Every turn runs these, in this order (src/app/api/ai/chat+api.ts): load the
- * calendar and your rules, then one model call that picks a tool. Which tool,
- * and what it found, only the reply can say — so the last stage just waits.
- */
-const STAGES: { tool: TraceStep['tool']; label: string }[] = [
-  { tool: 'read_calendar', label: 'Reading your calendar' },
-  { tool: 'apply_rules', label: 'Applying your rules' },
-  { tool: 'model', label: 'Working out what you need' },
-];
+/** A turn in flight: the steps the server has finished, and the one it is on. */
+export type Live = { done: TraceStep[]; current: { tool: string; label: string } | null };
 
-/** The live card while a turn runs. */
-export function Working() {
-  const [at, setAt] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setAt((i) => Math.min(i + 1, STAGES.length - 1)), 650);
-    return () => clearInterval(t);
-  }, []);
+/**
+ * The live card while a turn runs. Every row is an event the server sent as it
+ * happened (ChatStreamEvent) — nothing here is on a timer.
+ */
+export function Working({ live }: { live: Live }) {
   return (
     <FadeIn>
       <View style={styles.working}>
         <Shimmer />
         <View style={styles.workingBody}>
-          {STAGES.map((st, i) => {
-            const done = i < at;
-            const now = i === at;
-            return (
-              <View key={st.tool} style={[styles.stepRow, i > at && styles.stepLater]}>
+          {live.done.map((st, i) => (
+            <FadeIn key={`${st.tool}-${i}`}>
+              <View style={styles.stepRow}>
                 <StepIcon tool={st.tool} size={24} />
-                <Txt style={[styles.stepLabel, now && styles.stepLabelNow]}>{st.label}</Txt>
-                <View style={styles.spacer} />
-                {done ? <Icon name="check-bold" size={14} color={BREAK_COLOR} /> : now ? <Dots /> : null}
+                <View style={styles.liveText}>
+                  <Txt style={styles.stepLabel}>{st.label}</Txt>
+                  {!!st.detail && <Txt style={styles.liveDetail}>{st.detail}</Txt>}
+                </View>
+                <Icon name="check-bold" size={14} color={BREAK_COLOR} />
               </View>
-            );
-          })}
+            </FadeIn>
+          ))}
+          {live.current ? (
+            <FadeIn key={`now-${live.current.tool}-${live.done.length}`}>
+              <View style={styles.stepRow}>
+                <StepIcon tool={live.current.tool} size={24} />
+                <Txt style={[styles.stepLabel, styles.stepLabelNow]}>{live.current.label}</Txt>
+                <View style={styles.spacer} />
+                <Dots />
+              </View>
+            </FadeIn>
+          ) : (
+            !live.done.length && (
+              <View style={styles.stepRow}>
+                <Txt style={[styles.stepLabel, styles.stepLabelNow]}>Sending</Txt>
+                <View style={styles.spacer} />
+                <Dots />
+              </View>
+            )
+          )}
         </View>
       </View>
     </FadeIn>
@@ -209,8 +213,7 @@ export function Trace({ steps, open: startOpen = false }: { steps: TraceStep[]; 
         hoverBg={N.hover}
         accessibilityRole="button"
         aria-expanded={open}
-        style={styles.traceHead}
-      >
+        style={styles.traceHead}>
         <View style={styles.stack}>
           {steps.slice(0, 4).map((s, i) => (
             <View key={`${s.tool}-${i}`} style={[styles.stackItem, { marginLeft: i ? -8 : 0, zIndex: 10 - i }]}>
@@ -275,7 +278,8 @@ export function DayStrip({ startISO, endISO }: { startISO: string; endISO: strin
     [day],
   ).filter((sl) => sl.t > lo && sl.s < hi);
   const marks = [];
-  for (let h = Math.ceil(hours.start / 3) * 3; h < hours.end; h += 3) if (h >= hours.start + 2 && h <= hours.end - 2) marks.push(h);
+  for (let h = Math.ceil(hours.start / 3) * 3; h < hours.end; h += 3)
+    if (h >= hours.start + 2 && h <= hours.end - 2) marks.push(h);
 
   return (
     <View style={styles.strip} aria-label={`Your day: ${busy.length} other blocks`}>
@@ -339,9 +343,10 @@ const styles = StyleSheet.create({
   },
   workingBody: { padding: 12, gap: 10 },
   stepRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  stepLater: { opacity: 0.4 },
   stepIcon: { alignItems: 'center', justifyContent: 'center' },
   stepLabel: { fontFamily: SANS, fontSize: 13, lineHeight: 18, color: N.ink2 },
+  liveText: { flex: 1, minWidth: 0, gap: 1 },
+  liveDetail: { fontFamily: SANS, fontSize: 12, lineHeight: 16, color: N.muted, fontVariant: ['tabular-nums'] },
   stepLabelNow: { color: N.ink, fontWeight: '600' },
   dots: { flexDirection: 'row', gap: 3 },
   dot: {

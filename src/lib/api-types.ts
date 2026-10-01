@@ -160,11 +160,44 @@ export type ChatMessage = {
  * real numbers ("18 blocks · next 14 days").
  */
 export type TraceStep = {
-  tool: 'read_calendar' | 'apply_rules' | 'model' | 'rank_slots' | 'check_time' | 'save_rule' | 'block_time' | 'ask';
+  /** a key in the tool registry (GET /api/ai/tools): a pipeline step, or the tool the model called */
+  tool: string;
   label: string;
   detail?: string;
   ms?: number;
 };
+
+/**
+ * How one tool or pipeline step looks in the chat. The server owns this list
+ * (src/lib/agent-tools.ts, served at GET /api/ai/tools) so a new tool brings
+ * its own label, icon, colour and shortcut — the panel draws what it is sent.
+ */
+export type ToolUi = {
+  key: string;
+  /** past tense, for the trace: "Read your calendar" / the tool's name: "Find time" */
+  label: string;
+  /** present tense, while it runs: "Reading your calendar" */
+  running: string;
+  /** an icon name the app ships (src/design/solar-icons.ts); unknown names fall back */
+  icon: string;
+  /** a calendar category colour key */
+  color: 'deep' | 'sync' | 'design' | 'research' | 'admin';
+  /** offered as a composer shortcut: tapping it starts the sentence with `seed` */
+  shortcut?: { label: string; seed: string };
+};
+
+export type ToolsResponse = { tools: ToolUi[] };
+
+/**
+ * POST /api/ai/chat with `Accept: application/x-ndjson`: one event per line as
+ * the turn runs. `start` when a step begins, `step` when it finishes (with its
+ * numbers), then exactly one `message` or `error`.
+ */
+export type ChatStreamEvent =
+  | { type: 'start'; tool: string; label: string }
+  | { type: 'step'; step: TraceStep }
+  | { type: 'message'; sessionId: string; message: ChatMessage }
+  | { type: 'error'; sessionId?: string; error: string };
 
 export type ChatRequest = {
   /** omit to start a new conversation */

@@ -3,8 +3,10 @@ import type {
   ChatMessage,
   ChatProposal,
   ChatResponse,
+  ChatStreamEvent,
   TraceStep,
 } from '@/lib/api-types';
+import { agentTool, STEP } from '@/lib/agent-tools';
 import { requireUserId, unauthorized } from '@/server/auth/clerk';
 import { aiConfigured, chatWithTools, type ChatTurn } from '@/server/ai/gemini';
 import {
@@ -88,16 +90,6 @@ function preferenceCard(profile: AgentProfile): { learned: string[]; rules: stri
   return { learned, rules };
 }
 
-/** How each tool reads in the chat's step list. */
-const MODEL_LABEL: Record<string, string> = {
-  [TOOL_PROPOSE]: 'Chose: find time',
-  [TOOL_PLACE_AT]: 'Chose: place at a time',
-  [TOOL_ASK]: 'Chose: ask you',
-  [TOOL_RULE]: 'Chose: save a rule',
-  [TOOL_TIME_OFF]: 'Chose: block time off',
-  [TOOL_ANSWER]: 'Chose: answer',
-};
-
 export async function GET(request: Request): Promise<Response> {
   if (!isConfigured()) {
     return Response.json({ error: 'Database not configured (DATABASE_URL missing).' }, { status: 503 });
@@ -125,7 +117,54 @@ export async function GET(request: Request): Promise<Response> {
   return Response.json({ sessionId, messages } satisfies ChatHistoryResponse);
 }
 
+type Emit = (e: ChatStreamEvent) => void;
+
+/** The step's own words from the registry, so a renamed tool renames everywhere. */
+const doneLabel = (key: string, fallback: string) => agentTool(key)?.label ?? fallback;
+const runningLabel = (key: string) => agentTool(key)?.running ?? 'Working';
+
+/**
+ * POST /api/ai/chat. With `Accept: application/x-ndjson` the turn streams:
+ * a `start` as each step begins, a `step` with its numbers as it ends, then
+ * the reply (ChatStreamEvent). Without it, one JSON body as before — the
+ * steps still ride on the reply as `trace`.
+ */
 export async function POST(request: Request): Promise<Response> {
+  if (!(request.headers.get('accept') ?? '').includes('application/x-ndjson')) {
+    return handle(request, () => {});
+  }
+  const enc = new TextEncoder();
+  const stream = new TransformStream<Uint8Array, Uint8Array>();
+  const writer = stream.writable.getWriter();
+  const emit: Emit = (e) => void writer.write(enc.encode(`${JSON.stringify(e)}\n`)).catch(() => {});
+  void (async () => {
+    try {
+      // Every exit of the handler is a Response; its body becomes the last line.
+      const res = await handle(request, emit);
+      const body = (await res.json().catch(() => ({}))) as Partial<ChatResponse> & { error?: string };
+      if (res.ok && body.message && body.sessionId) emit({ type: 'message', sessionId: body.sessionId, message: body.message });
+      else emit({ type: 'error', sessionId: body.sessionId, error: body.error ?? 'Find time hit a snag. Try again.' });
+    } catch (err) {
+      console.error('ai/chat stream', err);
+      emit({ type: 'error', error: 'Find time hit a snag. Try again.' });
+    } finally {
+      await writer.close().catch(() => {});
+    }
+  })();
+  return new Response(stream.readable, {
+    headers: { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store' },
+  });
+}
+
+async function handle(request: Request, emit: Emit): Promise<Response> {
+  /** What this turn actually did, step by step — kept on the reply and streamed as it happens. */
+  const trace: TraceStep[] = [];
+  const begin = (key: string) => emit({ type: 'start', tool: key, label: runningLabel(key) });
+  const step = (st: TraceStep) => {
+    trace.push(st);
+    emit({ type: 'step', step: st });
+  };
+
   if (!isConfigured()) {
     return Response.json({ error: 'Database not configured (DATABASE_URL missing).' }, { status: 503 });
   }
@@ -168,6 +207,7 @@ export async function POST(request: Request): Promise<Response> {
   let profile: AgentProfile;
   let history: Awaited<ReturnType<typeof listMessages>>;
   let events: Awaited<ReturnType<typeof listEvents>>;
+  begin(STEP.read);
   try {
     [profile, history, events] = await Promise.all([
       loadProfile(userId),
@@ -188,31 +228,21 @@ export async function POST(request: Request): Promise<Response> {
 
   const card = preferenceCard(profile);
 
-  /**
-   * What this turn actually did, step by step, for the chat to show. Only
-   * real work goes in, with real counts — the panel never makes up progress.
-   */
-  const trace: TraceStep[] = [
-    {
-      tool: 'read_calendar',
-      label: 'Read your calendar',
-      detail: `${events.length} block${events.length === 1 ? '' : 's'} · next ${HORIZON_DAYS} days · ${busy.length} fixed`,
-      ms: loadMs,
-    },
-    {
-      tool: 'apply_rules',
-      label: card.rules.length || card.learned.length ? 'Applied your rules' : 'No rules yet',
-      detail:
-        card.rules.length || card.learned.length
-          ? [
-              card.rules.length && `${card.rules.length} rule${card.rules.length === 1 ? '' : 's'}`,
-              card.learned.length && `${card.learned.length} learned habit${card.learned.length === 1 ? '' : 's'}`,
-            ]
-              .filter(Boolean)
-              .join(' · ')
-          : 'tell me one any time',
-    },
-  ];
+  step({
+    tool: STEP.read,
+    label: doneLabel(STEP.read, 'Read your calendar'),
+    detail: `${events.length} block${events.length === 1 ? '' : 's'} · next ${HORIZON_DAYS} days · ${busy.length} fixed`,
+    ms: loadMs,
+  });
+  const ruleBits = [
+    card.rules.length && `${card.rules.length} rule${card.rules.length === 1 ? '' : 's'}`,
+    card.learned.length && `${card.learned.length} learned habit${card.learned.length === 1 ? '' : 's'}`,
+  ].filter(Boolean);
+  step({
+    tool: STEP.rules,
+    label: ruleBits.length ? doneLabel(STEP.rules, 'Applied your rules') : 'No rules yet',
+    detail: ruleBits.length ? ruleBits.join(' · ') : 'tell me one any time',
+  });
   const system = buildSystemPrompt({
     nowISO,
     learned: card.learned,
@@ -253,6 +283,7 @@ export async function POST(request: Request): Promise<Response> {
   };
 
   let choice: Awaited<ReturnType<typeof chatWithTools>>;
+  begin(STEP.model);
   try {
     choice = await chatWithTools({ system, history: turns, tools: CHAT_TOOLS });
   } catch (err) {
@@ -274,7 +305,8 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const args = choice.args;
-  trace.push({ tool: 'model', label: MODEL_LABEL[choice.name] ?? 'Understood your request', ms: choice.latencyMs });
+  // The row for the model call is the tool it actually called — its icon, its name.
+  step({ tool: choice.name, label: `Chose: ${doneLabel(choice.name, choice.name).toLowerCase()}`, ms: choice.latencyMs });
 
   /**
    * The clarification policy. A proposal whose day or length the model had to
@@ -333,7 +365,7 @@ export async function POST(request: Request): Promise<Response> {
           });
     question = { text: questionFor(missing, title, options.length > 0), options };
     reply = question.text;
-    trace.push({ tool: 'ask', label: missing === 'duration' ? 'Needs a length first' : 'Needs a day first', detail: 'I never guess a time' });
+    step({ tool: STEP.ask, label: missing === 'duration' ? 'Needs a length first' : 'Needs a day first', detail: 'I never guess a time' });
   } else if (choice.name === TOOL_PROPOSE) {
     kind = 'plan';
     const category = asString(args.category, 'deep-work');
@@ -362,6 +394,8 @@ export async function POST(request: Request): Promise<Response> {
     let latestISO = Date.parse(modelLatest) > Date.parse(horizonISO) ? horizonISO : modelLatest;
     if (Date.parse(latestISO) <= Date.parse(earliestISO)) latestISO = horizonISO;
 
+    begin(STEP.rank);
+    const rankT0 = Date.now();
     const ranked = rankFreeSlots(busy, {
       durationMin,
       count,
@@ -392,10 +426,11 @@ export async function POST(request: Request): Promise<Response> {
       strategy: explore ? 'spread' : 'top',
     });
 
-    trace.push({
-      tool: 'rank_slots',
-      label: 'Scored free slots',
+    step({
+      tool: STEP.rank,
+      label: doneLabel(STEP.rank, 'Scored free slots'),
       detail: `${ranked.length} candidate${ranked.length === 1 ? '' : 's'} · ${durationMin} min · picked ${chosen.length}`,
+      ms: Date.now() - rankT0,
     });
 
     if (chosen.length === 0) {
@@ -536,7 +571,7 @@ export async function POST(request: Request): Promise<Response> {
       // occasion. The card and the feedback path are the same as any proposal.
       const clash = clashNote(busy, checked.span);
       const reason = clash ?? "it's the time you asked for";
-      trace.push({ tool: 'check_time', label: 'Checked that time', detail: clash ? 'it overlaps something' : 'it is free' });
+      step({ tool: STEP.check, label: doneLabel(STEP.check, 'Checked that time'), detail: clash ? 'it overlaps something' : 'it is free' });
       try {
         const stored = await saveProposals(userId, sessionId, checked.span, [
           { title, category, ...checked.span, score: 0, features: ZERO_FEATURES, reason, alternatives: [] },
@@ -559,7 +594,7 @@ export async function POST(request: Request): Promise<Response> {
     }
   } else if (choice.name === TOOL_ASK) {
     kind = 'question';
-    trace.push({ tool: 'ask', label: 'Needs one detail', detail: 'asked rather than guessed' });
+    step({ tool: STEP.ask, label: doneLabel(STEP.ask, 'Needs one detail'), detail: 'asked rather than guessed' });
     const opts = Array.isArray(args.options)
       ? args.options.filter((o): o is string => typeof o === 'string').slice(0, 4)
       : [];
@@ -584,7 +619,7 @@ export async function POST(request: Request): Promise<Response> {
       // preferences stay soft.
       const saved = await addRule(userId, { kind: ruleKind, rule, hard: true, label });
       savedRule = { id: saved.id, label: saved.label };
-      trace.push({ tool: 'save_rule', label: 'Saved a rule', detail: saved.label });
+      step({ tool: STEP.saveRule, label: doneLabel(STEP.saveRule, 'Saved a rule'), detail: saved.label });
       reply = reply || `Saved — ${label}`;
     } catch (err) {
       // Never claim to have saved a rule that did not save; the user would go on
@@ -618,7 +653,7 @@ export async function POST(request: Request): Promise<Response> {
           created.push(ev.id);
         }
         timeOff = { title, startISO: checked.span.startISO, endISO: checked.span.endISO, days: created.length };
-        trace.push({ tool: 'block_time', label: 'Blocked the time', detail: `${created.length} day${created.length === 1 ? '' : 's'}` });
+        step({ tool: STEP.block, label: doneLabel(STEP.block, 'Blocked the time'), detail: `${created.length} day${created.length === 1 ? '' : 's'}` });
         reply = reply || `Blocked — ${title}.`;
       } catch (err) {
         console.error('ai/chat timeOff', err);

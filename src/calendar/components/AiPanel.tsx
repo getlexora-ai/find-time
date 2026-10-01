@@ -21,17 +21,19 @@ import {
   acceptAlternative,
   acceptProposal,
   loadHistory,
+  loadTools,
   rejectProposal,
   reportReply,
   resetSession,
   sendMessage,
+  useAgentTools,
 } from '../agent-store';
-import { Icon, type IconName } from '../Icon';
+import { Icon } from '../Icon';
 
 import { BREAK_COLOR, CATS, N, R, SANS, SHADOW, T, tint, TINT } from '../tokens';
 import { NEXUS_SURFACE, Press, Txt } from '../ui';
 import { useResponsive } from '../useResponsive';
-import { DayStrip, FadeIn, Shimmer, Trace, Working } from './AiParts';
+import { DayStrip, FadeIn, type Live, Shimmer, StepIcon, Trace, useToolLook, Working } from './AiParts';
 
 /**
  * Find time — the scheduling agent, as a conversation.
@@ -59,54 +61,15 @@ import { DayStrip, FadeIn, Shimmer, Trace, Working } from './AiParts';
  * like the proposal tile on the grid (dashed accent on white).
  */
 
-const STARTERS: { text: string; icon: IconName; color: string }[] = [
-  {
-    text: 'Make room for 2h of deep work on Thursday',
-    icon: 'magic',
-    color: CATS.deep.color,
-  },
-  {
-    text: 'Find three 45-minute review slots this week',
-    icon: 'chart',
-    color: CATS.design.color,
-  },
-  {
-    text: 'Never book me before 10',
-    icon: 'shield',
-    color: CATS.research.color,
-  },
-  {
-    text: "I'm away Friday afternoon",
-    icon: 'calendar-mark',
-    color: CATS.admin.color,
-  },
-];
-
 /**
- * Shortcuts into the agent's tools. They only start the sentence — the model
- * still reads what you write and picks the tool — so they are labelled as
- * what they help you say, not as switches.
+ * First things to say, each tagged with the tool it will most likely reach —
+ * the icon and colour come from the server's registry, like every other row.
  */
-const TOOLS: { label: string; icon: IconName; color: string; seed: string }[] = [
-  {
-    label: 'Find time',
-    icon: 'magic',
-    color: CATS.deep.color,
-    seed: 'Find time for ',
-  },
-  { label: 'At a time', icon: 'clock', color: CATS.sync.color, seed: 'Put ' },
-  {
-    label: 'Rule',
-    icon: 'shield',
-    color: CATS.research.color,
-    seed: 'Never book me ',
-  },
-  {
-    label: 'Time off',
-    icon: 'calendar-mark',
-    color: CATS.admin.color,
-    seed: "I'm away ",
-  },
+const STARTERS: { text: string; tool: string }[] = [
+  { text: 'Make room for 2h of deep work on Thursday', tool: 'propose_blocks' },
+  { text: 'Put the gym at 18:00 on Friday', tool: 'place_at' },
+  { text: 'Never book me before 10', tool: 'record_rule' },
+  { text: "I'm away Friday afternoon", tool: 'block_time_off' },
 ];
 
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -168,6 +131,17 @@ export function AiPanel({
     setTimeout(() => scroller.current?.scrollToEnd({ animated: true }), 700);
   }, []);
 
+  // How the tools look — from the server's registry, fetched once.
+  const registry = useAgentTools();
+  const look = useToolLook();
+  const shortcuts = registry.filter((t) => t.shortcut);
+  useEffect(() => {
+    void loadTools();
+  }, []);
+
+  /** The turn in flight, as the server streams it. */
+  const [live, setLive] = useState<Live>({ done: [], current: null });
+
   useEffect(() => {
     let live = true;
     void loadHistory().then((history) => {
@@ -200,10 +174,18 @@ export function AiPanel({
       setText('');
       setTool(null);
       setSending(true);
+      setLive({ done: [], current: null });
       toBottom();
 
       try {
-        const reply = await sendMessage(body);
+        const reply = await sendMessage(body, (e) => {
+          setLive((l) =>
+            e.type === 'start'
+              ? { ...l, current: { tool: e.tool, label: e.label } }
+              : { done: [...l.done, e.step], current: l.current?.tool === e.step.tool ? null : l.current },
+          );
+          toBottom();
+        });
         setMessages((m) => [...m, reply]);
       } catch (err) {
         setMessages((m) => [
@@ -299,8 +281,7 @@ export function AiPanel({
       {...NEXUS_SURFACE}
       role="complementary"
       aria-label="Plan with AI"
-      style={[styles.panel, isDesktop ? styles.panelDocked : styles.panelSheet]}
-    >
+      style={[styles.panel, isDesktop ? styles.panelDocked : styles.panelSheet]}>
       {!isDesktop && <View style={styles.grab} />}
       <View style={styles.head}>
         <Icon name="magic" size={16} color={N.ink} />
@@ -325,8 +306,7 @@ export function AiPanel({
         ref={scroller}
         style={styles.thread}
         contentContainerStyle={[styles.threadPad, empty && styles.threadEmpty]}
-        onContentSizeChange={toBottom}
-      >
+        onContentSizeChange={toBottom}>
         {booting && (
           <View style={styles.thinking}>
             <ActivityIndicator size="small" color={N.muted} />
@@ -346,9 +326,7 @@ export function AiPanel({
               {STARTERS.map((st, i) => (
                 <FadeIn key={st.text} delay={120 + i * 60}>
                   <Press onPress={() => void send(st.text)} hoverBg={N.sunken} lift style={styles.starter}>
-                    <View style={[styles.starterIcon, { backgroundColor: tint(st.color, 0.14) }]}>
-                      <Icon name={st.icon} size={15} color={st.color} />
-                    </View>
+                    <StepIcon tool={st.tool} size={28} />
                     <Txt style={styles.starterTxt}>{st.text}</Txt>
                     <Icon name="arrow-right" size={14} color={N.faint} />
                   </Press>
@@ -377,35 +355,30 @@ export function AiPanel({
           />
         ))}
 
-        {sending && <Working />}
+        {sending && <Working live={live} />}
       </ScrollView>
 
       <View style={styles.composer}>
         <View style={[styles.inputBox, SHADOW.sm]}>
           <View style={styles.tools}>
-            {TOOLS.map((t) => {
-              const on = tool === t.label;
+            {shortcuts.map((t) => {
+              const sc = t.shortcut!;
+              const { icon, color } = look(t.key);
+              const on = tool === t.key;
               return (
                 <Press
-                  key={t.label}
+                  key={t.key}
                   onPress={() => {
-                    setTool(t.label);
-                    setText(t.seed);
+                    setTool(t.key);
+                    setText(sc.seed);
                     input.current?.focus();
                   }}
                   hoverBg={on ? undefined : N.sunken}
                   accessibilityRole="button"
-                  aria-label={`Start with: ${t.seed.trim()}`}
-                  style={[
-                    styles.tool,
-                    on && {
-                      backgroundColor: tint(t.color, 0.14),
-                      borderColor: tint(t.color, 0.4),
-                    },
-                  ]}
-                >
-                  <Icon name={t.icon} size={13} color={t.color} />
-                  <Txt style={[styles.toolTxt, on && { color: N.ink }]}>{t.label}</Txt>
+                  aria-label={`Start with: ${sc.seed.trim()}`}
+                  style={[styles.tool, on && { backgroundColor: tint(color, 0.14), borderColor: tint(color, 0.4) }]}>
+                  <Icon name={icon} size={13} color={color} />
+                  <Txt style={[styles.toolTxt, on && { color: N.ink }]}>{sc.label}</Txt>
                 </Press>
               );
             })}
@@ -444,8 +417,7 @@ export function AiPanel({
               disabled={sending || !text.trim()}
               hoverBg={N.inkHover}
               style={[styles.send, (sending || !text.trim()) && styles.sendOff]}
-              aria-label="Send"
-            >
+              aria-label="Send">
               <Icon name="arrow-right-up" size={16} color={sending || !text.trim() ? N.faint : N.onInk} />
             </Press>
           </View>
@@ -599,8 +571,7 @@ function MessageRow({
               onPress={() => onOpenReport(message.id)}
               hoverBg={N.hover}
               style={styles.reportLink}
-              aria-label="Report this reply"
-            >
+              aria-label="Report this reply">
               <Icon name="flag" size={12} color={N.faint} />
               <Txt style={styles.reportTxt}>Report</Txt>
             </Press>
@@ -643,8 +614,7 @@ function ReportBox({
               onPress={() => setReason(r.code)}
               hoverBg={on ? undefined : N.sunken}
               style={[styles.chip, on && styles.chipOn]}
-              aria-label={r.label}
-            >
+              aria-label={r.label}>
               <Txt style={[styles.chipTxt, on && styles.chipTxtOn]}>{r.label}</Txt>
             </Press>
           );
@@ -666,8 +636,7 @@ function ReportBox({
           onPress={() => void submit()}
           disabled={!reason || sending}
           hoverBg={N.inkHover}
-          style={[styles.primary, (!reason || sending) && styles.sendOff]}
-        >
+          style={[styles.primary, (!reason || sending) && styles.sendOff]}>
           <Txt style={styles.primaryTxt}>{sending ? 'Sending…' : 'Send report'}</Txt>
         </Press>
         <Press onPress={onCancel} hoverBg={N.sunken} style={styles.secondary}>
@@ -718,8 +687,10 @@ function ProposalCard({
       <View style={[styles.tile, styles.tileProposed]}>
         <Txt style={styles.tileTitle}>{proposal.title}</Txt>
         <Txt
-          style={[styles.tileTime, styles.tileTimeProposed]}
-        >{`${fmtSlot(proposal.startISO, proposal.endISO)} · proposed`}</Txt>
+          style={[
+            styles.tileTime,
+            styles.tileTimeProposed,
+          ]}>{`${fmtSlot(proposal.startISO, proposal.endISO)} · proposed`}</Txt>
       </View>
       <DayStrip startISO={proposal.startISO} endISO={proposal.endISO} />
       {/* The scorer's own reason. Showing it is what makes the feedback
@@ -736,8 +707,7 @@ function ProposalCard({
                 key={r.code}
                 onPress={() => onReject(proposal, r.code, r.label)}
                 hoverBg={N.sunken}
-                style={styles.chip}
-              >
+                style={styles.chip}>
                 <Txt style={styles.chipTxt}>{r.label}</Txt>
               </Press>
             ))}
@@ -754,8 +724,7 @@ function ProposalCard({
                     key={a.startISO}
                     onPress={() => onAcceptAlt(proposal, a)}
                     hoverBg={N.sunken}
-                    style={styles.chip}
-                  >
+                    style={styles.chip}>
                     <Txt style={styles.chipTxt}>{fmtSlot(a.startISO, a.endISO)}</Txt>
                   </Press>
                 ))}

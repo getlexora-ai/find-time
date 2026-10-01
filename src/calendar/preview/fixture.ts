@@ -1,4 +1,5 @@
-import type { ApiAccount, ChatMessage } from '@/lib/api-types';
+import { AGENT_TOOLS } from '@/lib/agent-tools';
+import type { ApiAccount, ChatMessage, ToolUi } from '@/lib/api-types';
 
 import { addDays, iso, startOfWeek, today } from '../cal-date';
 import type { CalEvent } from '../types';
@@ -102,7 +103,7 @@ export function previewAccounts(): ApiAccount[] {
 /* ───────────────────────── Plan with AI ───────────────────────── */
 
 /** A short conversation for the AI panel in `/preview`, on the fixture week. */
-export function previewChat(): { history: ChatMessage[]; reply: (text: string) => ChatMessage } {
+export function previewChat(): { history: ChatMessage[]; reply: (text: string) => ChatMessage; tools: ToolUi[] } {
   const at = (date: string, hm: string) => `${date}T${hm}:00.000Z`;
   const t = new Date();
   const d = (n: number) => {
@@ -111,6 +112,7 @@ export function previewChat(): { history: ChatMessage[]; reply: (text: string) =
   };
   const now = new Date().toISOString();
   return {
+    tools: AGENT_TOOLS,
     history: [
       { id: 'u1', role: 'user', text: 'Make room for 2h of deep work on the launch plan before Friday', createdAt: now },
       {
@@ -121,7 +123,7 @@ export function previewChat(): { history: ChatMessage[]; reply: (text: string) =
         trace: [
           { tool: 'read_calendar', label: 'Read your calendar', detail: '41 blocks · next 14 days · 33 fixed', ms: 180 },
           { tool: 'apply_rules', label: 'Applied your rules', detail: '2 rules · 3 learned habits' },
-          { tool: 'model', label: 'Chose: find time', ms: 1640 },
+          { tool: 'propose_blocks', label: 'Chose: find time', ms: 1640 },
           { tool: 'rank_slots', label: 'Scored free slots', detail: '27 candidates · 120 min · picked 1' },
         ],
         proposals: [
@@ -149,7 +151,7 @@ export function previewChat(): { history: ChatMessage[]; reply: (text: string) =
         trace: [
           { tool: 'read_calendar', label: 'Read your calendar', detail: '41 blocks · next 14 days · 33 fixed', ms: 150 },
           { tool: 'apply_rules', label: 'Applied your rules', detail: '2 rules · 3 learned habits' },
-          { tool: 'model', label: 'Chose: save a rule', ms: 920 },
+          { tool: 'record_rule', label: 'Chose: save a rule', ms: 920 },
           { tool: 'save_rule', label: 'Saved a rule', detail: 'No bookings before 09:00' },
         ],
       },
@@ -163,7 +165,7 @@ export function previewChat(): { history: ChatMessage[]; reply: (text: string) =
       trace: [
         { tool: 'read_calendar', label: 'Read your calendar', detail: '42 blocks · next 14 days · 34 fixed', ms: 160 },
         { tool: 'apply_rules', label: 'Applied your rules', detail: '3 rules · 3 learned habits' },
-        { tool: 'model', label: 'Chose: find time', ms: 1210 },
+        { tool: 'propose_blocks', label: 'Chose: find time', ms: 1210 },
         { tool: 'ask', label: 'Needs a length first', detail: 'I never guess a time' },
       ],
     }),

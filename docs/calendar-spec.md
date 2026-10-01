@@ -450,3 +450,13 @@ planner was the guide, not the template.
   tool shortcuts in the composer (Find time, At a time, Rule, Time off; they
   start the sentence, and the model still picks the tool), and a day strip on
   each proposal drawn from your real events.
+- **Tools are server-driven** (2026-10-01): `src/lib/agent-tools.ts` is the one
+  registry of how each model tool and pipeline step looks: label, live label,
+  icon, category colour, optional composer shortcut. It is served at
+  `GET /api/ai/tools`. The panel has no tool names of its own: trace rows,
+  live rows, starter icons and composer shortcuts are all drawn from the
+  registry, and unknown icons or colours fall back safely. `POST /api/ai/chat`
+  with `Accept: application/x-ndjson` streams `start`/`step` events as each
+  step really runs, then the `message`. The model's row is the tool it
+  actually called. To add a tool: add its ToolDef to CHAT_TOOLS and a registry
+  entry with the same key.
