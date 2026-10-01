@@ -283,3 +283,115 @@ Each step is committed and checked (typecheck, lint, web export, screenshot at
 6. Create: click and drag-to-draw, quick-create popover.
 7. Move and resize: drag, edges, undo, routine scope, keyboard.
 8. Pass with `no-ai-design-slop` against the B artboard; fix what it finds.
+
+---
+
+## 11. v2 rules — data that tells the truth, actions you use daily
+
+Added 2026-10-01 after the first build. Server side: `db/019_calendar_v2.sql`
+(apply before deploying), `src/server/google/{map,sync,push}.ts`,
+`src/server/calendar/settings-repo.ts`, `/api/calendar/settings`.
+
+### 11.1 Time zones
+- Every time is shown in **your** zone (`scheduler_profiles.timezone`, detected
+  from the device on first run, changeable in settings).
+- Google events are converted from the organiser's zone into yours at sync,
+  DST-correct. A 09:00 New York meeting is 15:00 on a Berlin calendar.
+- Find Time's own blocks are plans in local time: "focus 09:00–11:00" stays at
+  09:00 wherever you are.
+- Changing zone re-syncs every Google calendar in full.
+- If the device's zone differs from your setting, a one-line notice offers to
+  switch ("You're in Lisbon — show times in Lisbon?").
+
+### 11.2 Repeats
+- Google series arrive as single occurrences: a meeting moved or cancelled for
+  one week is exactly that on the grid.
+- Find Time repeats: moving, resizing or deleting one occurrence asks
+  **This one · This and following · All**.
+  - This one: the date joins the series' cancelled dates (`exdates`) and a one-off
+    takes its place (linked by `seriesId`). Deleting this one only adds the date.
+  - This and following: the series ends the day before (`UNTIL`), a new series
+    starts on that date with the change.
+  - All: the series' times change (days never change by drag).
+
+### 11.3 Invites and free/busy
+- Declined: drawn struck-through and faint; never blocks time, never clashes,
+  never counts in planned hours or capacity.
+- "Show as free" in Google: drawn with a hollow outline; never clashes; doesn't
+  reduce capacity.
+- Not yet answered: a small "?" before the title.
+- Tentative counts as busy.
+- Detail shows: your answer, guests count, location, a Join link for video.
+
+### 11.4 Clashes
+- Between two busy blocks as before, **plus** a proposal that would land on a busy
+  block: it shows "would clash with …" in its detail and on the tile, before you
+  approve it.
+
+### 11.5 Undo and done
+- Delete has Undo (5 s), like move and resize. Undoing a delete recreates the
+  block with the same fields.
+- Tasks tick off: the checkbox on the tile and in the detail. Done tasks are
+  struck through, stay where they are, and leave the planned-hours count.
+
+### 11.6 All-day, duplicate, copy
+- Create all-day blocks: the all-day lane is clickable; the sheet has an
+  All-day switch.
+- Dragging a timed block into the all-day lane makes it all-day; dragging an
+  all-day chip onto the hours makes it a 1-hour block there.
+- Alt-drag (desktop) duplicates instead of moving. "Duplicate" in the detail
+  copies to the next day; the copy is selected.
+
+### 11.7 Settings that follow you
+Your hours, working hours (editable per day), zone, first day of week, 12/24-hour
+clock, weekly hours target and focus goal live in your profile, not the device.
+The device keeps a copy for offline start.
+
+### 11.8 Write-back (opt-in)
+"Block focus time in Google": one-off protected focus blocks become private,
+busy events on your primary Google calendar, so colleagues see you as taken.
+Off by default. Needs reconnecting Google once (write permission). Repeating
+focus blocks are not written (Google would hand each occurrence back as a
+separate event).
+
+### 11.9 Smaller rules
+- **Buffers**: "Find a time" leaves your default buffer (profile, 10 min) after
+  a meeting. Back-to-back meetings with no gap show a thin notch between them.
+- **The past**: creating or moving into the past is allowed; the toast says
+  "in the past".
+- **Zoom**: compact / comfortable / roomy hour height (40 / 56 / 72 px), per
+  device. Shift-drag skips the 15-minute snap (5-minute steps).
+- **12/24-hour** clock and **Sunday-first** weeks follow the settings everywhere
+  (gutter, tiles, headers, picker).
+- **First run**: no Google and no blocks → the grid shows one line and two
+  actions: Connect Google Calendar, or Plan my week.
+- **Targets**: weekly planned-hours target and focus goal come from settings;
+  the defaults (40 h, 14 h) apply until you set them.
+
+## 12. Colour (decided 2026-10-01: "add some nice colours")
+
+The structure stays Nexus: white surfaces, hairlines, ink type, three shadows.
+Colour now carries **category**, and kind still carries **shape**. Each category
+has three tones in `tokens.ts` `CATS`: `tint` (fill), `line` (edges, marks),
+`ink` (text on the tint, AA). Orange stays reserved for proposals and now. Never
+a fill.
+
+| Category | tint | line | ink | solid (focus) |
+|---|---|---|---|---|
+| Deep work | #EAF1FF | #3B82F6 | #1E3A8A | #2563EB |
+| Meetings | #EFEEFF | #6366F1 | #312E81 | #4F46E5 |
+| Design | #FCEEF5 | #DB2777 | #831843 | #BE185D |
+| Research | #E7F6F3 | #0D9488 | #134E4A | #0F766E |
+| Admin | #FEF6DC | #CA8A04 | #713F12 | #A16207 |
+
+How kinds use it:
+- focus: solid category colour, white text.
+- event: the category tint, `sm` shadow, ink text.
+- task: white, the category line as the checkbox and hairline.
+- routine: the tint with the hatch.
+- break: neutral grey hatch, no colour (recovery is not a category).
+- proposal: white, dashed orange.
+
+Declined events lose their colour (grey). The KPI planned bar, the legend and the
+week's mini-month dots use the same category colours. The Google calendar
+square stays the calendar's own colour.
