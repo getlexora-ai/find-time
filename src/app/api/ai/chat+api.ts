@@ -3,6 +3,7 @@ import type {
   ChatMessage,
   ChatProposal,
   ChatResponse,
+  TraceStep,
 } from '@/lib/api-types';
 import { requireUserId, unauthorized } from '@/server/auth/clerk';
 import { aiConfigured, chatWithTools, type ChatTurn } from '@/server/ai/gemini';
@@ -87,6 +88,16 @@ function preferenceCard(profile: AgentProfile): { learned: string[]; rules: stri
   return { learned, rules };
 }
 
+/** How each tool reads in the chat's step list. */
+const MODEL_LABEL: Record<string, string> = {
+  [TOOL_PROPOSE]: 'Chose: find time',
+  [TOOL_PLACE_AT]: 'Chose: place at a time',
+  [TOOL_ASK]: 'Chose: ask you',
+  [TOOL_RULE]: 'Chose: save a rule',
+  [TOOL_TIME_OFF]: 'Chose: block time off',
+  [TOOL_ANSWER]: 'Chose: answer',
+};
+
 export async function GET(request: Request): Promise<Response> {
   if (!isConfigured()) {
     return Response.json({ error: 'Database not configured (DATABASE_URL missing).' }, { status: 503 });
@@ -150,6 +161,7 @@ export async function POST(request: Request): Promise<Response> {
   await appendMessage(sessionId, { role: 'user', content: text });
 
   const now = new Date();
+  const t0 = Date.now();
   const nowISO = iso(now);
   const horizonISO = iso(new Date(now.getTime() + HORIZON_DAYS * 86_400_000));
 
@@ -167,12 +179,40 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ sessionId, error: 'Could not read your calendar.' }, { status: 500 });
   }
 
+  const loadMs = Date.now() - t0;
+
   // Flexible blocks may be scheduled over; everything else is a hard conflict.
   const busy = events
     .filter((e) => e.flexibility !== 'flexible')
     .map((e) => ({ start: e.start, end: e.end, title: e.title }));
 
   const card = preferenceCard(profile);
+
+  /**
+   * What this turn actually did, step by step, for the chat to show. Only
+   * real work goes in, with real counts — the panel never makes up progress.
+   */
+  const trace: TraceStep[] = [
+    {
+      tool: 'read_calendar',
+      label: 'Read your calendar',
+      detail: `${events.length} block${events.length === 1 ? '' : 's'} · next ${HORIZON_DAYS} days · ${busy.length} fixed`,
+      ms: loadMs,
+    },
+    {
+      tool: 'apply_rules',
+      label: card.rules.length || card.learned.length ? 'Applied your rules' : 'No rules yet',
+      detail:
+        card.rules.length || card.learned.length
+          ? [
+              card.rules.length && `${card.rules.length} rule${card.rules.length === 1 ? '' : 's'}`,
+              card.learned.length && `${card.learned.length} learned habit${card.learned.length === 1 ? '' : 's'}`,
+            ]
+              .filter(Boolean)
+              .join(' · ')
+          : 'tell me one any time',
+    },
+  ];
   const system = buildSystemPrompt({
     nowISO,
     learned: card.learned,
@@ -234,6 +274,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const args = choice.args;
+  trace.push({ tool: 'model', label: MODEL_LABEL[choice.name] ?? 'Understood your request', ms: choice.latencyMs });
 
   /**
    * The clarification policy. A proposal whose day or length the model had to
@@ -292,6 +333,7 @@ export async function POST(request: Request): Promise<Response> {
           });
     question = { text: questionFor(missing, title, options.length > 0), options };
     reply = question.text;
+    trace.push({ tool: 'ask', label: missing === 'duration' ? 'Needs a length first' : 'Needs a day first', detail: 'I never guess a time' });
   } else if (choice.name === TOOL_PROPOSE) {
     kind = 'plan';
     const category = asString(args.category, 'deep-work');
@@ -348,6 +390,12 @@ export async function POST(request: Request): Promise<Response> {
       bufferMin: effectiveBuffer(profile),
       alternatives: explore ? 4 : 2,
       strategy: explore ? 'spread' : 'top',
+    });
+
+    trace.push({
+      tool: 'rank_slots',
+      label: 'Scored free slots',
+      detail: `${ranked.length} candidate${ranked.length === 1 ? '' : 's'} · ${durationMin} min · picked ${chosen.length}`,
     });
 
     if (chosen.length === 0) {
@@ -486,7 +534,9 @@ export async function POST(request: Request): Promise<Response> {
     } else {
       // The user's own time, not a scorer pick: no features, no runners-up, no
       // occasion. The card and the feedback path are the same as any proposal.
-      const reason = clashNote(busy, checked.span) ?? "it's the time you asked for";
+      const clash = clashNote(busy, checked.span);
+      const reason = clash ?? "it's the time you asked for";
+      trace.push({ tool: 'check_time', label: 'Checked that time', detail: clash ? 'it overlaps something' : 'it is free' });
       try {
         const stored = await saveProposals(userId, sessionId, checked.span, [
           { title, category, ...checked.span, score: 0, features: ZERO_FEATURES, reason, alternatives: [] },
@@ -509,6 +559,7 @@ export async function POST(request: Request): Promise<Response> {
     }
   } else if (choice.name === TOOL_ASK) {
     kind = 'question';
+    trace.push({ tool: 'ask', label: 'Needs one detail', detail: 'asked rather than guessed' });
     const opts = Array.isArray(args.options)
       ? args.options.filter((o): o is string => typeof o === 'string').slice(0, 4)
       : [];
@@ -533,6 +584,7 @@ export async function POST(request: Request): Promise<Response> {
       // preferences stay soft.
       const saved = await addRule(userId, { kind: ruleKind, rule, hard: true, label });
       savedRule = { id: saved.id, label: saved.label };
+      trace.push({ tool: 'save_rule', label: 'Saved a rule', detail: saved.label });
       reply = reply || `Saved — ${label}`;
     } catch (err) {
       // Never claim to have saved a rule that did not save; the user would go on
@@ -566,6 +618,7 @@ export async function POST(request: Request): Promise<Response> {
           created.push(ev.id);
         }
         timeOff = { title, startISO: checked.span.startISO, endISO: checked.span.endISO, days: created.length };
+        trace.push({ tool: 'block_time', label: 'Blocked the time', detail: `${created.length} day${created.length === 1 ? '' : 's'}` });
         reply = reply || `Blocked — ${title}.`;
       } catch (err) {
         console.error('ai/chat timeOff', err);
@@ -584,6 +637,7 @@ export async function POST(request: Request): Promise<Response> {
   if (question) extras.question = question;
   if (savedRule) extras.savedRule = savedRule;
   if (timeOff) extras.timeOff = timeOff;
+  extras.trace = trace;
 
   const messageId = await appendMessage(sessionId, {
     role: 'assistant',

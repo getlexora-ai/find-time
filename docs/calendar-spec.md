@@ -439,3 +439,14 @@ planner was the guide, not the template.
   `origin: 'ai'`, and the adapter draws every AI-origin event as a proposal
   (`api-adapter.ts` `kindOf`). So it stays dashed after you add it. The fix is
   to split "made by AI" from "still a draft" in the data model.
+- **Plan with AI shows its work** (2026-10-01): each reply carries a `trace`,
+  the steps the server really ran with real counts: read calendar (blocks,
+  horizon, fixed), applied rules (rules, learned habits), the tool the model
+  chose and its latency, then the tool's own step (slots scored and picked,
+  time checked, rule saved, days blocked, or what it needs to ask). It is
+  stored with the message, so history replays it. While a turn runs, the
+  panel walks the stages every turn runs, in their real order. Nothing it
+  shows is invented. Also: a palette shimmer under the header while working,
+  tool shortcuts in the composer (Find time, At a time, Rule, Time off; they
+  start the sentence, and the model still picks the tool), and a day strip on
+  each proposal drawn from your real events.

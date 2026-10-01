@@ -150,6 +150,20 @@ export type ChatMessage = {
   timeOff?: { title: string; startISO: string; endISO: string; days: number };
   /** the user has reported this reply (POST /api/ai/report) */
   reported?: boolean;
+  /** what the agent actually did for this turn, in order — never invented client-side */
+  trace?: TraceStep[];
+};
+
+/**
+ * One real step of a turn, as the server ran it: reading the calendar, applying
+ * rules, the tool the model chose, scoring slots, saving. `detail` carries the
+ * real numbers ("18 blocks · next 14 days").
+ */
+export type TraceStep = {
+  tool: 'read_calendar' | 'apply_rules' | 'model' | 'rank_slots' | 'check_time' | 'save_rule' | 'block_time' | 'ask';
+  label: string;
+  detail?: string;
+  ms?: number;
 };
 
 export type ChatRequest = {

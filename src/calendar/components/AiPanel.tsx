@@ -1,5 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, type TextStyle, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  type TextStyle,
+  View,
+  type ViewStyle,
+} from 'react-native';
 
 import type { ChatMessage, ChatProposal, RejectReason, ReportReason } from '@/lib/api-types';
 
@@ -14,11 +26,12 @@ import {
   resetSession,
   sendMessage,
 } from '../agent-store';
-import { Icon } from '../Icon';
+import { Icon, type IconName } from '../Icon';
 
 import { BREAK_COLOR, CATS, N, R, SANS, SHADOW, T, tint, TINT } from '../tokens';
 import { NEXUS_SURFACE, Press, Txt } from '../ui';
 import { useResponsive } from '../useResponsive';
+import { DayStrip, FadeIn, Shimmer, Trace, Working } from './AiParts';
 
 /**
  * Find time — the scheduling agent, as a conversation.
@@ -46,11 +59,54 @@ import { useResponsive } from '../useResponsive';
  * like the proposal tile on the grid (dashed accent on white).
  */
 
-const STARTERS = [
-  'Make room for 2h of deep work on Thursday',
-  'Find three 45-minute review slots this week',
-  'Never book me before 10',
-  'Move my gym to the evening',
+const STARTERS: { text: string; icon: IconName; color: string }[] = [
+  {
+    text: 'Make room for 2h of deep work on Thursday',
+    icon: 'magic',
+    color: CATS.deep.color,
+  },
+  {
+    text: 'Find three 45-minute review slots this week',
+    icon: 'chart',
+    color: CATS.design.color,
+  },
+  {
+    text: 'Never book me before 10',
+    icon: 'shield',
+    color: CATS.research.color,
+  },
+  {
+    text: "I'm away Friday afternoon",
+    icon: 'calendar-mark',
+    color: CATS.admin.color,
+  },
+];
+
+/**
+ * Shortcuts into the agent's tools. They only start the sentence — the model
+ * still reads what you write and picks the tool — so they are labelled as
+ * what they help you say, not as switches.
+ */
+const TOOLS: { label: string; icon: IconName; color: string; seed: string }[] = [
+  {
+    label: 'Find time',
+    icon: 'magic',
+    color: CATS.deep.color,
+    seed: 'Find time for ',
+  },
+  { label: 'At a time', icon: 'clock', color: CATS.sync.color, seed: 'Put ' },
+  {
+    label: 'Rule',
+    icon: 'shield',
+    color: CATS.research.color,
+    seed: 'Never book me ',
+  },
+  {
+    label: 'Time off',
+    icon: 'calendar-mark',
+    color: CATS.admin.color,
+    seed: "I'm away ",
+  },
 ];
 
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -104,8 +160,12 @@ export function AiPanel({
   const [reported, setReported] = useState<Record<string, true>>({});
 
   const scroller = useRef<ScrollView>(null);
+  const input = useRef<TextInput>(null);
+  const [tool, setTool] = useState<string | null>(null);
+  // Once now, and again after the fade-ins and an opening trace have grown the thread.
   const toBottom = useCallback(() => {
     requestAnimationFrame(() => scroller.current?.scrollToEnd({ animated: true }));
+    setTimeout(() => scroller.current?.scrollToEnd({ animated: true }), 700);
   }, []);
 
   useEffect(() => {
@@ -130,9 +190,15 @@ export function AiPanel({
       const localId = `local_${Date.now()}`;
       setMessages((m) => [
         ...m,
-        { id: localId, role: 'user', text: body, createdAt: new Date().toISOString() },
+        {
+          id: localId,
+          role: 'user',
+          text: body,
+          createdAt: new Date().toISOString(),
+        },
       ]);
       setText('');
+      setTool(null);
       setSending(true);
       toBottom();
 
@@ -164,7 +230,10 @@ export function AiPanel({
         toast('Could not add that block.');
         return;
       }
-      setDecisions((d) => ({ ...d, [p.id]: { kind: 'added', label: fmtSlot(p.startISO, p.endISO) } }));
+      setDecisions((d) => ({
+        ...d,
+        [p.id]: { kind: 'added', label: fmtSlot(p.startISO, p.endISO) },
+      }));
       onApplied(p.startISO, 1, 1);
       if (res.notes.length) toast(res.notes[0]);
     },
@@ -223,13 +292,15 @@ export function AiPanel({
   }, [toast]);
 
   const empty = !booting && messages.length === 0;
+  const lastBot = [...messages].reverse().find((m) => m.role === 'assistant')?.id;
 
   const panel = (
     <View
       {...NEXUS_SURFACE}
       role="complementary"
       aria-label="Plan with AI"
-      style={[styles.panel, isDesktop ? styles.panelDocked : styles.panelSheet]}>
+      style={[styles.panel, isDesktop ? styles.panelDocked : styles.panelSheet]}
+    >
       {!isDesktop && <View style={styles.grab} />}
       <View style={styles.head}>
         <Icon name="magic" size={16} color={N.ink} />
@@ -243,13 +314,19 @@ export function AiPanel({
         <Press onPress={onClose} hoverBg={N.hover} style={styles.iconBtn} aria-label="Close">
           <Icon name="close" size={18} color={N.ink2} />
         </Press>
+        {sending && (
+          <View style={styles.headBar}>
+            <Shimmer />
+          </View>
+        )}
       </View>
 
       <ScrollView
         ref={scroller}
         style={styles.thread}
         contentContainerStyle={[styles.threadPad, empty && styles.threadEmpty]}
-        onContentSizeChange={toBottom}>
+        onContentSizeChange={toBottom}
+      >
         {booting && (
           <View style={styles.thinking}>
             <ActivityIndicator size="small" color={N.muted} />
@@ -257,20 +334,25 @@ export function AiPanel({
         )}
         {empty && (
           <View style={styles.intro}>
-            <View style={styles.introMark}>
-              <Icon name="magic" size={22} color={CATS.deep.color} />
+            <View style={[styles.introMark, MARK_BG]}>
+              <Icon name="magic" size={24} color={N.onInk} />
             </View>
             <Txt style={styles.introTitle}>What should we plan?</Txt>
             <Txt style={styles.introTxt}>
-              Tell me what to make room for. I only move what is flexible, never a protected block, and
-              nothing is booked until you say so.
+              Tell me what to make room for. I only move what is flexible, never a protected block, and nothing is
+              booked until you say so.
             </Txt>
             <View style={styles.starters}>
-              {STARTERS.map((st) => (
-                <Press key={st} onPress={() => void send(st)} hoverBg={N.sunken} style={styles.starter}>
-                  <Txt style={styles.starterTxt}>{st}</Txt>
-                  <Icon name="arrow-right" size={14} color={N.faint} />
-                </Press>
+              {STARTERS.map((st, i) => (
+                <FadeIn key={st.text} delay={120 + i * 60}>
+                  <Press onPress={() => void send(st.text)} hoverBg={N.sunken} lift style={styles.starter}>
+                    <View style={[styles.starterIcon, { backgroundColor: tint(st.color, 0.14) }]}>
+                      <Icon name={st.icon} size={15} color={st.color} />
+                    </View>
+                    <Txt style={styles.starterTxt}>{st.text}</Txt>
+                    <Icon name="arrow-right" size={14} color={N.faint} />
+                  </Press>
+                </FadeIn>
               ))}
             </View>
           </View>
@@ -279,6 +361,7 @@ export function AiPanel({
         {messages.map((m) => (
           <MessageRow
             key={m.id}
+            latest={m.id === lastBot}
             message={m}
             decisions={decisions}
             rejecting={rejecting}
@@ -294,19 +377,46 @@ export function AiPanel({
           />
         ))}
 
-        {sending && (
-          <View style={styles.thinking}>
-            <ActivityIndicator size="small" color={N.muted} />
-            <Txt style={styles.thinkingTxt}>Reading your calendar…</Txt>
-          </View>
-        )}
+        {sending && <Working />}
       </ScrollView>
 
       <View style={styles.composer}>
         <View style={[styles.inputBox, SHADOW.sm]}>
+          <View style={styles.tools}>
+            {TOOLS.map((t) => {
+              const on = tool === t.label;
+              return (
+                <Press
+                  key={t.label}
+                  onPress={() => {
+                    setTool(t.label);
+                    setText(t.seed);
+                    input.current?.focus();
+                  }}
+                  hoverBg={on ? undefined : N.sunken}
+                  accessibilityRole="button"
+                  aria-label={`Start with: ${t.seed.trim()}`}
+                  style={[
+                    styles.tool,
+                    on && {
+                      backgroundColor: tint(t.color, 0.14),
+                      borderColor: tint(t.color, 0.4),
+                    },
+                  ]}
+                >
+                  <Icon name={t.icon} size={13} color={t.color} />
+                  <Txt style={[styles.toolTxt, on && { color: N.ink }]}>{t.label}</Txt>
+                </Press>
+              );
+            })}
+          </View>
           <TextInput
+            ref={input}
             value={text}
-            onChangeText={setText}
+            onChangeText={(v) => {
+              setText(v);
+              if (!v) setTool(null);
+            }}
             multiline
             autoFocus={isDesktop}
             placeholder={messages.length ? 'Reply…' : 'What would you like to plan?'}
@@ -314,7 +424,11 @@ export function AiPanel({
             style={[styles.input, INPUT_RESET]}
             onKeyPress={(e) => {
               // Enter sends, Shift+Enter breaks the line (web).
-              const ne = e.nativeEvent as unknown as { key: string; shiftKey?: boolean; preventDefault?: () => void };
+              const ne = e.nativeEvent as unknown as {
+                key: string;
+                shiftKey?: boolean;
+                preventDefault?: () => void;
+              };
               if (Platform.OS === 'web' && ne.key === 'Enter' && !ne.shiftKey) {
                 (e as unknown as { preventDefault: () => void }).preventDefault();
                 void send(text);
@@ -330,7 +444,8 @@ export function AiPanel({
               disabled={sending || !text.trim()}
               hoverBg={N.inkHover}
               style={[styles.send, (sending || !text.trim()) && styles.sendOff]}
-              aria-label="Send">
+              aria-label="Send"
+            >
               <Icon name="arrow-right-up" size={16} color={sending || !text.trim() ? N.faint : N.onInk} />
             </Press>
           </View>
@@ -387,6 +502,7 @@ function Status({ icon, children }: { icon: 'check' | 'stars' | 'calendar-mark';
 }
 
 function MessageRow({
+  latest,
   message,
   decisions,
   rejecting,
@@ -400,6 +516,7 @@ function MessageRow({
   onOpenReport,
   onReport,
 }: {
+  latest: boolean;
   message: ChatMessage;
   decisions: Record<string, Decision>;
   rejecting: string | null;
@@ -415,75 +532,81 @@ function MessageRow({
 }) {
   if (message.role === 'user') {
     return (
-      <View style={styles.userRow}>
-        <View style={styles.userBubble}>
-          <Txt style={styles.userTxt}>{message.text}</Txt>
+      <FadeIn>
+        <View style={styles.userRow}>
+          <View style={styles.userBubble}>
+            <Txt style={styles.userTxt}>{message.text}</Txt>
+          </View>
         </View>
-      </View>
+      </FadeIn>
     );
   }
 
   return (
-    <View style={styles.botRow}>
-      {message.savedRule && <Status icon="stars">{`Rule saved · ${message.savedRule.label}`}</Status>}
+    <FadeIn>
+      <View style={styles.botRow}>
+        {!!message.trace?.length && <Trace steps={message.trace} open={latest} />}
+        {message.savedRule && <Status icon="stars">{`Rule saved · ${message.savedRule.label}`}</Status>}
 
-      {/* Only rendered when the blocks were actually written — the server sets
+        {/* Only rendered when the blocks were actually written — the server sets
           timeOff after the last one saves, never on a failed attempt. */}
-      {message.timeOff && (
-        <Status icon="calendar-mark">
-          {`${message.timeOff.title} blocked · ${fmtAway(message.timeOff.startISO, message.timeOff.endISO)}`}
-        </Status>
-      )}
+        {message.timeOff && (
+          <Status icon="calendar-mark">
+            {`${message.timeOff.title} blocked · ${fmtAway(message.timeOff.startISO, message.timeOff.endISO)}`}
+          </Status>
+        )}
 
-      {message.text.length > 0 && <Rich text={message.text} />}
+        {message.text.length > 0 && <Rich text={message.text} />}
 
-      {message.question?.options?.length ? (
-        <View style={styles.chipRow}>
-          {message.question.options.map((o) => (
-            <Press key={o} onPress={() => onAnswer(o)} hoverBg={N.sunken} style={styles.chip}>
-              <Txt style={styles.chipTxt}>{o}</Txt>
+        {message.question?.options?.length ? (
+          <View style={styles.chipRow}>
+            {message.question.options.map((o) => (
+              <Press key={o} onPress={() => onAnswer(o)} hoverBg={N.sunken} style={styles.chip}>
+                <Txt style={styles.chipTxt}>{o}</Txt>
+              </Press>
+            ))}
+          </View>
+        ) : null}
+
+        {message.proposals?.map((p) => (
+          <ProposalCard
+            key={p.id}
+            proposal={p}
+            decision={decisions[p.id]}
+            rejecting={rejecting === p.id}
+            onAccept={onAccept}
+            onAcceptAlt={onAcceptAlt}
+            onReject={onReject}
+            onOpenReject={onOpenReject}
+          />
+        ))}
+
+        {/* Client-side error bubbles (`err_…`) never reached the server, so
+          there is no turn behind them to report. */}
+        {!message.id.startsWith('err_') &&
+          (reported ? (
+            <View style={styles.reportRow}>
+              <Icon name="flag" size={12} color={N.faint} />
+              <Txt style={styles.reportTxt}>Reported</Txt>
+            </View>
+          ) : reporting ? (
+            <ReportBox
+              onCancel={() => onOpenReport(null)}
+              onSubmit={(reason, note) => onReport(message.id, reason, note)}
+            />
+          ) : (
+            <Press
+              onPress={() => onOpenReport(message.id)}
+              hoverBg={N.hover}
+              style={styles.reportLink}
+              aria-label="Report this reply"
+            >
+              <Icon name="flag" size={12} color={N.faint} />
+              <Txt style={styles.reportTxt}>Report</Txt>
             </Press>
           ))}
-        </View>
-      ) : null}
-
-      {message.proposals?.map((p) => (
-        <ProposalCard
-          key={p.id}
-          proposal={p}
-          decision={decisions[p.id]}
-          rejecting={rejecting === p.id}
-          onAccept={onAccept}
-          onAcceptAlt={onAcceptAlt}
-          onReject={onReject}
-          onOpenReject={onOpenReject}
-        />
-      ))}
-
-      {/* Client-side error bubbles (`err_…`) never reached the server, so
-          there is no turn behind them to report. */}
-      {!message.id.startsWith('err_') &&
-        (reported ? (
-          <View style={styles.reportRow}>
-            <Icon name="flag" size={12} color={N.faint} />
-            <Txt style={styles.reportTxt}>Reported</Txt>
-          </View>
-        ) : reporting ? (
-          <ReportBox
-            onCancel={() => onOpenReport(null)}
-            onSubmit={(reason, note) => onReport(message.id, reason, note)}
-          />
-        ) : (
-          <Press
-            onPress={() => onOpenReport(message.id)}
-            hoverBg={N.hover}
-            style={styles.reportLink}
-            aria-label="Report this reply">
-            <Icon name="flag" size={12} color={N.faint} />
-            <Txt style={styles.reportTxt}>Report</Txt>
-          </Press>
-        ))}
-    </View>
+      </View>
+    </FadeIn>
   );
 }
 
@@ -520,7 +643,8 @@ function ReportBox({
               onPress={() => setReason(r.code)}
               hoverBg={on ? undefined : N.sunken}
               style={[styles.chip, on && styles.chipOn]}
-              aria-label={r.label}>
+              aria-label={r.label}
+            >
               <Txt style={[styles.chipTxt, on && styles.chipTxtOn]}>{r.label}</Txt>
             </Press>
           );
@@ -542,7 +666,8 @@ function ReportBox({
           onPress={() => void submit()}
           disabled={!reason || sending}
           hoverBg={N.inkHover}
-          style={[styles.primary, (!reason || sending) && styles.sendOff]}>
+          style={[styles.primary, (!reason || sending) && styles.sendOff]}
+        >
           <Txt style={styles.primaryTxt}>{sending ? 'Sending…' : 'Send report'}</Txt>
         </Press>
         <Press onPress={onCancel} hoverBg={N.sunken} style={styles.secondary}>
@@ -592,8 +717,11 @@ function ProposalCard({
     <View style={[styles.card, SHADOW.sm]}>
       <View style={[styles.tile, styles.tileProposed]}>
         <Txt style={styles.tileTitle}>{proposal.title}</Txt>
-        <Txt style={[styles.tileTime, styles.tileTimeProposed]}>{`${fmtSlot(proposal.startISO, proposal.endISO)} · proposed`}</Txt>
+        <Txt
+          style={[styles.tileTime, styles.tileTimeProposed]}
+        >{`${fmtSlot(proposal.startISO, proposal.endISO)} · proposed`}</Txt>
       </View>
+      <DayStrip startISO={proposal.startISO} endISO={proposal.endISO} />
       {/* The scorer's own reason. Showing it is what makes the feedback
           below about the right thing — the user can disagree with the
           reasoning, not just the outcome. */}
@@ -604,7 +732,12 @@ function ProposalCard({
           <Txt style={styles.boxLabel}>What was wrong with it?</Txt>
           <View style={styles.chipRow}>
             {REJECT_REASONS.map((r) => (
-              <Press key={r.code} onPress={() => onReject(proposal, r.code, r.label)} hoverBg={N.sunken} style={styles.chip}>
+              <Press
+                key={r.code}
+                onPress={() => onReject(proposal, r.code, r.label)}
+                hoverBg={N.sunken}
+                style={styles.chip}
+              >
                 <Txt style={styles.chipTxt}>{r.label}</Txt>
               </Press>
             ))}
@@ -617,7 +750,12 @@ function ProposalCard({
               <Txt style={styles.altLabel}>Or another time</Txt>
               <View style={styles.chipRow}>
                 {proposal.alternatives.map((a) => (
-                  <Press key={a.startISO} onPress={() => onAcceptAlt(proposal, a)} hoverBg={N.sunken} style={styles.chip}>
+                  <Press
+                    key={a.startISO}
+                    onPress={() => onAcceptAlt(proposal, a)}
+                    hoverBg={N.sunken}
+                    style={styles.chip}
+                  >
                     <Txt style={styles.chipTxt}>{fmtSlot(a.startISO, a.endISO)}</Txt>
                   </Press>
                 ))}
@@ -640,86 +778,342 @@ function ProposalCard({
 
 const USER_TINT = tint(CATS.deep.color, TINT);
 
+/** The welcome mark: the palette as one gradient (web); deep blue elsewhere. */
+const MARK_BG = (Platform.select({
+  web: {
+    backgroundImage: `linear-gradient(135deg, ${CATS.deep.color}, ${CATS.sync.color} 55%, ${CATS.design.color})`,
+  } as unknown as ViewStyle,
+  default: { backgroundColor: CATS.deep.color },
+}) ?? {}) as ViewStyle;
+
 const styles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: N.scrim },
   sheetWrap: { width: '100%', height: '88%' },
   panel: { backgroundColor: N.surface, minHeight: 0 },
   // Docked: a column beside the grid, ruled once on the left. No backdrop, no shadow —
   // it is part of the page, not over it.
-  panelDocked: { width: 400, height: '100%', borderLeftWidth: 1, borderLeftColor: N.line },
-  panelSheet: { flex: 1, borderTopLeftRadius: R.xl, borderTopRightRadius: R.xl, overflow: 'hidden' },
-  grab: { alignSelf: 'center', marginTop: 8, height: 4, width: 36, borderRadius: R.full, backgroundColor: N.ghost },
+  panelDocked: {
+    width: 400,
+    height: '100%',
+    borderLeftWidth: 1,
+    borderLeftColor: N.line,
+  },
+  panelSheet: {
+    flex: 1,
+    borderTopLeftRadius: R.xl,
+    borderTopRightRadius: R.xl,
+    overflow: 'hidden',
+  },
+  grab: {
+    alignSelf: 'center',
+    marginTop: 8,
+    height: 4,
+    width: 36,
+    borderRadius: R.full,
+    backgroundColor: N.ghost,
+  },
 
-  head: { height: 60, flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 18, paddingRight: 10, borderBottomWidth: 1, borderBottomColor: N.line },
-  headTitle: { fontFamily: SANS, fontSize: 15, lineHeight: 20, fontWeight: '600', color: N.ink },
+  headBar: { position: 'absolute', left: 0, right: 0, bottom: -1 },
+  head: {
+    height: 60,
+    position: 'relative',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingLeft: 18,
+    paddingRight: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: N.line,
+  },
+  headTitle: {
+    fontFamily: SANS,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '600',
+    color: N.ink,
+  },
   spacer: { flex: 1 },
-  iconBtn: { width: 34, height: 34, borderRadius: R.md, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: R.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   thread: { flex: 1, minHeight: 0 },
   threadPad: { padding: 18, gap: 18 },
   threadEmpty: { flexGrow: 1, justifyContent: 'center' },
 
   intro: { alignItems: 'center', gap: 10, paddingHorizontal: 4 },
-  introMark: { width: 44, height: 44, borderRadius: R.xl, backgroundColor: USER_TINT, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  introMark: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
   introTitle: { fontFamily: SANS, ...T.heading, color: N.ink },
-  introTxt: { fontFamily: SANS, fontSize: 14, lineHeight: 21, color: N.muted, textAlign: 'center' },
+  introTxt: {
+    fontFamily: SANS,
+    fontSize: 14,
+    lineHeight: 21,
+    color: N.muted,
+    textAlign: 'center',
+  },
   starters: { alignSelf: 'stretch', gap: 6, marginTop: 10 },
-  starter: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 11, borderRadius: R.lg, borderWidth: 1, borderColor: N.line },
-  starterTxt: { flex: 1, fontFamily: SANS, fontSize: 14, lineHeight: 20, color: N.ink },
+  starter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderRadius: R.lg,
+    borderWidth: 1,
+    borderColor: N.line,
+    backgroundColor: N.surface,
+  },
+  starterIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  starterTxt: {
+    flex: 1,
+    fontFamily: SANS,
+    fontSize: 14,
+    lineHeight: 20,
+    color: N.ink,
+  },
 
   userRow: { alignItems: 'flex-end' },
-  userBubble: { maxWidth: '88%', borderRadius: R.xl, backgroundColor: USER_TINT, paddingHorizontal: 14, paddingVertical: 10 },
+  userBubble: {
+    maxWidth: '88%',
+    borderRadius: R.xl,
+    backgroundColor: USER_TINT,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
   userTxt: { fontFamily: SANS, fontSize: 14, lineHeight: 21, color: N.ink },
 
   botRow: { gap: 12, alignItems: 'stretch' },
   botTxt: { fontFamily: SANS, fontSize: 14, lineHeight: 22, color: N.ink },
   botStrong: { fontWeight: '600' },
 
-  status: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, alignSelf: 'center', maxWidth: '100%' },
-  statusTxt: { fontFamily: SANS, fontSize: 13, lineHeight: 18, color: N.ink2, flexShrink: 1 },
+  status: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    alignSelf: 'center',
+    maxWidth: '100%',
+  },
+  statusTxt: {
+    fontFamily: SANS,
+    fontSize: 13,
+    lineHeight: 18,
+    color: N.ink2,
+    flexShrink: 1,
+  },
 
-  card: { borderRadius: R.xl, backgroundColor: N.surface, padding: 10, gap: 10 },
-  tile: { borderRadius: R.md, paddingHorizontal: 10, paddingVertical: 8, gap: 2 },
-  tileProposed: { borderWidth: 1, borderStyle: 'dashed', borderColor: N.accent, backgroundColor: N.surface },
+  card: {
+    borderRadius: R.xl,
+    backgroundColor: N.surface,
+    padding: 10,
+    gap: 10,
+  },
+  tile: {
+    borderRadius: R.md,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 2,
+  },
+  tileProposed: {
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: N.accent,
+    backgroundColor: N.surface,
+  },
   tileAdded: { backgroundColor: USER_TINT },
   tileSkipped: { backgroundColor: N.sunken, opacity: 0.8 },
   tileTitle: { fontFamily: SANS, ...T.tile, color: N.ink },
   tileMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  tileTime: { fontFamily: SANS, ...T.time, color: N.ink2, fontVariant: ['tabular-nums'] },
+  tileTime: {
+    fontFamily: SANS,
+    ...T.time,
+    color: N.ink2,
+    fontVariant: ['tabular-nums'],
+  },
   tileTimeProposed: { color: N.accentInk },
-  why: { fontFamily: SANS, fontSize: 13, lineHeight: 19, color: N.muted, paddingHorizontal: 2 },
+  why: {
+    fontFamily: SANS,
+    fontSize: 13,
+    lineHeight: 19,
+    color: N.muted,
+    paddingHorizontal: 2,
+  },
 
   alts: { gap: 6 },
-  altLabel: { fontFamily: SANS, fontSize: 12, lineHeight: 16, color: N.muted, paddingHorizontal: 2 },
+  altLabel: {
+    fontFamily: SANS,
+    fontSize: 12,
+    lineHeight: 16,
+    color: N.muted,
+    paddingHorizontal: 2,
+  },
   btnRow: { flexDirection: 'row', gap: 8 },
-  primary: { flex: 1, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: R.lg, backgroundColor: N.ink },
-  primaryTxt: { fontFamily: SANS, fontSize: 13, fontWeight: '600', color: N.onInk },
-  secondary: { height: 36, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', borderRadius: R.lg, borderWidth: 1, borderColor: N.lineStrong, backgroundColor: N.surface },
-  secondaryTxt: { fontFamily: SANS, fontSize: 13, fontWeight: '500', color: N.ink },
+  primary: {
+    flex: 1,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: R.lg,
+    backgroundColor: N.ink,
+  },
+  primaryTxt: {
+    fontFamily: SANS,
+    fontSize: 13,
+    fontWeight: '600',
+    color: N.onInk,
+  },
+  secondary: {
+    height: 36,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: R.lg,
+    borderWidth: 1,
+    borderColor: N.lineStrong,
+    backgroundColor: N.surface,
+  },
+  secondaryTxt: {
+    fontFamily: SANS,
+    fontSize: 13,
+    fontWeight: '500',
+    color: N.ink,
+  },
 
   box: { gap: 10, borderRadius: R.lg, backgroundColor: N.sunken, padding: 12 },
-  boxLabel: { fontFamily: SANS, fontSize: 13, lineHeight: 18, fontWeight: '500', color: N.ink },
+  boxLabel: {
+    fontFamily: SANS,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500',
+    color: N.ink,
+  },
   boxHint: { fontFamily: SANS, fontSize: 12, lineHeight: 17, color: N.muted },
 
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  chip: { borderRadius: R.full, borderWidth: 1, borderColor: N.lineStrong, backgroundColor: N.surface, paddingHorizontal: 12, paddingVertical: 7 },
-  chipTxt: { fontFamily: SANS, fontSize: 13, lineHeight: 18, color: N.ink, fontVariant: ['tabular-nums'] },
+  chip: {
+    borderRadius: R.full,
+    borderWidth: 1,
+    borderColor: N.lineStrong,
+    backgroundColor: N.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  chipTxt: {
+    fontFamily: SANS,
+    fontSize: 13,
+    lineHeight: 18,
+    color: N.ink,
+    fontVariant: ['tabular-nums'],
+  },
   chipOn: { borderColor: N.ink, backgroundColor: N.ink },
   chipTxtOn: { color: N.onInk },
 
-  reportLink: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: R.full, paddingHorizontal: 8, paddingVertical: 3, marginLeft: -8 },
-  reportRow: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 3 },
+  reportLink: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: R.full,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginLeft: -8,
+  },
+  reportRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 3,
+  },
   reportTxt: { fontFamily: SANS, fontSize: 12, color: N.faint },
-  reportInput: { minHeight: 36, borderRadius: R.md, borderWidth: 1, borderColor: N.lineStrong, backgroundColor: N.surface, paddingHorizontal: 10, paddingVertical: 8, color: N.ink, fontSize: 13, fontFamily: SANS },
+  reportInput: {
+    minHeight: 36,
+    borderRadius: R.md,
+    borderWidth: 1,
+    borderColor: N.lineStrong,
+    backgroundColor: N.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    color: N.ink,
+    fontSize: 13,
+    fontFamily: SANS,
+  },
 
-  thinking: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
+  thinking: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 4,
+  },
   thinkingTxt: { fontFamily: SANS, fontSize: 13, color: N.muted },
 
   composer: { padding: 14, paddingTop: 6 },
-  inputBox: { borderRadius: R.xl, backgroundColor: N.surface, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 10, gap: 6 },
-  input: { minHeight: 44, maxHeight: 140, color: N.ink, fontSize: 14, lineHeight: 21, fontFamily: SANS, textAlignVertical: 'top' },
+  inputBox: {
+    borderRadius: R.xl,
+    backgroundColor: N.surface,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 10,
+    gap: 6,
+  },
+  input: {
+    minHeight: 44,
+    maxHeight: 140,
+    color: N.ink,
+    fontSize: 14,
+    lineHeight: 21,
+    fontFamily: SANS,
+    textAlignVertical: 'top',
+  },
+  tools: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  tool: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    height: 26,
+    paddingHorizontal: 9,
+    borderRadius: R.full,
+    borderWidth: 1,
+    borderColor: N.line,
+  },
+  toolTxt: {
+    fontFamily: SANS,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '500',
+    color: N.ink2,
+  },
   inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  inputHint: { flex: 1, fontFamily: SANS, fontSize: 11, lineHeight: 14, color: N.faint },
-  send: { height: 34, width: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: N.ink },
+  inputHint: {
+    flex: 1,
+    fontFamily: SANS,
+    fontSize: 11,
+    lineHeight: 14,
+    color: N.faint,
+  },
+  send: {
+    height: 34,
+    width: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 17,
+    backgroundColor: N.ink,
+  },
   sendOff: { backgroundColor: N.sunken },
 });

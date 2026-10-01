@@ -118,6 +118,12 @@ export function previewChat(): { history: ChatMessage[]; reply: (text: string) =
         role: 'assistant',
         text: 'The best fit is **tomorrow, 09:30 – 11:30**. Your morning is clear and it lands before Friday\'s review. I haven\'t booked anything yet.',
         createdAt: now,
+        trace: [
+          { tool: 'read_calendar', label: 'Read your calendar', detail: '41 blocks · next 14 days · 33 fixed', ms: 180 },
+          { tool: 'apply_rules', label: 'Applied your rules', detail: '2 rules · 3 learned habits' },
+          { tool: 'model', label: 'Chose: find time', ms: 1640 },
+          { tool: 'rank_slots', label: 'Scored free slots', detail: '27 candidates · 120 min · picked 1' },
+        ],
         proposals: [
           {
             id: 'p1',
@@ -140,6 +146,12 @@ export function previewChat(): { history: ChatMessage[]; reply: (text: string) =
         text: 'Done. I will keep everything after **09:00** from now on.',
         createdAt: now,
         savedRule: { id: 'r1', label: 'No bookings before 09:00' },
+        trace: [
+          { tool: 'read_calendar', label: 'Read your calendar', detail: '41 blocks · next 14 days · 33 fixed', ms: 150 },
+          { tool: 'apply_rules', label: 'Applied your rules', detail: '2 rules · 3 learned habits' },
+          { tool: 'model', label: 'Chose: save a rule', ms: 920 },
+          { tool: 'save_rule', label: 'Saved a rule', detail: 'No bookings before 09:00' },
+        ],
       },
     ],
     reply: () => ({
@@ -148,6 +160,12 @@ export function previewChat(): { history: ChatMessage[]; reply: (text: string) =
       text: 'How long should it be?',
       createdAt: new Date().toISOString(),
       question: { text: 'How long should it be?', options: ['30 min', '1 hour', '2 hours'] },
+      trace: [
+        { tool: 'read_calendar', label: 'Read your calendar', detail: '42 blocks · next 14 days · 34 fixed', ms: 160 },
+        { tool: 'apply_rules', label: 'Applied your rules', detail: '3 rules · 3 learned habits' },
+        { tool: 'model', label: 'Chose: find time', ms: 1210 },
+        { tool: 'ask', label: 'Needs a length first', detail: 'I never guess a time' },
+      ],
     }),
   };
 }

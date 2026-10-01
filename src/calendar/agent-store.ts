@@ -76,7 +76,8 @@ export function startPreviewChat(p: typeof preview): void {
 export async function sendMessage(text: string): Promise<ChatMessage> {
   if (preview) {
     const reply = preview.reply(text);
-    return new Promise((r) => setTimeout(() => r(reply), 700));
+    // long enough to watch the working card walk its stages
+    return new Promise((r) => setTimeout(() => r(reply), 2400));
   }
   const res = await apiFetch('/api/ai/chat', {
     method: 'POST',
