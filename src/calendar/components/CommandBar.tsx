@@ -1,14 +1,30 @@
-import { StyleSheet, View } from 'react-native';
+import { type GestureResponderEvent, StyleSheet, View } from 'react-native';
 
 import { Logo } from '@/design/Logo';
 
 import { useAccounts } from '../account-store';
 import { Icon } from '../Icon';
-import type { CalActions, CalState, Page, ViewKind } from '../state';
+import type { CalActions, CalState, Page, PointAnchor, ViewKind } from '../state';
 import { N, R, SANS, SHADOW, T } from '../tokens';
 import { Button, Press, Txt } from '../ui';
 import { useResponsive } from '../useResponsive';
 import { AccountButton } from './AccountButton';
+
+/**
+ * A point just under the pressed heading, for the date picker. Popover places
+ * its card at (x + 12, y - 12), so this lands it flush left, 8px below. On web
+ * the heading's own box is used; press coordinates are not reliable there.
+ */
+function underTarget(e: GestureResponderEvent, alignRight?: number) {
+  const el = e.currentTarget as unknown as { getBoundingClientRect?: () => DOMRect };
+  if (typeof el?.getBoundingClientRect === 'function') {
+    const r = el.getBoundingClientRect();
+    // Right-aligned: the card's right edge on the button's (alignRight = card width).
+    return { x: alignRight ? r.right - alignRight - 12 : r.left - 12, y: r.bottom + 20 };
+  }
+  const { pageX, pageY } = e.nativeEvent;
+  return { x: alignRight ? pageX - alignRight : pageX - 24, y: pageY + 36 };
+}
 
 const PAGES: { key: Page; label: string }[] = [
   { key: 'planner', label: 'Planner' },
@@ -48,7 +64,7 @@ export function CommandBar({
   title: string;
   /** clashes + proposals waiting — the dot on Insights */
   needsYou: number;
-  onShow: () => void;
+  onShow: (anchor?: PointAnchor) => void;
   /** desktop: draw only the app bar or only the toolbar (the AI panel docks beside the toolbar) */
   part?: 'app' | 'tools';
   aiOpen?: boolean;
@@ -66,7 +82,7 @@ export function CommandBar({
           <Logo size={16} color={N.onInk} />
         </View>
         <Press
-          onPress={actions.openPicker}
+          onPress={(e) => actions.openPicker(underTarget(e))}
           accessibilityRole="button"
           aria-label={`Showing ${title}. Pick a date`}
           style={styles.periodBtn}>
@@ -131,7 +147,7 @@ export function CommandBar({
 
   const toolbar = (
       <View style={[styles.bar, styles.toolbar]}>
-        <Press onPress={actions.openPicker} hoverBg={N.hover} accessibilityRole="button" aria-label={`Showing ${title}. Pick a date`} style={styles.periodBtn}>
+        <Press onPress={(e) => actions.openPicker(underTarget(e))} hoverBg={N.hover} accessibilityRole="button" aria-label={`Showing ${title}. Pick a date`} style={styles.periodBtn}>
           <Txt style={styles.period} numberOfLines={1}>
             {title}
           </Txt>
@@ -168,13 +184,14 @@ export function CommandBar({
               onPress={() => actions.openCompose(null)}
               icon={<Icon name="add" size={14} color={N.ink2} />}
             />
-            <Button
-              variant="ghost"
-              onPress={onShow}
-              accessibilityLabel="Show, hours and calendars"
-              icon={<Icon name="eye" size={16} color={N.ink2} />}
-              style={styles.navBtn}
-            />
+            <Press
+              onPress={(e) => onShow(underTarget(e, 340))}
+              hoverBg={N.hover}
+              accessibilityRole="button"
+              aria-label="Show, hours and calendars"
+              style={styles.navBtn}>
+              <Icon name="eye" size={16} color={N.ink2} />
+            </Press>
           </>
         )}
       </View>

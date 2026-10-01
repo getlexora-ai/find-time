@@ -6,10 +6,10 @@ import { fromIso, MO, wdIndex, WD_LONG } from '../cal-date';
 import { Icon, type IconName } from '../Icon';
 import { KINDS, paint, PICKABLE } from '../kinds';
 import type { CalActions, PointAnchor } from '../state';
-import { CATS, durLabel, N, R, SANS, T } from '../tokens';
+import { CATS, durLabel, N, SANS } from '../tokens';
 import type { CalEvent } from '../types';
-import { Button, CalSwatch, Label, Mono, Txt } from '../ui';
-import { Chip, spanMin } from './ComposeSheet';
+import { Button, CalSwatch, Chip, Label, Txt } from '../ui';
+import { spanMin } from './ComposeSheet';
 import { Popover } from './Popover';
 import { useToast } from './Toast';
 
@@ -57,7 +57,7 @@ export function EventDetail({
     : `${WD_LONG[wdIndex(date)]} ${date.getDate()} ${MO[date.getMonth()].slice(0, 3)} · ${ev.start}–${ev.end}${ev.endDate ? ' next day' : ''} · ${durLabel(dur)}`;
 
   return (
-    <Popover anchor={anchor} width={340} estHeight={420} onClose={onClose} label={ev.title}>
+    <Popover anchor={anchor} width={380} estHeight={460} onClose={onClose} label={ev.title}>
       <View style={styles.top}>
         <View style={[styles.kindMark, ...p.box]}>
           <Icon name={p.spec.icon} size={12} color={p.glyph} />
@@ -176,6 +176,7 @@ export function EventDetail({
                 on={ev.kind === k}
                 icon={KINDS[k].icon}
                 label={KINDS[k].label}
+                color={p.color}
                 onPress={() =>
                   void setKind(ev.id, k).then((ok) =>
                     toast(ok ? `Now a ${KINDS[k].label.toLowerCase()}` : SAVE_FAILED),
@@ -187,9 +188,9 @@ export function EventDetail({
         </>
       )}
       {!ev.allDay && (
-        <Mono style={styles.tip}>
-          {ev.imported ? 'Read-only on the grid' : 'Tip: drag the tile to move it, its edges to resize'}
-        </Mono>
+        <Txt style={styles.tip}>
+          {ev.imported ? 'Read-only on the grid' : 'Drag the tile to move it, its edges to resize'}
+        </Txt>
       )}
     </Popover>
   );
@@ -208,29 +209,29 @@ function Line({ icon, children }: { icon: IconName; children: React.ReactNode })
 
 const styles = StyleSheet.create({
   top: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  kindMark: { width: 20, height: 20, borderRadius: R.sm, alignItems: 'center', justifyContent: 'center' },
+  kindMark: { width: 24, height: 24, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
   kindLabel: { color: N.muted },
   close: { width: 28, height: 28 },
-  title: { marginTop: 10, fontFamily: SANS, ...T.heading, color: N.ink },
-  meta: { marginTop: 12, gap: 8 },
+  title: { marginTop: 12, fontFamily: SANS, fontSize: 20, lineHeight: 26, fontWeight: '600', letterSpacing: -0.4, color: N.ink },
+  meta: { marginTop: 14, gap: 10 },
   line: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  lineIcon: { width: 16, alignItems: 'center' },
-  lineTxt: { flex: 1, fontFamily: SANS, ...T.caption, color: N.ink2 },
-  notes: { marginTop: 12, fontFamily: SANS, ...T.caption, color: N.ink2 },
+  lineIcon: { width: 18, alignItems: 'center' },
+  lineTxt: { flex: 1, fontFamily: SANS, fontSize: 14, lineHeight: 20, color: N.ink2, fontVariant: ['tabular-nums'] },
+  notes: { marginTop: 14, fontFamily: SANS, fontSize: 14, lineHeight: 21, color: N.ink2 },
   box: {
     marginTop: 12,
     flexDirection: 'row',
     gap: 8,
-    borderRadius: R.md,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: N.line,
     backgroundColor: N.sunken,
-    padding: 10,
+    padding: 12,
   },
   boxWarn: { borderColor: N.accent, backgroundColor: N.surface },
-  boxTxt: { flex: 1, fontFamily: SANS, ...T.caption, color: N.ink2 },
-  row: { marginTop: 16, flexDirection: 'row', gap: 6 },
-  kindHead: { marginTop: 18 },
-  chips: { marginTop: 8, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  tip: { marginTop: 14, color: N.faint },
+  boxTxt: { flex: 1, fontFamily: SANS, fontSize: 13, lineHeight: 19, color: N.ink2 },
+  row: { marginTop: 18, flexDirection: 'row', gap: 8 },
+  kindHead: { marginTop: 20 },
+  chips: { marginTop: 10, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  tip: { marginTop: 16, fontFamily: SANS, fontSize: 12, lineHeight: 16, color: N.faint },
 });

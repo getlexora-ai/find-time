@@ -2,8 +2,8 @@ import { Platform, StyleSheet, View } from 'react-native';
 
 import { connect, disconnect, setCalRead, syncNow, useAccounts } from '../account-store';
 import { Icon } from '../Icon';
-import { N, R, SANS, T } from '../tokens';
-import { Button, CalSwatch, Label, Mono, Press, Txt } from '../ui';
+import { CATS, N, R, SANS } from '../tokens';
+import { Button, CalSwatch, Label, Press, Txt } from '../ui';
 import { useToast } from './Toast';
 
 /**
@@ -45,13 +45,13 @@ export function GoogleCalendars() {
           <Icon name="check" size={10} color={N.onInk} />
         </View>
         <Txt style={styles.calName}>Find Time</Txt>
-        <Mono>own blocks</Mono>
+        <Txt style={styles.tag}>own blocks</Txt>
       </View>
 
       {!!error && <Txt style={styles.error}>{error}</Txt>}
 
       {loading ? (
-        <Mono style={styles.pad}>Loading…</Mono>
+        <Txt style={[styles.muted, styles.pad]}>Loading…</Txt>
       ) : !connected ? (
         isWeb ? (
           <Button
@@ -83,7 +83,7 @@ export function GoogleCalendars() {
                 <Icon name="trash" size={13} color={N.faint} />
               </Press>
             </View>
-            <Mono style={[styles.status, a.syncStatus === 'error' && styles.statusErr]}>
+            <Txt style={[styles.status, a.syncStatus === 'error' && styles.statusErr]}>
               {syncing
                 ? 'syncing…'
                 : a.syncStatus === 'error'
@@ -91,7 +91,7 @@ export function GoogleCalendars() {
                   : a.lastSyncAt
                     ? `synced ${ago(a.lastSyncAt)}`
                     : 'not synced yet'}
-            </Mono>
+            </Txt>
 
             {a.calendars.map((c) => (
               <Press
@@ -109,7 +109,7 @@ export function GoogleCalendars() {
                 <Txt style={[styles.calName, !c.readEnabled && styles.calOff]} numberOfLines={1}>
                   {c.name}
                 </Txt>
-                {c.isPrimary && <Mono>primary</Mono>}
+                {c.isPrimary && <Txt style={styles.tag}>primary</Txt>}
               </Press>
             ))}
           </View>
@@ -129,29 +129,30 @@ function ago(iso: string): string {
 
 const styles = StyleSheet.create({
   section: { paddingVertical: 16, borderTopWidth: 1, borderTopColor: N.line },
-  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, minHeight: 24 },
-  iconBtn: { height: 24, width: 24, alignItems: 'center', justifyContent: 'center', borderRadius: R.sm },
+  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, minHeight: 28 },
+  iconBtn: { height: 30, width: 30, alignItems: 'center', justifyContent: 'center', borderRadius: R.md },
   pad: { paddingVertical: 6 },
-  muted: { fontFamily: SANS, ...T.caption, color: N.muted },
-  error: { fontFamily: SANS, ...T.caption, color: N.accentInk, marginBottom: 8 },
+  muted: { fontFamily: SANS, fontSize: 13, lineHeight: 18, color: N.muted },
+  error: { fontFamily: SANS, fontSize: 13, lineHeight: 18, color: N.accentInk, marginBottom: 8 },
   connect: { marginTop: 8, alignSelf: 'stretch' },
-  account: { marginTop: 10 },
+  account: { marginTop: 12 },
   acctHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  acctEmail: { flex: 1, fontFamily: SANS, ...T.caption, color: N.ink2 },
-  status: { marginBottom: 4 },
+  acctEmail: { flex: 1, fontFamily: SANS, fontSize: 13, lineHeight: 18, color: N.ink2 },
+  status: { marginBottom: 4, fontFamily: SANS, fontSize: 12, lineHeight: 16, color: N.muted },
   statusErr: { color: N.accentInk },
-  calRow: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: R.sm, paddingVertical: 5, paddingHorizontal: 2 },
+  tag: { fontFamily: SANS, fontSize: 12, lineHeight: 16, color: N.muted },
+  calRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: R.md, paddingVertical: 7, paddingHorizontal: 6, marginHorizontal: -6 },
   box: {
-    height: 14,
-    width: 14,
-    borderRadius: R.xs,
-    borderWidth: 1,
+    height: 18,
+    width: 18,
+    borderRadius: 5,
+    borderWidth: 1.5,
     borderColor: N.lineStrong,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: N.surface,
   },
-  boxOn: { backgroundColor: N.ink, borderColor: N.ink },
-  calName: { flex: 1, fontFamily: SANS, ...T.caption, color: N.ink },
+  boxOn: { backgroundColor: CATS.deep.color, borderColor: CATS.deep.color },
+  calName: { flex: 1, fontFamily: SANS, fontSize: 14, lineHeight: 20, color: N.ink },
   calOff: { color: N.faint },
 });

@@ -7,10 +7,10 @@ import { useHours, workFor } from '../hours';
 import { Icon } from '../Icon';
 import { KINDS, PICKABLE } from '../kinds';
 import type { ComposePreset, Slot } from '../state';
-import { durLabel, N, R, SANS, T } from '../tokens';
+import { CATS, durLabel, N, SANS } from '../tokens';
 import type { EventKind } from '../types';
-import { Button, Label, Mono, Txt } from '../ui';
-import { Chip, DEFAULT_CAT } from './ComposeSheet';
+import { Button, Chip, INPUT, Txt } from '../ui';
+import { DEFAULT_CAT } from './ComposeSheet';
 import { Popover } from './Popover';
 
 /**
@@ -54,11 +54,11 @@ export function QuickCreate({
   };
 
   return (
-    <Popover anchor={slot.anchor} width={340} estHeight={250} onClose={onClose} label="New block">
-      <Label>New block</Label>
-      <Mono style={styles.when}>
-        {WD[wdIndex(d)]} {d.getDate()} {MO[d.getMonth()].slice(0, 3)} · {slot.start}–{slot.end} · {durLabel(dur)}
-      </Mono>
+    <Popover anchor={slot.anchor} width={360} estHeight={330} onClose={onClose} label="New block">
+      <Txt style={styles.head}>New block</Txt>
+      <Txt style={styles.when}>
+        {WD[wdIndex(d)]} {d.getDate()} {MO[d.getMonth()].slice(0, 3)} · {slot.start} – {slot.end} · {durLabel(dur)}
+      </Txt>
       {offHours && <Txt style={styles.note}>Outside your working hours — that is fine, it is your time.</Txt>}
 
       <TextInput
@@ -75,7 +75,14 @@ export function QuickCreate({
 
       <View style={styles.chips}>
         {PICKABLE.map((k) => (
-          <Chip key={k} on={k === kind} onPress={() => setKind(k)} icon={KINDS[k].icon} label={KINDS[k].label} />
+          <Chip
+            key={k}
+            on={k === kind}
+            onPress={() => setKind(k)}
+            icon={KINDS[k].icon}
+            label={KINDS[k].label}
+            color={CATS[DEFAULT_CAT[k]].color}
+          />
         ))}
       </View>
 
@@ -97,19 +104,10 @@ export function QuickCreate({
 }
 
 const styles = StyleSheet.create({
-  when: { marginTop: 6, fontSize: 11, color: N.ink2 },
-  note: { marginTop: 6, fontFamily: SANS, ...T.caption, color: N.muted },
-  input: {
-    marginTop: 14,
-    height: 40,
-    borderRadius: R.md,
-    borderWidth: 1,
-    borderColor: N.lineStrong,
-    paddingHorizontal: 12,
-    fontFamily: SANS,
-    fontSize: 14,
-    color: N.ink,
-  },
-  chips: { marginTop: 12, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  footer: { marginTop: 16, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  head: { fontFamily: SANS, fontSize: 18, lineHeight: 24, fontWeight: '600', letterSpacing: -0.3, color: N.ink },
+  when: { marginTop: 4, fontFamily: SANS, fontSize: 14, lineHeight: 20, color: N.ink2, fontVariant: ['tabular-nums'] },
+  note: { marginTop: 6, fontFamily: SANS, fontSize: 13, lineHeight: 18, color: N.muted },
+  input: { ...INPUT, marginTop: 16 },
+  chips: { marginTop: 12, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  footer: { marginTop: 18, flexDirection: 'row', alignItems: 'center', gap: 8 },
 });

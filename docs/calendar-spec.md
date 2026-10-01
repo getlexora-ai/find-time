@@ -460,3 +460,12 @@ planner was the guide, not the template.
   step really runs, then the `message`. The model's row is the tool it
   actually called. To add a tool: add its ToolDef to CHAT_TOOLS and a registry
   entry with the same key.
+- **One set of primitives** (2026-10-01): every surface (month picker,
+  event popover, quick create, New/Edit sheet, Show sheet) draws from
+  `ui.tsx`. `Chip` is a 34px pill, 13px; when selected it fills with a tint of
+  its colour (a category's own, or the event's for kind chips). `INPUT` is a
+  42px, 15px sans field. `Label` is 13px ink2. The month picker uses round
+  34px days, today as the ink disc (the same as the grid header), the selected
+  day in the deep-work tint, and the shown week as a soft band. It opens
+  under the heading (desktop) and inline in the sheet for Date. The Show sheet
+  opens under the eye button. No surface draws its own chip or input style.

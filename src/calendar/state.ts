@@ -56,6 +56,7 @@ export type CalActions = {
   openList: (title: string, events: CalEvent[], anchor?: PointAnchor) => void;
   openAI: (prefill?: string) => void;
   closeAI: () => void;
-  openPicker: () => void;
+  /** `anchor`: where to open it on desktop (under the heading); a sheet on a phone */
+  openPicker: (anchor?: PointAnchor) => void;
   toast: (msg: string, action?: ToastAction) => void;
 };

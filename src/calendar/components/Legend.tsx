@@ -1,9 +1,9 @@
 import { StyleSheet, View } from 'react-native';
 
 import { KIND_KEYS, KINDS, paint } from '../kinds';
-import { N, R, SANS, T } from '../tokens';
+import { N, R, SANS } from '../tokens';
 import type { CalEvent, EventKind } from '../types';
-import { Label, Mono, Press, Txt } from '../ui';
+import { Label, Press, Txt } from '../ui';
 
 /**
  * The legend, which is also the filter. Each row's swatch IS the tile — drawn
@@ -15,14 +15,17 @@ export function Legend({
   hidden,
   onToggleKind,
   touch = false,
+  first = false,
 }: {
   events: CalEvent[];
   hidden: Set<EventKind>;
   onToggleKind: (k: EventKind) => void;
   touch?: boolean;
+  /** the first section of a sheet: no rule above it */
+  first?: boolean;
 }) {
   return (
-    <View style={styles.section}>
+    <View style={[styles.section, first && styles.first]}>
       <Label>Show</Label>
       <View style={styles.list}>
         {KIND_KEYS.map((k) => {
@@ -40,7 +43,7 @@ export function Legend({
               style={[styles.row, touch && styles.rowTouch]}>
               <View style={[styles.swatch, ...paint({ kind: k }).box, off && styles.swatchOff]} />
               <Txt style={[styles.label, off && styles.labelOff]}>{spec.label}</Txt>
-              <Mono>{off ? 'hidden' : n}</Mono>
+              <Txt style={styles.count}>{off ? 'hidden' : n}</Txt>
             </Press>
           );
         })}
@@ -51,11 +54,13 @@ export function Legend({
 
 const styles = StyleSheet.create({
   section: { paddingVertical: 16, borderTopWidth: 1, borderTopColor: N.line },
-  list: { marginTop: 6 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: R.sm, paddingVertical: 5, paddingHorizontal: 2 },
-  rowTouch: { paddingVertical: 10 },
-  swatch: { width: 16, height: 12, borderRadius: R.xs },
+  first: { paddingTop: 0, borderTopWidth: 0 },
+  list: { marginTop: 8 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: R.md, paddingVertical: 7, paddingHorizontal: 6, marginHorizontal: -6 },
+  rowTouch: { paddingVertical: 11 },
+  swatch: { width: 16, height: 16, borderRadius: 5 },
   swatchOff: { opacity: 0.3 },
-  label: { flex: 1, fontFamily: SANS, ...T.caption, color: N.ink },
+  label: { flex: 1, fontFamily: SANS, fontSize: 14, lineHeight: 20, color: N.ink },
+  count: { fontFamily: SANS, fontSize: 13, lineHeight: 18, color: N.muted, fontVariant: ['tabular-nums'] },
   labelOff: { color: N.faint, textDecorationLine: 'line-through' },
 });

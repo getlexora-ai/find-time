@@ -6,11 +6,13 @@ import {
   StyleSheet,
   Text,
   type TextProps,
+  type TextStyle,
   View,
   type ViewStyle,
 } from 'react-native';
 
-import { MONO, N, R, SANS, SHADOW, T, TRANSITION } from './tokens';
+import { Icon, type IconName } from './Icon';
+import { CATS, MONO, N, R, SANS, SHADOW, T, tint, TRANSITION } from './tokens';
 
 export { MONO, SANS };
 
@@ -161,12 +163,80 @@ export function CalSwatch({ color, size = 6 }: { color: string; size?: number })
   return <View style={{ width: size, height: size, borderRadius: 1, backgroundColor: color }} />;
 }
 
+/**
+ * A choice pill — kinds, categories, lengths, answers (quiet calendar).
+ * Off: white with a hairline. On: a tint of `color` (default deep work) with
+ * ink text, so a picked category reads in its own colour. `dot` draws the
+ * category's colour square in front of the label.
+ */
+export function Chip({
+  on,
+  onPress,
+  label,
+  icon,
+  color = CATS.deep.color,
+  dot,
+}: {
+  on: boolean;
+  onPress: () => void;
+  label: string;
+  icon?: IconName;
+  color?: string;
+  dot?: string;
+}) {
+  return (
+    <Press
+      onPress={onPress}
+      accessibilityRole="radio"
+      aria-checked={on}
+      hoverBg={on ? undefined : N.sunken}
+      style={[
+        chip.base,
+        on ? { backgroundColor: tint(color, 0.16), borderColor: tint(color, 0.55) } : chip.off,
+      ]}>
+      {!!dot && <View style={[chip.dot, { backgroundColor: dot }]} />}
+      {icon && <Icon name={icon} size={14} color={on ? color : N.muted} />}
+      <Text style={[chip.txt, on && chip.txtOn]}>{label}</Text>
+    </Press>
+  );
+}
+
+const chip = StyleSheet.create({
+  base: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 34,
+    borderRadius: R.full,
+    borderWidth: 1,
+    paddingHorizontal: 13,
+  },
+  off: { backgroundColor: N.surface, borderColor: N.lineStrong },
+  dot: { width: 9, height: 9, borderRadius: 3 },
+  txt: { fontFamily: SANS, fontSize: 13, lineHeight: 18, fontWeight: '500', color: N.ink2, fontVariant: ['tabular-nums'] },
+  txtOn: { color: N.ink, fontWeight: '600' },
+});
+
+/** Every text field in the calendar: 15px sans, 42px tall, a hairline that turns ink on focus (global.css). */
+export const INPUT = {
+  height: 42,
+  borderRadius: R.lg,
+  borderWidth: 1,
+  borderColor: N.lineStrong,
+  backgroundColor: N.surface,
+  paddingHorizontal: 12,
+  color: N.ink,
+  fontFamily: SANS,
+  fontSize: 15,
+  fontVariant: ['tabular-nums'],
+} satisfies TextStyle;
+
 const styles = StyleSheet.create({
   txt: { fontFamily: SANS, color: N.ink, ...T.body, fontWeight: '400' },
   // Quiet calendar: numbers and small labels are the sans face too (tabular
   // figures keep times aligned). The name stays so call sites need not change.
   mono: { fontFamily: SANS, color: N.muted, fontSize: 12, lineHeight: 16, fontVariant: ['tabular-nums'] },
-  label: { fontFamily: SANS, color: N.muted, fontSize: 12, lineHeight: 16, fontWeight: '500' },
+  label: { fontFamily: SANS, color: N.ink2, fontSize: 13, lineHeight: 18, fontWeight: '500' },
   btn: {
     height: 34,
     flexDirection: 'row',

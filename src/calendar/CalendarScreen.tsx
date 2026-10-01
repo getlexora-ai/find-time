@@ -153,8 +153,8 @@ export function CalendarScreen() {
   const [quick, setQuick] = useState<Slot | null>(null);
   const [list, setList] = useState<{ title: string; events: CalEvent[]; anchor: PointAnchor | null } | null>(null);
   const [ai, setAi] = useState<{ prefill?: string } | null>(null);
-  const [picker, setPicker] = useState(false);
-  const [filters, setFilters] = useState(false);
+  const [picker, setPicker] = useState<{ anchor: PointAnchor | null } | null>(null);
+  const [filters, setFilters] = useState<{ anchor: PointAnchor | null } | null>(null);
 
   const step = useCallback((dir: -1 | 1) => {
     setState((s) => {
@@ -192,7 +192,7 @@ export function CalendarScreen() {
       openList: (title, evs, anchor) => setList({ title, events: evs, anchor: anchor ?? null }),
       openAI: (prefill) => setAi({ prefill }),
       closeAI: () => setAi(null),
-      openPicker: () => setPicker(true),
+      openPicker: (anchor) => setPicker({ anchor: anchor ?? null }),
       toast,
     }),
     [step, toast],
@@ -230,8 +230,8 @@ export function CalendarScreen() {
         setDetail(null);
         setQuick(null);
         setList(null);
-        setPicker(false);
-        setFilters(false);
+        setPicker(null);
+        setFilters(null);
         return;
       }
       if (anyOpen) return;
@@ -312,7 +312,7 @@ export function CalendarScreen() {
             onPage={setPage}
             title={page === 'insights' ? insightsTitle(state.view, state.cursor, state.selected) : title}
             needsYou={clashes.pairs.length + proposals.length}
-            onShow={() => setFilters(true)}
+            onShow={(anchor) => setFilters({ anchor: anchor ?? null })}
             part={part}
             aiOpen={!!ai}
           />
@@ -412,22 +412,29 @@ export function CalendarScreen() {
       )}
       {ai && !isDesktop && aiPanel}
       {filters && (
-        <FilterSheet events={shown} hidden={hidden} onToggleKind={toggleKind} onClose={() => setFilters(false)} />
+        <FilterSheet
+          events={shown}
+          hidden={hidden}
+          onToggleKind={toggleKind}
+          anchor={filters.anchor}
+          onClose={() => setFilters(null)}
+        />
       )}
       {picker && (
         <PickerSheet
+          anchor={picker.anchor}
           selected={state.selected}
           events={shown}
           onPick={(d) => {
             setState((s) => ({ ...s, selected: fromIso(d), cursor: fromIso(d) }));
-            setPicker(false);
+            setPicker(null);
           }}
           onToday={() => {
             const t = today();
             setState((s) => ({ ...s, cursor: t, selected: new Date(t) }));
-            setPicker(false);
+            setPicker(null);
           }}
-          onClose={() => setPicker(false)}
+          onClose={() => setPicker(null)}
         />
       )}
     </SafeAreaView>

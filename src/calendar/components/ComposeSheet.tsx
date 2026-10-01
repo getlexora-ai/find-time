@@ -10,10 +10,11 @@ import { Icon } from '../Icon';
 import { KINDS, PICKABLE } from '../kinds';
 import { sliceOn } from '../layout';
 import type { ComposePreset } from '../state';
-import { CATS, CAT_KEYS, type CatKey, durLabel, MONO, N, R, SANS, SHADOW, SNAP, T } from '../tokens';
+import { CATS, CAT_KEYS, type CatKey, durLabel, N, R, SANS, SHADOW, SNAP } from '../tokens';
 import type { CalEvent, EventKind } from '../types';
-import { Button, Label, Mono, NEXUS_SURFACE, Press, Txt } from '../ui';
+import { Button, Chip, INPUT, Label, NEXUS_SURFACE, Press, Txt } from '../ui';
 import { useResponsive } from '../useResponsive';
+import { MiniMonth } from './MiniMonth';
 
 const DURATIONS = [15, 30, 45, 60, 90, 120, 180];
 
@@ -108,6 +109,7 @@ export function ComposeSheet({
   /** set once the person has seen the "outside your hours" line and pressed Save again */
   const [confirmOutside, setConfirmOutside] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pickDate, setPickDate] = useState(false);
 
   const s = isTime(start) ? toMin(start) : NaN;
   const outside =
@@ -205,6 +207,7 @@ export function ComposeSheet({
                     }}
                     icon={KINDS[k].icon}
                     label={KINDS[k].label}
+                    color={CATS[cat].color}
                   />
                 ))}
               </View>
@@ -213,16 +216,18 @@ export function ComposeSheet({
 
             <View style={styles.two}>
               <Field label="Date" style={{ flex: 1 }}>
-                <TextInput
-                  value={date}
-                  onChangeText={(v) => {
-                    setDate(v);
-                    setConfirmOutside(false);
-                  }}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor={N.faint}
-                  style={[styles.input, styles.mono]}
-                />
+                <Press
+                  onPress={() => setPickDate((v) => !v)}
+                  hoverBg={N.sunken}
+                  accessibilityRole="button"
+                  aria-label={`Date: ${d ? `${WD[wdIndex(d)]} ${d.getDate()} ${MO[d.getMonth()]}` : 'pick a date'}`}
+                  aria-expanded={pickDate}
+                  style={[styles.input, styles.dateBtn, pickDate && styles.dateBtnOn]}>
+                  <Icon name="calendar" size={15} color={N.muted} />
+                  <Txt style={styles.dateTxt}>
+                    {d ? `${WD[wdIndex(d)]} ${d.getDate()} ${MO[d.getMonth()].slice(0, 3)} ${d.getFullYear()}` : 'Pick a date'}
+                  </Txt>
+                </Press>
               </Field>
               <Field label="Start" style={{ flex: 1 }}>
                 <TextInput
@@ -234,15 +239,29 @@ export function ComposeSheet({
                   }}
                   placeholder="HH:MM"
                   placeholderTextColor={N.faint}
-                  style={[styles.input, styles.mono, find && styles.inputOff]}
+                  style={[styles.input, find && styles.inputOff]}
                 />
               </Field>
             </View>
 
+            {pickDate && (
+              <View style={styles.inlinePick}>
+                <MiniMonth
+                  selected={d ?? fromIso(defaultDate)}
+                  events={allEvents()}
+                  onPick={(v) => {
+                    setDate(v);
+                    setConfirmOutside(false);
+                    setPickDate(false);
+                  }}
+                />
+              </View>
+            )}
+
             <Field label="Length">
               <View style={styles.chips}>
                 {(DURATIONS.includes(dur) ? DURATIONS : [...DURATIONS, dur].sort((a, b) => a - b)).map((m) => (
-                  <Chip key={m} on={m === dur} onPress={() => setDur(m)} label={durLabel(m)} mono />
+                  <Chip key={m} on={m === dur} onPress={() => setDur(m)} label={durLabel(m)} color={CATS[cat].color} />
                 ))}
               </View>
             </Field>
@@ -269,7 +288,7 @@ export function ComposeSheet({
             <Field label="Category">
               <View style={styles.chips}>
                 {CAT_KEYS.map((k) => (
-                  <Chip key={k} on={k === cat} onPress={() => setCat(k)} label={CATS[k].label} />
+                  <Chip key={k} on={k === cat} onPress={() => setCat(k)} label={CATS[k].label} color={CATS[k].color} dot={CATS[k].color} />
                 ))}
               </View>
             </Field>
@@ -300,8 +319,8 @@ export function ComposeSheet({
               <View style={styles.warn}>
                 <Icon name="clock" size={14} color={N.accentInk} />
                 <Txt style={styles.warnTxt}>
-                  Outside your hours ({pad(hours.start)}:00–{pad(hours.end % 24)}:00). It will show as a chip at the
-                  edge of the day. Press Save again to keep it.
+                  Outside your hours ({pad(hours.start)}:00–{pad(hours.end % 24)}:00). It will show as a +1 in that day&apos;s
+                  header. Press Save again to keep it.
                 </Txt>
               </View>
             )}
@@ -336,42 +355,14 @@ export function ComposeSheet({
 
 function Field({ label, children, style }: { label: string; children: React.ReactNode; style?: object }) {
   return (
-    <View style={[{ marginTop: 18 }, style]}>
+    <View style={[{ marginTop: 22 }, style]}>
       <Label>{label}</Label>
-      <View style={{ marginTop: 8 }}>{children}</View>
+      <View style={{ marginTop: 10 }}>{children}</View>
     </View>
   );
 }
 
-export function Chip({
-  on,
-  onPress,
-  label,
-  icon,
-  mono,
-}: {
-  on: boolean;
-  onPress: () => void;
-  label: string;
-  icon?: Parameters<typeof Icon>[0]['name'];
-  mono?: boolean;
-}) {
-  return (
-    <Press
-      onPress={onPress}
-      accessibilityRole="radio"
-      aria-checked={on}
-      hoverBg={on ? undefined : N.sunken}
-      style={[styles.chip, on ? styles.chipOn : [styles.chipOff, SHADOW.sm]]}>
-      {icon && <Icon name={icon} size={13} color={on ? N.onInk : N.muted} />}
-      {mono ? (
-        <Mono style={[styles.chipTxt, styles.chipMono, { color: on ? N.onInk : N.ink2 }]}>{label}</Mono>
-      ) : (
-        <Txt style={[styles.chipTxt, { color: on ? N.onInk : N.ink2 }]}>{label}</Txt>
-      )}
-    </Press>
-  );
-}
+export { Chip };
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: N.scrim },
@@ -379,45 +370,33 @@ const styles = StyleSheet.create({
   backdropCenter: { justifyContent: 'center', alignItems: 'center', padding: 20 },
   panel: { backgroundColor: N.surface, maxHeight: '92%' },
   panelSheet: { width: '100%', borderTopLeftRadius: R.xl, borderTopRightRadius: R.xl },
-  panelModal: { width: '100%', maxWidth: 520, borderRadius: R.xl },
-  pad: { padding: 20 },
+  panelModal: { width: '100%', maxWidth: 540, borderRadius: 16 },
+  pad: { padding: 24 },
   head: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  title: { marginTop: 6, fontFamily: SANS, ...T.heading, color: N.ink },
-  hint: { marginTop: 6, fontFamily: SANS, ...T.caption, color: N.muted },
-  input: {
-    height: 40,
-    borderRadius: R.md,
-    borderWidth: 1,
-    borderColor: N.lineStrong,
-    backgroundColor: N.surface,
-    paddingHorizontal: 12,
-    color: N.ink,
-    fontFamily: SANS,
-    fontSize: 14,
-  },
+  title: { marginTop: 4, fontFamily: SANS, fontSize: 22, lineHeight: 28, fontWeight: '600', letterSpacing: -0.5, color: N.ink, fontVariant: ['tabular-nums'] },
+  hint: { marginTop: 8, fontFamily: SANS, fontSize: 13, lineHeight: 18, color: N.muted },
+  input: { ...INPUT },
   inputOff: { backgroundColor: N.sunken, color: N.muted },
-  mono: { fontFamily: MONO, fontSize: 13 },
+  dateBtn: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  dateBtnOn: { borderColor: N.ink },
+  dateTxt: { fontFamily: SANS, fontSize: 15, lineHeight: 20, color: N.ink, fontVariant: ['tabular-nums'] },
+  inlinePick: { marginTop: 12, borderRadius: 12, borderWidth: 1, borderColor: N.line, paddingHorizontal: 12, paddingVertical: 10 },
   textarea: { height: 80, paddingTop: 10, textAlignVertical: 'top' },
   two: { flexDirection: 'row', gap: 12 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 32, borderRadius: R.md, paddingHorizontal: 11 },
-  chipOn: { backgroundColor: N.ink },
-  chipOff: { backgroundColor: N.surface },
-  chipTxt: { fontFamily: SANS, fontSize: 12, lineHeight: 16, fontWeight: '500' },
-  chipMono: { fontFamily: MONO, fontWeight: '400', fontSize: 11 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   toggle: {
     marginTop: 18,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    borderRadius: R.lg,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: N.line,
-    padding: 12,
+    padding: 14,
   },
-  toggleTitle: { fontFamily: SANS, ...T.body, color: N.ink },
+  toggleTitle: { fontFamily: SANS, fontSize: 15, lineHeight: 20, fontWeight: '500', color: N.ink },
   track: { width: 34, height: 20, borderRadius: R.full, backgroundColor: N.ghost },
-  trackOn: { backgroundColor: N.ink },
+  trackOn: { backgroundColor: CATS.deep.color },
   knob: { position: 'absolute', top: 2, left: 2, height: 16, width: 16, borderRadius: R.full, backgroundColor: N.surface },
   knobOn: { left: 16 },
   warn: {
@@ -429,7 +408,7 @@ const styles = StyleSheet.create({
     borderColor: N.accent,
     padding: 10,
   },
-  warnTxt: { flex: 1, fontFamily: SANS, ...T.caption, color: N.ink2 },
-  error: { marginTop: 14, fontFamily: SANS, ...T.caption, color: N.accentInk },
+  warnTxt: { flex: 1, fontFamily: SANS, fontSize: 13, lineHeight: 18, color: N.ink2 },
+  error: { marginTop: 14, fontFamily: SANS, fontSize: 13, lineHeight: 18, color: N.accentInk },
   footer: { marginTop: 22, flexDirection: 'row', alignItems: 'center', gap: 8 },
 });
