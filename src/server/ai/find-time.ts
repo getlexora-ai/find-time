@@ -24,6 +24,7 @@
 // extension so that `node src/server/ai/*.check.mjs` can run these modules
 // directly with no build step (Node's ESM resolver does not guess extensions).
 // `module: preserve` in tsconfig makes tsc accept them.
+import { isImported } from '../../lib/synced-fields.ts';
 import type { AgentProfile } from './preferences.ts';
 import {
   type Interval,
@@ -37,6 +38,33 @@ import {
 
 export type Busy = { start: string; end: string };
 export type Slot = { startISO: string; endISO: string };
+
+/** The fields of a calendar event that decide whether it occupies its time. */
+export type BusyCandidate = {
+  flexibility?: string;
+  free?: boolean;
+  rsvp?: string | null;
+  allDay?: boolean;
+  origin?: string;
+};
+
+/**
+ * Whether an event takes its time away from the planner. Mirrors what the
+ * user's calendar itself says about the event:
+ *   - flexible blocks may be scheduled over;
+ *   - "free" (transparent) events and declined invitations are not busy time;
+ *   - an all-day event marks the day (a birthday, a working location), not
+ *     its hours. Google shows all-day events as free unless someone marked
+ *     them busy, so an imported one that still reads busy — a holiday, an
+ *     offsite — was marked on purpose and does block the day.
+ */
+export function blocksTime(e: BusyCandidate): boolean {
+  if (e.flexibility === 'flexible') return false;
+  if (e.free) return false;
+  if (e.rsvp === 'declined') return false;
+  if (e.allDay) return isImported(e.origin);
+  return true;
+}
 
 export type FindSpec = {
   durationMin: number;

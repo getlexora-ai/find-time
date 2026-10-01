@@ -1,6 +1,7 @@
 import type { FeedbackResponse, RejectReason } from '@/lib/api-types';
 import { requireUserId, unauthorized } from '@/server/auth/clerk';
 import { type Feedback, type Outcome, learnFrom } from '@/server/ai/learn';
+import { blocksTime } from '@/server/ai/find-time';
 import { type ScoreContext, type SlotFeatures, ZERO_FEATURES, slotFeatures } from '@/server/ai/scoring';
 import {
   evidenceCount,
@@ -118,7 +119,7 @@ export async function POST(request: Request): Promise<Response> {
       const dayTo = new Date(fe + 2 * 86_400_000).toISOString();
       const events = await listEvents(userId, dayFrom, dayTo);
       const busy = events
-        .filter((e) => e.flexibility !== 'flexible')
+        .filter(blocksTime)
         .map((e) => ({ s: Date.parse(e.start), e: Date.parse(e.end) }))
         .filter((b) => Number.isFinite(b.s) && Number.isFinite(b.e))
         .sort((a, b) => a.s - b.s);

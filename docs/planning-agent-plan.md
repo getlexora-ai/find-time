@@ -336,6 +336,10 @@ separate pure function that checks any plan against the hard constraints.
 coverage; consider a constraint solver (e.g. OR-Tools as a service) only if
 the heuristic fails the evaluation set.
 
+**Prior art:** [fluidcalendar-lessons.md](fluidcalendar-lessons.md) — what an
+open-source Motion clone got right (task model, pin-on-drag) and 20 traps to
+turn into checks before this engine is built.
+
 ---
 
 ## 9. Memory and learning

@@ -31,7 +31,7 @@ import {
   reportedMessageIds,
   shouldExplore,
 } from '@/server/ai/capture';
-import { buildScoreContext, rankFreeSlots, selectSlots, type RankedSlot } from '@/server/ai/find-time';
+import { blocksTime, buildScoreContext, rankFreeSlots, selectSlots, type RankedSlot } from '@/server/ai/find-time';
 import { SCORER_VERSION, slotNotes, ZERO_FEATURES } from '@/server/ai/scoring';
 import { ambiguousTime, checkPlaceAt, clashNote } from '@/server/ai/place-at';
 import { describeClaim } from '@/server/ai/learn';
@@ -224,9 +224,9 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
 
   const loadMs = Date.now() - t0;
 
-  // Flexible blocks may be scheduled over; everything else is a hard conflict.
+  // Only time the calendar itself calls busy is a conflict (see blocksTime).
   const busy = events
-    .filter((e) => e.flexibility !== 'flexible')
+    .filter(blocksTime)
     .map((e) => ({ start: e.start, end: e.end, title: e.title }));
 
   const card = preferenceCard(profile);

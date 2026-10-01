@@ -1,7 +1,7 @@
 import type { FindTimeProposal, FindTimeResponse } from '@/lib/api-types';
 import { requireUserId, unauthorized } from '@/server/auth/clerk';
 import { aiConfigured, extractWithTool } from '@/server/ai/gemini';
-import { findFreeSlots } from '@/server/ai/find-time';
+import { blocksTime, findFreeSlots } from '@/server/ai/find-time';
 import { isConfigured } from '@/server/db';
 import { enforceRateLimit } from '@/server/rate-limit';
 import { listEvents } from '@/server/events-repo';
@@ -132,9 +132,9 @@ export async function POST(request: Request): Promise<Response> {
     console.error('find-time listEvents', err);
     return Response.json({ error: 'Could not read your calendar.' }, { status: 500 });
   }
-  // Flexible blocks may be scheduled over; everything else is a hard conflict.
+  // Only time the calendar itself calls busy is a conflict (see blocksTime).
   const busy = events
-    .filter((e) => e.flexibility !== 'flexible')
+    .filter(blocksTime)
     .map((e) => ({ start: e.start, end: e.end, title: e.title }));
 
   let raw: Record<string, unknown>;

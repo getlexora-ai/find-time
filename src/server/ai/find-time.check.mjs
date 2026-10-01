@@ -4,7 +4,7 @@
  */
 import assert from 'node:assert/strict';
 
-const { findFreeSlots } = await import('./find-time.ts');
+const { blocksTime, findFreeSlots } = await import('./find-time.ts');
 
 const base = {
   earliestISO: '2026-09-09T00:00:00.000Z',
@@ -130,5 +130,26 @@ assert.deepEqual(s.map((x) => x.startISO), [
 s = findFreeSlots([], { ...base, durationMin: 60, count: 3 });
 assert.equal(s.length, 3);
 assert.ok(s.every((x) => x.startISO.startsWith('2026-09-09')));
+
+// ── what counts as busy ────────────────────────────────────────────────────
+// A timed meeting blocks; flexible blocks, "free" events and declined invites don't.
+assert.equal(blocksTime({ flexibility: 'fixed' }), true);
+assert.equal(blocksTime({ flexibility: 'flexible' }), false);
+assert.equal(blocksTime({ free: true }), false);
+assert.equal(blocksTime({ rsvp: 'declined' }), false);
+assert.equal(blocksTime({ rsvp: 'tentative' }), true);
+assert.equal(blocksTime({ rsvp: 'needsAction' }), true);
+// An all-day birthday or working location marks the day, not its hours…
+assert.equal(blocksTime({ allDay: true, origin: 'manual' }), false);
+assert.equal(blocksTime({ allDay: true, origin: 'imported', free: true }), false);
+// …but a holiday someone marked busy in Google keeps the day clear.
+assert.equal(blocksTime({ allDay: true, origin: 'imported' }), true);
+// An all-day row stored from midnight to midnight no longer empties the day.
+const day = [
+  { start: '2026-09-09T00:00:00.000Z', end: '2026-09-10T00:00:00.000Z', allDay: true, origin: 'manual' },
+  { start: '2026-09-09T10:00:00.000Z', end: '2026-09-09T11:00:00.000Z', rsvp: 'declined' },
+].filter(blocksTime);
+s = findFreeSlots(day, { ...base, durationMin: 60, count: 2 });
+assert.deepEqual(s.map((x) => x.startISO), ['2026-09-09T09:00:00.000Z', '2026-09-09T10:00:00.000Z']);
 
 console.log('find-time.check: ok');
