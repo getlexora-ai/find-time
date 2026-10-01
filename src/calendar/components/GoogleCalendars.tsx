@@ -92,6 +92,13 @@ export function GoogleCalendars() {
                     ? `synced ${ago(a.lastSyncAt)}`
                     : 'not synced yet'}
             </Txt>
+            {a.syncStatus === 'error' && !syncing && isWeb && (
+              // Reconnect re-runs the Google consent for this email; nothing is deleted.
+              <Press hoverBg={N.hover} style={styles.reconnect} accessibilityRole="button" onPress={connect}>
+                <Icon name="refresh" size={12} color={N.ink2} />
+                <Txt style={styles.reconnectTxt}>Reconnect</Txt>
+              </Press>
+            )}
 
             {a.calendars.map((c) => (
               <Press
@@ -140,6 +147,8 @@ const styles = StyleSheet.create({
   acctEmail: { flex: 1, fontFamily: SANS, fontSize: 13, lineHeight: 18, color: N.ink2 },
   status: { marginBottom: 4, fontFamily: SANS, fontSize: 12, lineHeight: 16, color: N.muted },
   statusErr: { color: N.accentInk },
+  reconnect: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', borderRadius: R.md, paddingVertical: 4, paddingHorizontal: 6, marginHorizontal: -6, marginBottom: 4 },
+  reconnectTxt: { fontFamily: SANS, fontSize: 12, lineHeight: 16, color: N.ink2, textDecorationLine: 'underline' },
   tag: { fontFamily: SANS, fontSize: 12, lineHeight: 16, color: N.muted },
   calRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: R.md, paddingVertical: 7, paddingHorizontal: 6, marginHorizontal: -6 },
   box: {

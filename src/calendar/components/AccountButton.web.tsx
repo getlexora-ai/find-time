@@ -7,12 +7,15 @@ import { apiFetch } from '@/lib/api';
 import { Icon } from '../Icon';
 import { N, SANS } from '../tokens';
 import { Txt } from '../ui';
+import { CalendarSettings } from './CalendarSettings';
 
 /**
  * Web account control: Clerk's `<UserButton />`. Its "Manage account" opens
  * Clerk's `<UserProfile />` as a modal overlay on top of the app; "Sign out"
- * clears the session. We add one custom item, "Delete account", which also wipes
- * the Neon data (FK cascade) before signing out.
+ * clears the session. We add a "Calendars" page to that profile (connect,
+ * reconnect, sync, disconnect Google — CalendarSettings), a menu item that
+ * opens it directly, and "Delete account", which also wipes the Neon data (FK
+ * cascade) before signing out.
  */
 export function AccountButton({ showName = false }: { showName?: boolean }) {
   const { user } = useUser();
@@ -40,7 +43,19 @@ export function AccountButton({ showName = false }: { showName?: boolean }) {
   return (
     <View style={styles.row}>
       <UserButton afterSignOutUrl="/login">
+        <UserButton.UserProfilePage
+          label="Calendars"
+          url="calendars"
+          labelIcon={<Icon name="calendar" size={14} color={N.ink2} />}>
+          <CalendarSettings />
+        </UserButton.UserProfilePage>
         <UserButton.MenuItems>
+          {/* Straight to the Calendars page in Manage account. */}
+          <UserButton.Action
+            label="Calendars"
+            labelIcon={<Icon name="calendar" size={14} color={N.ink2} />}
+            open="calendars"
+          />
           <UserButton.Action
             label="Delete account"
             labelIcon={<Icon name="trash" size={14} color={N.ink2} />}
