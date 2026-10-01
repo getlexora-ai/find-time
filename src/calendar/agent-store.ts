@@ -63,8 +63,21 @@ function restoreSession(): string | null {
 
 export class AgentError extends Error {}
 
+/**
+ * `/preview` only: a canned conversation, so the panel can be designed and
+ * screenshotted with no account and no network. Never set in the real app.
+ */
+let preview: { history: ChatMessage[]; reply: (text: string) => ChatMessage } | null = null;
+export function startPreviewChat(p: typeof preview): void {
+  preview = p;
+}
+
 /** Send one turn. Returns the assistant's reply. */
 export async function sendMessage(text: string): Promise<ChatMessage> {
+  if (preview) {
+    const reply = preview.reply(text);
+    return new Promise((r) => setTimeout(() => r(reply), 700));
+  }
   const res = await apiFetch('/api/ai/chat', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -86,6 +99,7 @@ export async function sendMessage(text: string): Promise<ChatMessage> {
 
 /** Rehydrate the open thread, so reopening the panel doesn't lose the context. */
 export async function loadHistory(): Promise<ChatMessage[]> {
+  if (preview) return preview.history;
   const id = restoreSession();
   if (!id) return [];
   try {

@@ -37,6 +37,8 @@ export function CommandBar({
   title,
   needsYou,
   onShow,
+  part,
+  aiOpen,
 }: {
   state: CalState;
   actions: CalActions;
@@ -47,6 +49,9 @@ export function CommandBar({
   /** clashes + proposals waiting — the dot on Insights */
   needsYou: number;
   onShow: () => void;
+  /** desktop: draw only the app bar or only the toolbar (the AI panel docks beside the toolbar) */
+  part?: 'app' | 'tools';
+  aiOpen?: boolean;
 }) {
   const { isDesktop } = useResponsive();
   const { accounts, syncing } = useAccounts();
@@ -79,9 +84,7 @@ export function CommandBar({
     );
   }
 
-  return (
-    <View>
-      {/* ── app bar ── */}
+  const appBar = (
       <View style={styles.bar}>
         <View style={styles.brand}>
           <View style={[styles.mark, SHADOW.sm]}>
@@ -117,15 +120,16 @@ export function CommandBar({
           <Txt style={[styles.sync, failed && styles.syncErr]}>{failed ? 'Sync failed' : 'Syncing…'}</Txt>
         )}
         <Button
-          variant="primary"
+          variant={aiOpen ? 'secondary' : 'primary'}
           label="Plan with AI"
-          onPress={() => actions.openAI()}
-          icon={<Icon name="magic" size={14} color={N.onInk} />}
+          onPress={() => (aiOpen ? actions.closeAI() : actions.openAI())}
+          icon={<Icon name="magic" size={14} color={aiOpen ? N.ink : N.onInk} />}
         />
         <AccountButton />
       </View>
+  );
 
-      {/* ── toolbar ── */}
+  const toolbar = (
       <View style={[styles.bar, styles.toolbar]}>
         <Press onPress={actions.openPicker} hoverBg={N.hover} accessibilityRole="button" aria-label={`Showing ${title}. Pick a date`} style={styles.periodBtn}>
           <Txt style={styles.period} numberOfLines={1}>
@@ -174,6 +178,14 @@ export function CommandBar({
           </>
         )}
       </View>
+  );
+
+  if (part === 'app') return appBar;
+  if (part === 'tools') return toolbar;
+  return (
+    <View>
+      {appBar}
+      {toolbar}
     </View>
   );
 }

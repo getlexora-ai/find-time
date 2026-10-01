@@ -3,10 +3,11 @@ import { useState } from 'react';
 import { View } from 'react-native';
 
 import { previewAccounts as setPreviewAccounts } from '@/calendar/account-store';
+import { startPreviewChat } from '@/calendar/agent-store';
 import { startPreview } from '@/calendar/cal-store';
 import { CalendarScreen } from '@/calendar/CalendarScreen';
 import { ToastProvider } from '@/calendar/components/Toast';
-import { previewAccounts, previewEvents } from '@/calendar/preview/fixture';
+import { previewAccounts, previewChat, previewEvents } from '@/calendar/preview/fixture';
 import { useMounted } from '@/design/useMounted';
 
 /**
@@ -22,6 +23,7 @@ export default function Preview() {
     if (!__DEV__) return false;
     startPreview(previewEvents());
     setPreviewAccounts(previewAccounts());
+    startPreviewChat(previewChat());
     return true;
   });
 

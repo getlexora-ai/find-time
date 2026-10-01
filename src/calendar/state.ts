@@ -55,6 +55,7 @@ export type CalActions = {
   /** a short list of events (a "+2" chip, "1 after 22:00") */
   openList: (title: string, events: CalEvent[], anchor?: PointAnchor) => void;
   openAI: (prefill?: string) => void;
+  closeAI: () => void;
   openPicker: () => void;
   toast: (msg: string, action?: ToastAction) => void;
 };

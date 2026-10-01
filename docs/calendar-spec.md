@@ -426,3 +426,16 @@ planner was the guide, not the template.
 - **Insights:** four cards (planned, focus protected, open capacity, plan
   health), "Needs you" (each clash → Resolve, each proposal → Review), and
   "Where the time goes" (hours per category against its target). Same `kpi.ts`.
+- **Plan with AI** (Reclaim's chat as the guide): on desktop a 400px panel
+  docked right of the toolbar and grid, under the app bar. No backdrop, so the
+  week stays usable and new blocks appear on the grid as you accept them. The
+  Plan with AI button toggles it. On a phone it is a light bottom sheet. Same
+  colours as the grid: white surface, ink text, your turns in the deep-work
+  tint, a proposal drawn as the grid's proposal tile (dashed accent) that turns
+  into the tint once added, status lines ("Rule saved") centred with a green
+  check, a rounded composer card with a round ink send button (Enter sends).
+  The dark lime "terminal" card is gone.
+- **Known gap:** an accepted AI block is stored with `kind: 'ai'` →
+  `origin: 'ai'`, and the adapter draws every AI-origin event as a proposal
+  (`api-adapter.ts` `kindOf`). So it stays dashed after you add it. The fix is
+  to split "made by AI" from "still a draft" in the data model.

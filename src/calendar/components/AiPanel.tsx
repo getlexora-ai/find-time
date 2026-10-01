@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, type TextStyle, View } from 'react-native';
 
 import type { ChatMessage, ChatProposal, RejectReason, ReportReason } from '@/lib/api-types';
 
@@ -16,8 +16,8 @@ import {
 } from '../agent-store';
 import { Icon } from '../Icon';
 
-import { C, R, rgba, w } from '@/design/tokens';
-import { MONO, Press, Txt } from '@/design/ui';
+import { BREAK_COLOR, CATS, N, R, SANS, SHADOW, T, tint, TINT } from '../tokens';
+import { NEXUS_SURFACE, Press, Txt } from '../ui';
 import { useResponsive } from '../useResponsive';
 
 /**
@@ -38,12 +38,19 @@ import { useResponsive } from '../useResponsive';
  * Replies that go wrong in ways a slot can't — misreading the request, ignoring
  * a rule — get a quiet "Report" link underneath. That goes to a review queue
  * (/api/ai/report), not straight into the agent, and the panel says so.
+ *
+ * Shell (quiet calendar, 2026-10-01): on desktop the panel is docked beside the
+ * grid — the week stays in view and usable while you talk, the way Reclaim's
+ * chat sits next to its planner. On a phone it is a light bottom sheet. It uses
+ * the calendar's own colours: your turns in the deep-work tint, proposals drawn
+ * like the proposal tile on the grid (dashed accent on white).
  */
 
 const STARTERS = [
   'Make room for 2h of deep work on Thursday',
   'Find three 45-minute review slots this week',
   'Never book me before 10',
+  'Move my gym to the evening',
 ];
 
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -80,8 +87,6 @@ export function AiPanel({
   onApplied: (firstISO?: string, count?: number, asked?: number) => void;
   toast: (m: string) => void;
 }) {
-  // The Ask panel is the dark terminal card from the B artboard, on purpose.
-  const theme = { panel: '#111111', panelBorder: 'rgba(255,255,255,0.08)' };
   const { isDesktop } = useResponsive();
 
   const [text, setText] = useState(prefill ?? '');
@@ -219,129 +224,165 @@ export function AiPanel({
 
   const empty = !booting && messages.length === 0;
 
+  const panel = (
+    <View
+      {...NEXUS_SURFACE}
+      role="complementary"
+      aria-label="Plan with AI"
+      style={[styles.panel, isDesktop ? styles.panelDocked : styles.panelSheet]}>
+      {!isDesktop && <View style={styles.grab} />}
+      <View style={styles.head}>
+        <Icon name="magic" size={16} color={N.ink} />
+        <Txt style={styles.headTitle}>Plan with AI</Txt>
+        <View style={styles.spacer} />
+        {messages.length > 0 && (
+          <Press onPress={startOver} hoverBg={N.hover} style={styles.iconBtn} aria-label="New conversation">
+            <Icon name="pen" size={17} color={N.ink2} />
+          </Press>
+        )}
+        <Press onPress={onClose} hoverBg={N.hover} style={styles.iconBtn} aria-label="Close">
+          <Icon name="close" size={18} color={N.ink2} />
+        </Press>
+      </View>
+
+      <ScrollView
+        ref={scroller}
+        style={styles.thread}
+        contentContainerStyle={[styles.threadPad, empty && styles.threadEmpty]}
+        onContentSizeChange={toBottom}>
+        {booting && (
+          <View style={styles.thinking}>
+            <ActivityIndicator size="small" color={N.muted} />
+          </View>
+        )}
+        {empty && (
+          <View style={styles.intro}>
+            <View style={styles.introMark}>
+              <Icon name="magic" size={22} color={CATS.deep.color} />
+            </View>
+            <Txt style={styles.introTitle}>What should we plan?</Txt>
+            <Txt style={styles.introTxt}>
+              Tell me what to make room for. I only move what is flexible, never a protected block, and
+              nothing is booked until you say so.
+            </Txt>
+            <View style={styles.starters}>
+              {STARTERS.map((st) => (
+                <Press key={st} onPress={() => void send(st)} hoverBg={N.sunken} style={styles.starter}>
+                  <Txt style={styles.starterTxt}>{st}</Txt>
+                  <Icon name="arrow-right" size={14} color={N.faint} />
+                </Press>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {messages.map((m) => (
+          <MessageRow
+            key={m.id}
+            message={m}
+            decisions={decisions}
+            rejecting={rejecting}
+            onAccept={onAccept}
+            onAcceptAlt={onAcceptAlt}
+            onReject={onReject}
+            onOpenReject={setRejecting}
+            onAnswer={(a) => void send(a)}
+            reported={Boolean(m.reported || reported[m.id])}
+            reporting={reporting === m.id}
+            onOpenReport={setReporting}
+            onReport={onReport}
+          />
+        ))}
+
+        {sending && (
+          <View style={styles.thinking}>
+            <ActivityIndicator size="small" color={N.muted} />
+            <Txt style={styles.thinkingTxt}>Reading your calendar…</Txt>
+          </View>
+        )}
+      </ScrollView>
+
+      <View style={styles.composer}>
+        <View style={[styles.inputBox, SHADOW.sm]}>
+          <TextInput
+            value={text}
+            onChangeText={setText}
+            multiline
+            autoFocus={isDesktop}
+            placeholder={messages.length ? 'Reply…' : 'What would you like to plan?'}
+            placeholderTextColor={N.faint}
+            style={[styles.input, INPUT_RESET]}
+            onKeyPress={(e) => {
+              // Enter sends, Shift+Enter breaks the line (web).
+              const ne = e.nativeEvent as unknown as { key: string; shiftKey?: boolean; preventDefault?: () => void };
+              if (Platform.OS === 'web' && ne.key === 'Enter' && !ne.shiftKey) {
+                (e as unknown as { preventDefault: () => void }).preventDefault();
+                void send(text);
+              }
+            }}
+            onSubmitEditing={() => void send(text)}
+            blurOnSubmit={false}
+          />
+          <View style={styles.inputRow}>
+            <Txt style={styles.inputHint}>{isDesktop ? 'Enter to send · Shift+Enter for a new line' : ' '}</Txt>
+            <Press
+              onPress={() => void send(text)}
+              disabled={sending || !text.trim()}
+              hoverBg={N.inkHover}
+              style={[styles.send, (sending || !text.trim()) && styles.sendOff]}
+              aria-label="Send">
+              <Icon name="arrow-right-up" size={16} color={sending || !text.trim() ? N.faint : N.onInk} />
+            </Press>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+
+  if (isDesktop) return panel;
+
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable
-        onPress={onClose}
-        style={[
-          styles.backdrop,
-          { backgroundColor: C.scrim },
-          isDesktop ? styles.backdropDrawer : styles.backdropSheet,
-        ]}>
-        <Pressable
-          onPress={(e) => e.stopPropagation()}
-          style={[
-            styles.panel,
-            { backgroundColor: theme.panel, borderColor: theme.panelBorder },
-            isDesktop ? styles.panelDrawer : styles.panelSheet,
-          ]}>
-          {/* the two concentric lime rings bleeding off the top-right corner */}
-          <View
-            pointerEvents="none"
-            style={[styles.rings, isDesktop ? styles.ringsDrawer : styles.ringsSheet]}>
-            <View style={[styles.ring, styles.ringOuter]} />
-            <View style={[styles.ring, styles.ringInner]} />
-          </View>
-
-          <View style={[styles.head, { paddingHorizontal: isDesktop ? 24 : 20 }]}>
-            {!isDesktop && <View style={styles.grab} />}
-            <View style={styles.headRow}>
-              <View>
-                <View style={styles.eyebrowRow}>
-                  <Icon name="magic" size={20} color={C.lime} />
-                  <Txt style={styles.eyebrow}>Find time</Txt>
-                </View>
-                <Txt style={styles.title}>What needs a slot?</Txt>
-              </View>
-              <View style={styles.headBtns}>
-                {messages.length > 0 && (
-                  <Press
-                    onPress={startOver}
-                    hoverBg={w(0.1)}
-                    style={styles.close}
-                    aria-label="New conversation">
-                    <Icon name="refresh" size={18} color={w(0.5)} />
-                  </Press>
-                )}
-                <Press onPress={onClose} hoverBg={w(0.1)} style={styles.close} aria-label="Close">
-                  <Icon name="close" size={20} color={w(0.5)} />
-                </Press>
-              </View>
-            </View>
-          </View>
-
-          <ScrollView
-            ref={scroller}
-            style={styles.thread}
-            contentContainerStyle={{ padding: isDesktop ? 24 : 20, paddingTop: 8, gap: 12 }}
-            onContentSizeChange={toBottom}>
-            {empty && (
-              <View style={styles.intro}>
-                <Txt style={styles.desc}>
-                  Tell me what to make room for. I only reshuffle what is flexible and never touch a
-                  protected block — and if I get it wrong, say so and I&apos;ll remember.
-                </Txt>
-                <View style={styles.chipRow}>
-                  {STARTERS.map((s) => (
-                    <Press key={s} onPress={() => void send(s)} hoverBg={w(0.05)} style={styles.chip}>
-                      <Txt style={styles.chipTxt}>{s}</Txt>
-                    </Press>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            {messages.map((m) => (
-              <MessageRow
-                key={m.id}
-                message={m}
-                decisions={decisions}
-                rejecting={rejecting}
-                onAccept={onAccept}
-                onAcceptAlt={onAcceptAlt}
-                onReject={onReject}
-                onOpenReject={setRejecting}
-                onAnswer={(a) => void send(a)}
-                reported={Boolean(m.reported || reported[m.id])}
-                reporting={reporting === m.id}
-                onOpenReport={setReporting}
-                onReport={onReport}
-              />
-            ))}
-
-            {sending && (
-              <View style={styles.thinking}>
-                <ActivityIndicator size="small" color={C.lime} />
-                <Txt style={styles.thinkingTxt}>Reading your calendar…</Txt>
-              </View>
-            )}
-          </ScrollView>
-
-          <View style={[styles.composer, { paddingHorizontal: isDesktop ? 24 : 20 }]}>
-            <View style={styles.inputBox}>
-              <TextInput
-                value={text}
-                onChangeText={setText}
-                multiline
-                placeholder={messages.length ? 'Reply…' : 'Make room for 2h deep work on Thursday'}
-                placeholderTextColor={w(0.25)}
-                style={styles.input}
-                onSubmitEditing={() => void send(text)}
-                blurOnSubmit={false}
-              />
-              <Press
-                onPress={() => void send(text)}
-                disabled={sending || !text.trim()}
-                hoverBg={C.limeHover}
-                style={[styles.run, (sending || !text.trim()) && styles.runOff]}
-                aria-label="Send">
-                <Icon name="arrow-right-up" size={16} color={C.surface} />
-              </Press>
-            </View>
-          </View>
+      <Pressable onPress={onClose} style={styles.backdrop} accessibilityLabel="Close">
+        <Pressable onPress={(e) => e.stopPropagation()} style={styles.sheetWrap}>
+          {panel}
         </Pressable>
       </Pressable>
     </Modal>
+  );
+}
+
+/** Removes the browser's focus outline on the bare input; the card around it is the field. */
+const INPUT_RESET = Platform.select({
+  web: { outlineStyle: 'none' } as unknown as TextStyle,
+  default: {},
+});
+
+/** "**Friday 2 Oct, 11:00–12:00** works" → the bold run in ink 600. */
+function Rich({ text }: { text: string }) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return (
+    <Text style={styles.botTxt}>
+      {parts.map((p, i) =>
+        p.startsWith('**') && p.endsWith('**') ? (
+          <Text key={i} style={styles.botStrong}>
+            {p.slice(2, -2)}
+          </Text>
+        ) : (
+          p
+        ),
+      )}
+    </Text>
+  );
+}
+
+/** A one-line, centred note that something happened ("Rule saved"). */
+function Status({ icon, children }: { icon: 'check' | 'stars' | 'calendar-mark'; children: React.ReactNode }) {
+  return (
+    <View style={styles.status}>
+      <Icon name={icon} size={14} color={BREAK_COLOR} />
+      <Txt style={styles.statusTxt}>{children}</Txt>
+    </View>
   );
 }
 
@@ -384,33 +425,22 @@ function MessageRow({
 
   return (
     <View style={styles.botRow}>
-      {message.text.length > 0 && <Txt style={styles.botTxt}>{message.text}</Txt>}
-
-      {message.savedRule && (
-        <View style={styles.ruleCard}>
-          <Icon name="stars" size={16} color={C.lime} />
-          <Txt style={styles.ruleTxt}>{message.savedRule.label}</Txt>
-        </View>
-      )}
+      {message.savedRule && <Status icon="stars">{`Rule saved · ${message.savedRule.label}`}</Status>}
 
       {/* Only rendered when the blocks were actually written — the server sets
           timeOff after the last one saves, never on a failed attempt. */}
       {message.timeOff && (
-        <View style={styles.ruleCard}>
-          <Icon name="calendar-mark" size={16} color={C.lime} />
-          <View style={{ flex: 1 }}>
-            <Txt style={styles.ruleTxt}>{message.timeOff.title}</Txt>
-            <Txt style={[styles.ruleTxt, { color: w(0.55), fontFamily: MONO }]}>
-              {fmtAway(message.timeOff.startISO, message.timeOff.endISO)}
-            </Txt>
-          </View>
-        </View>
+        <Status icon="calendar-mark">
+          {`${message.timeOff.title} blocked · ${fmtAway(message.timeOff.startISO, message.timeOff.endISO)}`}
+        </Status>
       )}
+
+      {message.text.length > 0 && <Rich text={message.text} />}
 
       {message.question?.options?.length ? (
         <View style={styles.chipRow}>
           {message.question.options.map((o) => (
-            <Press key={o} onPress={() => onAnswer(o)} hoverBg={w(0.05)} style={styles.chip}>
+            <Press key={o} onPress={() => onAnswer(o)} hoverBg={N.sunken} style={styles.chip}>
               <Txt style={styles.chipTxt}>{o}</Txt>
             </Press>
           ))}
@@ -435,8 +465,8 @@ function MessageRow({
       {!message.id.startsWith('err_') &&
         (reported ? (
           <View style={styles.reportRow}>
-            <Icon name="flag" size={12} color={w(0.3)} />
-            <Txt style={styles.reportedTxt}>Reported</Txt>
+            <Icon name="flag" size={12} color={N.faint} />
+            <Txt style={styles.reportTxt}>Reported</Txt>
           </View>
         ) : reporting ? (
           <ReportBox
@@ -446,11 +476,11 @@ function MessageRow({
         ) : (
           <Press
             onPress={() => onOpenReport(message.id)}
-            hoverBg={w(0.05)}
+            hoverBg={N.hover}
             style={styles.reportLink}
             aria-label="Report this reply">
-            <Icon name="flag" size={12} color={w(0.3)} />
-            <Txt style={styles.reportLinkTxt}>Report</Txt>
+            <Icon name="flag" size={12} color={N.faint} />
+            <Txt style={styles.reportTxt}>Report</Txt>
           </Press>
         ))}
     </View>
@@ -479,8 +509,8 @@ function ReportBox({
   };
 
   return (
-    <View style={styles.reportBox}>
-      <Txt style={styles.reasonLabel}>What went wrong with this reply?</Txt>
+    <View style={styles.box}>
+      <Txt style={styles.boxLabel}>What went wrong with this reply?</Txt>
       <View style={styles.chipRow}>
         {REPORT_REASONS.map((r) => {
           const on = reason === r.code;
@@ -488,7 +518,7 @@ function ReportBox({
             <Press
               key={r.code}
               onPress={() => setReason(r.code)}
-              hoverBg={w(0.05)}
+              hoverBg={on ? undefined : N.sunken}
               style={[styles.chip, on && styles.chipOn]}
               aria-label={r.label}>
               <Txt style={[styles.chipTxt, on && styles.chipTxtOn]}>{r.label}</Txt>
@@ -501,28 +531,33 @@ function ReportBox({
         onChangeText={setNote}
         maxLength={120}
         placeholder="What should it have done? (optional)"
-        placeholderTextColor={w(0.25)}
+        placeholderTextColor={N.faint}
         style={styles.reportInput}
       />
-      <Txt style={styles.reportHint}>
+      <Txt style={styles.boxHint}>
         Reports go to review. To change how I schedule right now, just tell me in the chat.
       </Txt>
-      <View style={styles.reportBtns}>
+      <View style={styles.btnRow}>
         <Press
           onPress={() => void submit()}
           disabled={!reason || sending}
-          hoverBg={C.limeHover}
-          style={[styles.reportSend, (!reason || sending) && styles.runOff]}>
-          <Txt style={styles.applyTxt}>{sending ? 'Sending…' : 'Send report'}</Txt>
+          hoverBg={N.inkHover}
+          style={[styles.primary, (!reason || sending) && styles.sendOff]}>
+          <Txt style={styles.primaryTxt}>{sending ? 'Sending…' : 'Send report'}</Txt>
         </Press>
-        <Press onPress={onCancel} hoverBg={w(0.1)} style={styles.dismissBtn}>
-          <Txt style={styles.dismissTxt}>Cancel</Txt>
+        <Press onPress={onCancel} hoverBg={N.sunken} style={styles.secondary}>
+          <Txt style={styles.secondaryTxt}>Cancel</Txt>
         </Press>
       </View>
     </View>
   );
 }
 
+/**
+ * A proposed slot, drawn as the grid draws it: dashed accent on white while it
+ * waits for you, the deep-work tint once it is on your calendar, faded if you
+ * turned it down.
+ */
 function ProposalCard({
   proposal,
   decision,
@@ -541,39 +576,35 @@ function ProposalCard({
   onOpenReject: (id: string | null) => void;
 }) {
   if (decision) {
+    const added = decision.kind === 'added';
     return (
-      <View style={[styles.card, decision.kind === 'declined' && styles.cardMuted]}>
-        <View style={styles.cardBody}>
-          <Txt style={styles.cardTitle}>{proposal.title}</Txt>
-          <Txt style={decision.kind === 'added' ? styles.cardSlot : styles.cardSlotMuted}>
-            {decision.kind === 'added' ? `Added · ${decision.label}` : `Skipped · ${decision.label}`}
-          </Txt>
+      <View style={[styles.tile, added ? styles.tileAdded : styles.tileSkipped]}>
+        <Txt style={styles.tileTitle}>{proposal.title}</Txt>
+        <View style={styles.tileMetaRow}>
+          <Icon name={added ? 'check' : 'close'} size={13} color={added ? BREAK_COLOR : N.faint} />
+          <Txt style={styles.tileTime}>{added ? `Added · ${decision.label}` : `Skipped · ${decision.label}`}</Txt>
         </View>
       </View>
     );
   }
 
   return (
-    <View style={styles.card}>
-      <View style={styles.cardBody}>
-        <Txt style={styles.cardTitle}>{proposal.title}</Txt>
-        <Txt style={styles.cardSlot}>{fmtSlot(proposal.startISO, proposal.endISO)}</Txt>
-        {/* The scorer's own reason. Showing it is what makes the feedback
-            below about the right thing — the user can disagree with the
-            reasoning, not just the outcome. */}
-        <Txt style={styles.cardWhy}>Because {proposal.reason}.</Txt>
+    <View style={[styles.card, SHADOW.sm]}>
+      <View style={[styles.tile, styles.tileProposed]}>
+        <Txt style={styles.tileTitle}>{proposal.title}</Txt>
+        <Txt style={[styles.tileTime, styles.tileTimeProposed]}>{`${fmtSlot(proposal.startISO, proposal.endISO)} · proposed`}</Txt>
       </View>
+      {/* The scorer's own reason. Showing it is what makes the feedback
+          below about the right thing — the user can disagree with the
+          reasoning, not just the outcome. */}
+      <Txt style={styles.why}>Because {proposal.reason}.</Txt>
 
       {rejecting ? (
-        <View style={styles.reasonBox}>
-          <Txt style={styles.reasonLabel}>What was wrong with it?</Txt>
+        <View style={styles.box}>
+          <Txt style={styles.boxLabel}>What was wrong with it?</Txt>
           <View style={styles.chipRow}>
             {REJECT_REASONS.map((r) => (
-              <Press
-                key={r.code}
-                onPress={() => onReject(proposal, r.code, r.label)}
-                hoverBg={w(0.05)}
-                style={styles.chip}>
+              <Press key={r.code} onPress={() => onReject(proposal, r.code, r.label)} hoverBg={N.sunken} style={styles.chip}>
                 <Txt style={styles.chipTxt}>{r.label}</Txt>
               </Press>
             ))}
@@ -582,30 +613,23 @@ function ProposalCard({
       ) : (
         <>
           {proposal.alternatives.length > 0 && (
-            <View style={styles.altBox}>
-              <Txt style={styles.altLabel}>or</Txt>
+            <View style={styles.alts}>
+              <Txt style={styles.altLabel}>Or another time</Txt>
               <View style={styles.chipRow}>
                 {proposal.alternatives.map((a) => (
-                  <Press
-                    key={a.startISO}
-                    onPress={() => onAcceptAlt(proposal, a)}
-                    hoverBg={w(0.05)}
-                    style={styles.chip}>
+                  <Press key={a.startISO} onPress={() => onAcceptAlt(proposal, a)} hoverBg={N.sunken} style={styles.chip}>
                     <Txt style={styles.chipTxt}>{fmtSlot(a.startISO, a.endISO)}</Txt>
                   </Press>
                 ))}
               </View>
             </View>
           )}
-          <View style={styles.cardBtns}>
-            <Press onPress={() => onAccept(proposal)} hoverBg={C.limeHover} style={styles.applyBtn}>
-              <Txt style={styles.applyTxt}>Add to calendar</Txt>
+          <View style={styles.btnRow}>
+            <Press onPress={() => onAccept(proposal)} hoverBg={N.inkHover} style={styles.primary}>
+              <Txt style={styles.primaryTxt}>Add to calendar</Txt>
             </Press>
-            <Press
-              onPress={() => onOpenReject(proposal.id)}
-              hoverBg={w(0.1)}
-              style={styles.dismissBtn}>
-              <Txt style={styles.dismissTxt}>Not this</Txt>
+            <Press onPress={() => onOpenReject(proposal.id)} hoverBg={N.sunken} style={styles.secondary}>
+              <Txt style={styles.secondaryTxt}>Not this</Txt>
             </Press>
           </View>
         </>
@@ -614,118 +638,88 @@ function ProposalCard({
   );
 }
 
+const USER_TINT = tint(CATS.deep.color, TINT);
+
 const styles = StyleSheet.create({
-  backdrop: { flex: 1 },
-  backdropSheet: { justifyContent: 'flex-end' },
-  backdropDrawer: { justifyContent: 'flex-start', alignItems: 'flex-end' },
-  panel: {
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOpacity: 0.5,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 16,
-  },
-  panelSheet: { width: '100%', maxHeight: '88%', borderTopLeftRadius: R.xl2, borderTopRightRadius: R.xl2 },
-  panelDrawer: { height: '100%', width: 432, borderTopLeftRadius: R.xl2, borderBottomLeftRadius: R.xl2 },
-  rings: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden' },
-  ringsSheet: { borderTopLeftRadius: R.xl2, borderTopRightRadius: R.xl2 },
-  ringsDrawer: { borderTopLeftRadius: R.xl2, borderBottomLeftRadius: R.xl2 },
-  ring: { position: 'absolute', borderWidth: 1, borderRadius: R.full },
-  ringOuter: { right: -48, top: -48, height: 144, width: 144, borderColor: rgba(C.lime, 0.2) },
-  ringInner: { right: -24, top: -24, height: 96, width: 96, borderColor: rgba(C.lime, 0.3) },
-  grab: { alignSelf: 'center', marginBottom: 16, height: 4, width: 40, borderRadius: R.full, backgroundColor: w(0.2) },
+  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: N.scrim },
+  sheetWrap: { width: '100%', height: '88%' },
+  panel: { backgroundColor: N.surface, minHeight: 0 },
+  // Docked: a column beside the grid, ruled once on the left. No backdrop, no shadow —
+  // it is part of the page, not over it.
+  panelDocked: { width: 400, height: '100%', borderLeftWidth: 1, borderLeftColor: N.line },
+  panelSheet: { flex: 1, borderTopLeftRadius: R.xl, borderTopRightRadius: R.xl, overflow: 'hidden' },
+  grab: { alignSelf: 'center', marginTop: 8, height: 4, width: 36, borderRadius: R.full, backgroundColor: N.ghost },
 
-  head: { paddingTop: 20, paddingBottom: 4 },
-  headRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  headBtns: { flexDirection: 'row', gap: 8 },
-  eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  eyebrow: { color: C.lime, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1.2 },
-  title: { marginTop: 8, color: '#fff', fontSize: 20, fontWeight: '500', letterSpacing: -0.4 },
-  close: { height: 36, width: 36, alignItems: 'center', justifyContent: 'center', borderRadius: R.lg, borderWidth: 1, borderColor: w(0.1) },
+  head: { height: 60, flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 18, paddingRight: 10, borderBottomWidth: 1, borderBottomColor: N.line },
+  headTitle: { fontFamily: SANS, fontSize: 15, lineHeight: 20, fontWeight: '600', color: N.ink },
+  spacer: { flex: 1 },
+  iconBtn: { width: 34, height: 34, borderRadius: R.md, alignItems: 'center', justifyContent: 'center' },
 
-  thread: { flexGrow: 0, flexShrink: 1 },
-  intro: { gap: 16 },
-  desc: { color: w(0.45), fontSize: 12, lineHeight: 18 },
+  thread: { flex: 1, minHeight: 0 },
+  threadPad: { padding: 18, gap: 18 },
+  threadEmpty: { flexGrow: 1, justifyContent: 'center' },
+
+  intro: { alignItems: 'center', gap: 10, paddingHorizontal: 4 },
+  introMark: { width: 44, height: 44, borderRadius: R.xl, backgroundColor: USER_TINT, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  introTitle: { fontFamily: SANS, ...T.heading, color: N.ink },
+  introTxt: { fontFamily: SANS, fontSize: 14, lineHeight: 21, color: N.muted, textAlign: 'center' },
+  starters: { alignSelf: 'stretch', gap: 6, marginTop: 10 },
+  starter: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 11, borderRadius: R.lg, borderWidth: 1, borderColor: N.line },
+  starterTxt: { flex: 1, fontFamily: SANS, fontSize: 14, lineHeight: 20, color: N.ink },
 
   userRow: { alignItems: 'flex-end' },
-  userBubble: {
-    maxWidth: '86%',
-    borderRadius: R.xl,
-    borderWidth: 1,
-    borderColor: rgba(C.lime, 0.3),
-    backgroundColor: rgba(C.lime, 0.08),
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  userTxt: { color: '#fff', fontSize: 13, lineHeight: 19 },
+  userBubble: { maxWidth: '88%', borderRadius: R.xl, backgroundColor: USER_TINT, paddingHorizontal: 14, paddingVertical: 10 },
+  userTxt: { fontFamily: SANS, fontSize: 14, lineHeight: 21, color: N.ink },
 
-  botRow: { gap: 10, alignItems: 'stretch' },
-  botTxt: { color: w(0.75), fontSize: 13, lineHeight: 20 },
+  botRow: { gap: 12, alignItems: 'stretch' },
+  botTxt: { fontFamily: SANS, fontSize: 14, lineHeight: 22, color: N.ink },
+  botStrong: { fontWeight: '600' },
 
-  card: { borderRadius: R.xl2, borderWidth: 1, borderColor: 'rgba(204,255,0,0.3)', backgroundColor: 'rgba(204,255,0,0.06)', overflow: 'hidden' },
-  cardMuted: { borderColor: w(0.1), backgroundColor: w(0.04) },
-  cardBody: { padding: 14, gap: 4 },
-  cardTitle: { color: '#fff', fontSize: 13, fontWeight: '500' },
-  cardSlot: { color: C.lime, fontSize: 12, fontFamily: MONO },
-  cardSlotMuted: { color: w(0.4), fontSize: 12, fontFamily: MONO },
-  cardWhy: { marginTop: 4, color: w(0.45), fontSize: 12, lineHeight: 17 },
+  status: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, alignSelf: 'center', maxWidth: '100%' },
+  statusTxt: { fontFamily: SANS, fontSize: 13, lineHeight: 18, color: N.ink2, flexShrink: 1 },
 
-  altBox: { paddingHorizontal: 14, paddingBottom: 4, gap: 6 },
-  altLabel: { color: w(0.35), fontSize: 11, textTransform: 'uppercase', letterSpacing: 1 },
-  reasonBox: { paddingHorizontal: 14, paddingVertical: 12, gap: 8, borderTopWidth: 1, borderTopColor: 'rgba(204,255,0,0.2)' },
-  reasonLabel: { color: w(0.6), fontSize: 12 },
+  card: { borderRadius: R.xl, backgroundColor: N.surface, padding: 10, gap: 10 },
+  tile: { borderRadius: R.md, paddingHorizontal: 10, paddingVertical: 8, gap: 2 },
+  tileProposed: { borderWidth: 1, borderStyle: 'dashed', borderColor: N.accent, backgroundColor: N.surface },
+  tileAdded: { backgroundColor: USER_TINT },
+  tileSkipped: { backgroundColor: N.sunken, opacity: 0.8 },
+  tileTitle: { fontFamily: SANS, ...T.tile, color: N.ink },
+  tileMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  tileTime: { fontFamily: SANS, ...T.time, color: N.ink2, fontVariant: ['tabular-nums'] },
+  tileTimeProposed: { color: N.accentInk },
+  why: { fontFamily: SANS, fontSize: 13, lineHeight: 19, color: N.muted, paddingHorizontal: 2 },
 
-  cardBtns: { flexDirection: 'row', gap: 8, borderTopWidth: 1, borderTopColor: 'rgba(204,255,0,0.2)', padding: 12 },
-  applyBtn: { flex: 1, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: R.lg, backgroundColor: C.lime },
-  applyTxt: { color: C.surface, fontSize: 12, fontWeight: '500' },
-  dismissBtn: { height: 38, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', borderRadius: R.lg, borderWidth: 1, borderColor: w(0.1) },
-  dismissTxt: { color: w(0.6), fontSize: 12 },
+  alts: { gap: 6 },
+  altLabel: { fontFamily: SANS, fontSize: 12, lineHeight: 16, color: N.muted, paddingHorizontal: 2 },
+  btnRow: { flexDirection: 'row', gap: 8 },
+  primary: { flex: 1, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: R.lg, backgroundColor: N.ink },
+  primaryTxt: { fontFamily: SANS, fontSize: 13, fontWeight: '600', color: N.onInk },
+  secondary: { height: 36, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', borderRadius: R.lg, borderWidth: 1, borderColor: N.lineStrong, backgroundColor: N.surface },
+  secondaryTxt: { fontFamily: SANS, fontSize: 13, fontWeight: '500', color: N.ink },
 
-  ruleCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderRadius: R.xl,
-    borderWidth: 1,
-    borderColor: rgba(C.lime, 0.3),
-    backgroundColor: rgba(C.lime, 0.06),
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  ruleTxt: { flex: 1, color: '#fff', fontSize: 12 },
+  box: { gap: 10, borderRadius: R.lg, backgroundColor: N.sunken, padding: 12 },
+  boxLabel: { fontFamily: SANS, fontSize: 13, lineHeight: 18, fontWeight: '500', color: N.ink },
+  boxHint: { fontFamily: SANS, fontSize: 12, lineHeight: 17, color: N.muted },
 
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { borderRadius: R.full, borderWidth: 1, borderColor: w(0.1), paddingHorizontal: 12, paddingVertical: 8 },
-  chipTxt: { color: w(0.55), fontSize: 12 },
-  chipOn: { borderColor: rgba(C.lime, 0.5), backgroundColor: rgba(C.lime, 0.08) },
-  chipTxtOn: { color: '#fff' },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  chip: { borderRadius: R.full, borderWidth: 1, borderColor: N.lineStrong, backgroundColor: N.surface, paddingHorizontal: 12, paddingVertical: 7 },
+  chipTxt: { fontFamily: SANS, fontSize: 13, lineHeight: 18, color: N.ink, fontVariant: ['tabular-nums'] },
+  chipOn: { borderColor: N.ink, backgroundColor: N.ink },
+  chipTxtOn: { color: N.onInk },
 
-  reportLink: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: R.full, paddingHorizontal: 8, paddingVertical: 4, marginLeft: -8 },
-  reportLinkTxt: { color: w(0.3), fontSize: 11 },
-  reportRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },
-  reportedTxt: { color: w(0.3), fontSize: 11 },
-  reportBox: { gap: 10, borderRadius: R.xl, borderWidth: 1, borderColor: w(0.1), backgroundColor: w(0.04), padding: 12 },
-  reportInput: { minHeight: 36, borderRadius: R.lg, borderWidth: 1, borderColor: w(0.1), backgroundColor: w(0.06), paddingHorizontal: 10, paddingVertical: 8, color: '#fff', fontSize: 12, fontFamily: MONO },
-  reportHint: { color: w(0.35), fontSize: 11, lineHeight: 16 },
-  reportBtns: { flexDirection: 'row', gap: 8 },
-  reportSend: { flex: 1, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: R.lg, backgroundColor: C.lime },
+  reportLink: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: R.full, paddingHorizontal: 8, paddingVertical: 3, marginLeft: -8 },
+  reportRow: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 3 },
+  reportTxt: { fontFamily: SANS, fontSize: 12, color: N.faint },
+  reportInput: { minHeight: 36, borderRadius: R.md, borderWidth: 1, borderColor: N.lineStrong, backgroundColor: N.surface, paddingHorizontal: 10, paddingVertical: 8, color: N.ink, fontSize: 13, fontFamily: SANS },
 
   thinking: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
-  thinkingTxt: { color: w(0.4), fontSize: 12 },
+  thinkingTxt: { fontFamily: SANS, fontSize: 13, color: N.muted },
 
-  composer: { borderTopWidth: 1, borderTopColor: w(0.08), paddingVertical: 14 },
-  inputBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 10,
-    borderRadius: R.xl,
-    borderWidth: 1,
-    borderColor: w(0.1),
-    backgroundColor: w(0.06),
-    padding: 10,
-  },
-  input: { flex: 1, minHeight: 36, maxHeight: 120, color: '#fff', fontSize: 13, lineHeight: 19, fontFamily: MONO, textAlignVertical: 'top' },
-  run: { height: 36, width: 36, alignItems: 'center', justifyContent: 'center', borderRadius: R.lg, backgroundColor: C.lime },
-  runOff: { opacity: 0.35 },
+  composer: { padding: 14, paddingTop: 6 },
+  inputBox: { borderRadius: R.xl, backgroundColor: N.surface, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 10, gap: 6 },
+  input: { minHeight: 44, maxHeight: 140, color: N.ink, fontSize: 14, lineHeight: 21, fontFamily: SANS, textAlignVertical: 'top' },
+  inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  inputHint: { flex: 1, fontFamily: SANS, fontSize: 11, lineHeight: 14, color: N.faint },
+  send: { height: 34, width: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: N.ink },
+  sendOff: { backgroundColor: N.sunken },
 });

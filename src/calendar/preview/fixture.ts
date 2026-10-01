@@ -1,4 +1,4 @@
-import type { ApiAccount } from '@/lib/api-types';
+import type { ApiAccount, ChatMessage } from '@/lib/api-types';
 
 import { addDays, iso, startOfWeek, today } from '../cal-date';
 import type { CalEvent } from '../types';
@@ -97,4 +97,57 @@ export function previewAccounts(): ApiAccount[] {
       ],
     },
   ];
+}
+
+/* ───────────────────────── Plan with AI ───────────────────────── */
+
+/** A short conversation for the AI panel in `/preview`, on the fixture week. */
+export function previewChat(): { history: ChatMessage[]; reply: (text: string) => ChatMessage } {
+  const at = (date: string, hm: string) => `${date}T${hm}:00.000Z`;
+  const t = new Date();
+  const d = (n: number) => {
+    const x = new Date(t.getFullYear(), t.getMonth(), t.getDate() + n);
+    return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+  };
+  const now = new Date().toISOString();
+  return {
+    history: [
+      { id: 'u1', role: 'user', text: 'Make room for 2h of deep work on the launch plan before Friday', createdAt: now },
+      {
+        id: 'a1',
+        role: 'assistant',
+        text: 'The best fit is **tomorrow, 09:30 – 11:30**. Your morning is clear and it lands before Friday\'s review. I haven\'t booked anything yet.',
+        createdAt: now,
+        proposals: [
+          {
+            id: 'p1',
+            title: 'Launch plan — deep work',
+            startISO: at(d(1), '09:30'),
+            endISO: at(d(1), '11:30'),
+            category: 'deep',
+            reason: 'it is your longest free stretch in working hours before Friday',
+            alternatives: [
+              { startISO: at(d(1), '14:00'), endISO: at(d(1), '16:00') },
+              { startISO: at(d(2), '09:00'), endISO: at(d(2), '11:00') },
+            ],
+          },
+        ],
+      },
+      { id: 'u2', role: 'user', text: 'And never book me before 9', createdAt: now },
+      {
+        id: 'a2',
+        role: 'assistant',
+        text: 'Done. I will keep everything after **09:00** from now on.',
+        createdAt: now,
+        savedRule: { id: 'r1', label: 'No bookings before 09:00' },
+      },
+    ],
+    reply: () => ({
+      id: `a_${Date.now()}`,
+      role: 'assistant',
+      text: 'How long should it be?',
+      createdAt: new Date().toISOString(),
+      question: { text: 'How long should it be?', options: ['30 min', '1 hour', '2 hours'] },
+    }),
+  };
 }

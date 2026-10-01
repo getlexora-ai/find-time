@@ -191,6 +191,7 @@ export function CalendarScreen() {
       },
       openList: (title, evs, anchor) => setList({ title, events: evs, anchor: anchor ?? null }),
       openAI: (prefill) => setAi({ prefill }),
+      closeAI: () => setAi(null),
       openPicker: () => setPicker(true),
       toast,
     }),
@@ -217,7 +218,8 @@ export function CalendarScreen() {
   const [page, setPage] = useState<Page>('planner');
 
   /* ── web keyboard ── */
-  const anyOpen = !!(compose || detail || quick || list || ai || picker || filters);
+  // The docked AI panel is part of the page on desktop: arrows and T still work beside it.
+  const anyOpen = !!(compose || detail || quick || list || (ai && !isDesktop) || picker || filters);
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const onKey = (e: KeyboardEvent) => {
@@ -272,6 +274,26 @@ export function CalendarScreen() {
     actions.openEvent((both.find((e) => !e.imported) ?? both[0]).id);
   };
 
+  const aiPanel = ai ? (
+    <AiPanel
+      key={ai.prefill ?? 'blank'}
+      prefill={ai.prefill}
+      onClose={() => setAi(null)}
+      onApplied={(firstISO, count, asked) => {
+        if (firstISO && count) {
+          const d = new Date(firstISO);
+          const day = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+          setPage('planner');
+          setState((s) => ({ ...s, view: 'week', cursor: day, selected: new Date(day) }));
+        }
+        if (!count) toast(asked ? 'Could not save those blocks — check your connection.' : 'Nothing to add');
+        else if (asked && count < asked) toast(`Only ${count} of ${asked} blocks saved — check your connection.`);
+        else toast(`${count} block${count > 1 ? 's' : ''} added to your calendar`);
+      }}
+      toast={toast}
+    />
+  ) : null;
+
   const grid =
     state.view === 'week' ? (
       <WeekView state={state} actions={actions} events={events} selectedId={selectedId} clashIds={clashes.ids} />
@@ -281,29 +303,56 @@ export function CalendarScreen() {
 
   return (
     <SafeAreaView style={styles.root} edges={['top']} nativeID="ft-calendar">
-      <CommandBar
-        state={state}
-        actions={actions}
-        page={page}
-        onPage={setPage}
-        title={page === 'insights' ? insightsTitle(state.view, state.cursor, state.selected) : title}
-        needsYou={clashes.pairs.length + proposals.length}
-        onShow={() => setFilters(true)}
-      />
-      <View style={[styles.main, !isDesktop && { paddingBottom: NAV_H + Math.max(10, insets.bottom) }]}>
-        {page === 'insights' ? (
-          <Insights
-            k={kpis}
-            clashes={clashes.pairs}
-            proposals={proposals}
-            scope={state.view === 'day' ? 'today' : 'this week'}
+      {(() => {
+        const bar = (part?: 'app' | 'tools') => (
+          <CommandBar
+            state={state}
             actions={actions}
-            onResolve={resolvePair}
+            page={page}
+            onPage={setPage}
+            title={page === 'insights' ? insightsTitle(state.view, state.cursor, state.selected) : title}
+            needsYou={clashes.pairs.length + proposals.length}
+            onShow={() => setFilters(true)}
+            part={part}
+            aiOpen={!!ai}
           />
-        ) : (
-          <View style={[styles.grid, isDesktop && styles.gridDesktop]}>{grid}</View>
-        )}
-      </View>
+        );
+        const body = (
+          <View style={[styles.main, !isDesktop && { paddingBottom: NAV_H + Math.max(10, insets.bottom) }]}>
+            {page === 'insights' ? (
+              <Insights
+                k={kpis}
+                clashes={clashes.pairs}
+                proposals={proposals}
+                scope={state.view === 'day' ? 'today' : 'this week'}
+                actions={actions}
+                onResolve={resolvePair}
+              />
+            ) : (
+              <View style={[styles.grid, isDesktop && styles.gridDesktop]}>{grid}</View>
+            )}
+          </View>
+        );
+        if (!isDesktop) return (
+          <>
+            {bar()}
+            {body}
+          </>
+        );
+        // Desktop: the app bar spans the page; the AI panel docks beside the toolbar and the grid.
+        return (
+          <>
+            {bar('app')}
+            <View style={styles.row}>
+              <View style={styles.main}>
+                {bar('tools')}
+                {body}
+              </View>
+              {ai && aiPanel}
+            </View>
+          </>
+        );
+      })()}
 
       {!isDesktop && (
         <MobileNav
@@ -361,24 +410,7 @@ export function CalendarScreen() {
           onOpen={(id) => actions.openEvent(id, list.anchor ?? undefined)}
         />
       )}
-      {ai && (
-        <AiPanel
-          key={ai.prefill ?? 'blank'}
-          prefill={ai.prefill}
-          onClose={() => setAi(null)}
-          onApplied={(firstISO, count, asked) => {
-            if (firstISO && count) {
-              const d = new Date(firstISO);
-              const day = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-              setState((s) => ({ ...s, view: 'week', cursor: day, selected: new Date(day) }));
-            }
-            if (!count) toast(asked ? 'Could not save those blocks — check your connection.' : 'Nothing to add');
-            else if (asked && count < asked) toast(`Only ${count} of ${asked} blocks saved — check your connection.`);
-            else toast(`${count} block${count > 1 ? 's' : ''} added to your calendar`);
-          }}
-          toast={toast}
-        />
-      )}
+      {ai && !isDesktop && aiPanel}
       {filters && (
         <FilterSheet events={shown} hidden={hidden} onToggleKind={toggleKind} onClose={() => setFilters(false)} />
       )}
@@ -405,6 +437,7 @@ export function CalendarScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: N.surface },
   main: { flex: 1, minWidth: 0, minHeight: 0 },
+  row: { flex: 1, minHeight: 0, flexDirection: 'row' },
   grid: { flex: 1, minHeight: 0 },
   // The grid sits on the page as one card, ruled once — no frame, no brackets.
   gridDesktop: { marginHorizontal: 20, marginBottom: 20, borderWidth: 1, borderColor: N.line, borderRadius: 12, overflow: 'hidden' },
