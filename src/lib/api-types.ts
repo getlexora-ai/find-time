@@ -37,6 +37,8 @@ export type ApiEvent = {
   exdates?: string[];
   /** set on a one-off that replaced an occurrence of a Find Time series */
   seriesId?: string | null;
+  /** the task this block is a session of ("plan my week") */
+  taskId?: string | null;
 };
 
 export type EventInput = {
@@ -120,6 +122,26 @@ export type ChatProposal = {
   reason: string;
   /** ranked runners-up the user can switch to in one tap */
   alternatives: { startISO: string; endISO: string }[];
+  /** "plan my week": the task this block is a session of */
+  taskId?: string;
+};
+
+/** A backlog task (db/002 `tasks`) — what "plan my week" places. */
+export type ApiTask = {
+  id: string;
+  title: string;
+  status: 'backlog' | 'scheduled' | 'in-progress' | 'done' | 'archived';
+  /** time still needed, minutes */
+  durationMin: number;
+  /** exclusive instant: midnight after the due day */
+  dueBy: string | null;
+  preferBy: string | null;
+  priority: 'low' | 'medium' | 'high';
+  preferredWindow: 'morning' | 'afternoon' | 'evening' | null;
+  splittable: boolean;
+  minChunkMin: number;
+  category: string;
+  completedAt: string | null;
 };
 
 /** Why a proposal was turned down. An unlabelled rejection teaches nothing. */

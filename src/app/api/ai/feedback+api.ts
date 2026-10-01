@@ -20,6 +20,7 @@ import {
   recordCorrection,
 } from '@/server/ai/capture';
 import { isConfigured } from '@/server/db';
+import { linkBlockToTask, retireReplacedBlock } from '@/server/tasks-repo';
 import { listEvents } from '@/server/events-repo';
 
 /**
@@ -88,6 +89,21 @@ export async function POST(request: Request): Promise<Response> {
     reasonCode,
   });
   if (!recorded) return Response.json({ error: 'Unknown suggestion.' }, { status: 404 });
+
+  // A "plan my week" session: the client has just created the block, so tie it
+  // to its task, and retire the block it was proposed to replace. Best effort —
+  // the outcome is already recorded and the block already exists.
+  if (suggestion.task_id && (outcome === 'accepted' || outcome === 'edited')) {
+    try {
+      await linkBlockToTask(userId, suggestion.task_id, {
+        title: suggestion.title,
+        startISO: (outcome === 'edited' && finalStart) || suggestion.proposed_start.toISOString(),
+      });
+      if (suggestion.event_id) await retireReplacedBlock(userId, suggestion.event_id, suggestion.task_id);
+    } catch (err) {
+      console.error('ai/feedback task link', err);
+    }
+  }
 
   const profile = await loadProfile(userId);
   const proposedStart = suggestion.proposed_start.toISOString();

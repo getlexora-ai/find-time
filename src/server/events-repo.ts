@@ -29,12 +29,13 @@ type Row = {
   done_at: Date | null;
   exdates: Date[] | null;
   recurrence_parent_id: string | null;
+  task_id: string | null;
 };
 
 const COLS = `id, title, start_at, end_at, category, item_type, flexibility,
               origin, is_draft, rrule, project_label, description,
               calendar_id, all_day, location, transparency, response_status,
-              conference_url, attendee_count, done_at, exdates, recurrence_parent_id`;
+              conference_url, attendee_count, done_at, exdates, recurrence_parent_id, task_id`;
 
 function toApi(r: Row): ApiEvent {
   return {
@@ -61,6 +62,7 @@ function toApi(r: Row): ApiEvent {
     // Wall-clock dates (see api-adapter.ts): the date part of each instant.
     exdates: (r.exdates ?? []).map((d) => d.toISOString().slice(0, 10)),
     seriesId: r.recurrence_parent_id,
+    taskId: r.task_id,
   };
 }
 

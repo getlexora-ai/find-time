@@ -25,12 +25,25 @@
  * the rest of the app (find-time.ts).
  */
 
-import { TOOL_ANSWER, TOOL_ASK, TOOL_DELETE, TOOL_PLACE_AT, TOOL_PROPOSE, TOOL_RULE, TOOL_TIME_OFF } from './chat.ts';
+import {
+  TOOL_ADD_TASK,
+  TOOL_ANSWER,
+  TOOL_ASK,
+  TOOL_DELETE,
+  TOOL_LIST_TASKS,
+  TOOL_PLACE_AT,
+  TOOL_PLAN_WEEK,
+  TOOL_PROPOSE,
+  TOOL_RULE,
+  TOOL_TASK_DONE,
+  TOOL_TASK_UPDATE,
+  TOOL_TIME_OFF,
+} from './chat.ts';
 import { durationOptions } from './clarify.ts';
 import { ambiguousTime } from './place-at.ts';
 
 /** Stamped on every logged turn in place of the old prompt version. Bump on any behaviour change. */
-export const PARSER_VERSION = 'r1';
+export const PARSER_VERSION = 'r2';
 /** What `ai_turns.model_id` records for a turn read by this module. */
 export const PARSER_ID = 'rules';
 
@@ -38,8 +51,21 @@ const DAY = 86_400_000;
 const MIN = 60_000;
 
 /** What the planner has understood so far in a conversation. Stored on the assistant message. */
+/** A task being added, held while its length is asked for. */
+export type TaskDraft = {
+  title: string;
+  category: string;
+  /** exclusive: midnight after the due day */
+  dueByISO?: string;
+  priority: 'low' | 'medium' | 'high';
+  splittable?: boolean;
+  preferredWindow?: 'morning' | 'afternoon' | 'evening';
+};
+
 export type Draft = {
-  tool: typeof TOOL_PROPOSE | typeof TOOL_PLACE_AT | typeof TOOL_TIME_OFF | typeof TOOL_DELETE;
+  tool: typeof TOOL_PROPOSE | typeof TOOL_PLACE_AT | typeof TOOL_TIME_OFF | typeof TOOL_DELETE | typeof TOOL_ADD_TASK;
+  /** add_task: the task so far */
+  task?: TaskDraft;
   /** delete: the title words to match ('' = every block in the range) */
   match?: string;
   /** delete: the exact blocks listed in the question, set by the route; a yes deletes these and only these */
@@ -84,6 +110,8 @@ export type UnderstandContext = {
   previous: Draft | null;
   /** the blocks the last plan proposed, for "why?" */
   lastProposals: { startISO: string; reason?: string }[];
+  /** titles of the user's open tasks, so "report due Monday" is read as a task change */
+  taskTitles?: string[];
 };
 
 /* ───────────────────────── vocabulary ───────────────────────── */
@@ -691,6 +719,151 @@ function readDelete(target: string, prev: Draft | null, nowMs: number, today: nu
   };
 }
 
+/* ───────────────────────── tasks ───────────────────────── */
+
+const ADD_TASK =
+  /^\s*(?:please\s+)?(?:(?:add|new|create|save)\s+(?:a\s+|the\s+)?(?:task|to-?do)\b|(?:task|to-?do)\s*:)\s*[:\-–]?\s*(.*)$/i;
+const PLAN_WEEK =
+  /^\s*(?:please\s+|can\s+you\s+|could\s+you\s+)?(?:(?:plan|schedule|organi[sz]e|sort\s+out)\s+(?:(?:my|the|all\s+(?:of\s+)?my|all\s+the)\s+)?(?:week|tasks|backlog|to-?dos|to-?do\s+list)(?:\s+(?:for\s+)?(?:this|next)\s+week)?|re-?plan(?:\s+(?:my|the)\s+(?:week|tasks))?)\s*[.!?]*$/i;
+const LIST_TASKS =
+  /^\s*(?:(?:show|list|what\s+are|what's\s+on|whats\s+on)\s+)?(?:me\s+)?(?:my\s+|the\s+)?(?:open\s+)?(?:tasks|to-?dos|backlog|to-?do\s+list)\s*[?.!]*$/i;
+const TASK_DONE =
+  /^\s*(?:i(?:'ve|\s+have)?\s+)?(?:finished|completed|done\s+with|mark(?:ed)?)\s+(?:the\s+|my\s+)?(.+?)(?:\s+(?:as\s+)?(?:done|complete|completed|finished))?\s*[.!]*$/i;
+const TASK_SPLIT = /^\s*(?:you\s+can\s+|it's\s+ok\s+to\s+|ok\s+to\s+)?split\s+(?:up\s+)?(?:the\s+|my\s+)?(.+?)\s*[.!]*$/i;
+const TASK_DUE = /^\s*(?:move\s+|make\s+)?(?:the\s+|my\s+)?(.+?)\s+(?:is\s+)?(?:now\s+)?due\s+(.+?)\s*[.!]*$/i;
+const TASK_TAKES = /^\s*(?:the\s+|my\s+)?(.+?)\s+(?:takes|will\s+take|needs)\s+(.+?)\s*[.!]*$/i;
+const TASK_CANCEL = /^\s*(?:no|nope|cancel|never\s*mind|forget\s+it|stop)\b[\s.!]*$/i;
+
+/** The open task a phrase names: exact title first, then one containing the other. */
+function matchTask(phrase: string, titles: string[]): string | null {
+  const p = phrase.toLowerCase().replace(/^(?:the|my)\s+/, '').replace(/[.!?]+$/, '').trim();
+  if (p.length < 2) return null;
+  return (
+    titles.find((t) => t.toLowerCase() === p) ??
+    titles.find((t) => t.toLowerCase().includes(p) || p.includes(t.toLowerCase())) ??
+    null
+  );
+}
+
+const hoursLabel = (min: number) => {
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  return min % 60 ? `${h}h${String(min % 60).padStart(2, '0')}` : `${h}h`;
+};
+
+/** "by Friday" → midnight after Friday: the whole due day counts, on the user's calendar. */
+function dueFrom(phrase: string, nowMs: number): number | null {
+  const f = readFacets(`by ${phrase.replace(/^\s*(?:on|by)\s+/i, '')}`, nowMs);
+  return f.when ? f.when.to : null;
+}
+
+function addTask(t: TaskDraft, durationMin: number, today: number): Understood {
+  const splittable = t.splittable ?? durationMin > 120;
+  const due = t.dueByISO ? `due ${dayLabel(Date.parse(t.dueByISO) - DAY, today)}` : 'no due date';
+  return {
+    name: TOOL_ADD_TASK,
+    args: { ...t, durationMin, splittable, reply: '' },
+    draft: null,
+    summary: [t.title, hoursLabel(durationMin), due, t.priority !== 'medium' ? `${t.priority} priority` : '', splittable ? 'can split' : '']
+      .filter(Boolean)
+      .join(' · '),
+  };
+}
+
+function readAddTask(body: string, nowMs: number, today: number): Understood {
+  let s = body;
+  const take = (re: RegExp) => {
+    const hit = re.test(s);
+    if (hit) s = s.replace(re, ' ');
+    return hit;
+  };
+  let priority: TaskDraft['priority'] = 'medium';
+  if (take(/\b(?:urgent(?:ly)?|asap|important|high[- ]priority|top[- ]priority)\b/i)) priority = 'high';
+  else if (take(/\b(?:low[- ]priority|whenever|someday|no\s+rush)\b/i)) priority = 'low';
+  else take(/\b(?:medium|normal)[- ]priority\b/i);
+
+  let splittable: boolean | undefined;
+  if (take(/\b(?:in\s+one\s+(?:go|sitting|block)|(?:don't|do\s+not)\s+split(?:\s+it)?|no\s+splitting|all\s+at\s+once)\b/i)) splittable = false;
+  else if (take(/\b(?:(?:can\s+be\s+)?split(?:\s+(?:it|up))?|in\s+(?:chunks|pieces|sessions)|across\s+(?:a\s+few\s+|several\s+)?days)\b/i)) splittable = true;
+
+  // "due Friday" reads like "by Friday": the end of that day.
+  s = s.replace(/\bdue\s+(?:on\s+|by\s+)?/i, 'by ');
+  const f = readFacets(s, nowMs);
+  const title = titleFrom(f.rest);
+  if (!title) {
+    return answer('What\'s the task? For example: "Add task: write the report, 3h, due Friday".', null);
+  }
+  const category = categoryOf(title.toLowerCase());
+  const t: TaskDraft = { title, category, priority };
+  if (f.when) t.dueByISO = iso(f.when.to);
+  if (splittable !== undefined) t.splittable = splittable;
+  if (f.part) t.preferredWindow = f.part.from < 12 ? 'morning' : f.part.from < 17 ? 'afternoon' : 'evening';
+
+  if (!f.durationMin) {
+    return ask(`How long will ${title} take?`, durationOptions(category), { tool: TOOL_ADD_TASK, task: t }, `task · ${title} · length missing`);
+  }
+  return addTask(t, f.durationMin, today);
+}
+
+/** A turn about the task backlog, or null when the sentence is about something else. */
+function readTaskTurn(raw: string, ctx: UnderstandContext, nowMs: number, today: number): Understood | null {
+  const prev = ctx.previous;
+  const titles = ctx.taskTitles ?? [];
+
+  // Answering "how long will X take?"
+  if (prev?.tool === TOOL_ADD_TASK && prev.task) {
+    if (TASK_CANCEL.test(raw)) return answer('Okay — no task added.', null);
+    const f = readFacets(raw, nowMs);
+    if (f.durationMin && !titleFrom(f.rest)) return addTask(prev.task, f.durationMin, today);
+  }
+
+  const add = ADD_TASK.exec(raw);
+  if (add) return readAddTask(add[1], nowMs, today);
+
+  if (PLAN_WEEK.test(raw)) return { name: TOOL_PLAN_WEEK, args: { reply: '' }, draft: null, summary: 'plan every open task' };
+  if (LIST_TASKS.test(raw)) return { name: TOOL_LIST_TASKS, args: { reply: '' }, draft: null, summary: 'list open tasks' };
+
+  const done = TASK_DONE.exec(raw);
+  if (done) {
+    const match = matchTask(done[1], titles) ?? done[1].trim();
+    return { name: TOOL_TASK_DONE, args: { match, reply: '' }, draft: null, summary: `done · "${match}"` };
+  }
+
+  // Changes to a task only count when they name one the user actually has.
+  const split = TASK_SPLIT.exec(raw);
+  const splitTitle = split && matchTask(split[1], titles);
+  if (splitTitle) {
+    return { name: TOOL_TASK_UPDATE, args: { match: splitTitle, splittable: true, reply: '' }, draft: null, summary: `${splitTitle} · can split` };
+  }
+  const dueM = TASK_DUE.exec(raw);
+  const dueTitle = dueM && matchTask(dueM[1], titles);
+  if (dueM && dueTitle) {
+    const to = dueFrom(dueM[2], nowMs);
+    if (to !== null) {
+      return {
+        name: TOOL_TASK_UPDATE,
+        args: { match: dueTitle, dueByISO: iso(to), reply: '' },
+        draft: null,
+        summary: `${dueTitle} · due ${dayLabel(to - DAY, today)}`,
+      };
+    }
+  }
+  const takes = TASK_TAKES.exec(raw);
+  const takesTitle = takes && matchTask(takes[1], titles);
+  if (takes && takesTitle) {
+    const f = readFacets(takes[2], nowMs);
+    if (f.durationMin) {
+      return {
+        name: TOOL_TASK_UPDATE,
+        args: { match: takesTitle, durationMin: f.durationMin, reply: '' },
+        draft: null,
+        summary: `${takesTitle} · ${hoursLabel(f.durationMin)}`,
+      };
+    }
+  }
+  return null;
+}
+
 /* ───────────────────────── the turn ───────────────────────── */
 
 const HELP =
@@ -751,6 +924,9 @@ export function understand(text: string, ctx: UnderstandContext): Understood {
 
   if (GREETING.test(raw)) return answer(HELP, prev);
   if (THANKS.test(raw)) return answer('Glad that works. Tap Add on anything you want to keep.', prev);
+  // The backlog before anything else: "add task: work out why…" is not a "why?".
+  const taskTurn = readTaskTurn(raw, ctx, nowMs, today);
+  if (taskTurn) return taskTurn;
   if (/\bwhy\b/.test(low)) return answer(why(ctx.lastProposals, today), prev);
 
   // Deleting: a yes or no to the list it just showed, or a new "delete …".

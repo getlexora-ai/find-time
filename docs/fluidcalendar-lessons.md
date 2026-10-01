@@ -16,13 +16,17 @@ model*; what it gets wrong is a list of traps for §8 of
 | --- | --- |
 | All-day events don't block hours | Done: `blocksTime` in `src/server/ai/find-time.ts`. Refined — an imported all-day event still marked busy (a holiday) does block. |
 | Declined / "free" events aren't busy | Done, same function. FluidCalendar stores these flags and never reads them. |
-| Task fields: due, priority, "not before", postpone, duration, lock | §8 entities (tasks) |
-| Dragging a block pins it, so re-planning leaves it alone | §8 re-planning ("pins accepted and started blocks") |
-| Re-plan everything unpinned | §8 re-planning, *with* minimal moves |
+| Task fields: due, priority, duration, lock | Done: `tasks` table + `src/server/tasks-repo.ts`, planned by `plan-week.ts`. "Not before" and postpone are not in the schema yet. |
+| A pinned block stays put through re-planning | Done: a non-flexible task block is pinned. Pin-on-drag needs the calendar to mark dragged blocks fixed — not yet. |
+| Re-plan everything unpinned | Done, *with* minimal moves: valid future sessions are kept, only broken ones move |
 | "Next three" focus queue with postpone 1h / 3h / 1d / 1w | Later; a view over the plan, not the planner |
 | Ignore echoes of our own pushed blocks when they sync back | Check when two-way push lands |
 
 ## Traps — each one becomes a `.check.mjs` case in the backlog phase
+
+`src/server/ai/plan-week.check.mjs` now covers 1, 2, 5, 6, 7, 8, 9, 15 and 17
+(numbers in brackets in the file); 10–14 are calendar-sync concerns and 3 does
+not apply (we have one clock). 16 applies once blocks are pushed to Google.
 
 Scoring
 

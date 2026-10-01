@@ -363,6 +363,10 @@ export type ProposalInput = {
   features: SlotFeatures;
   reason: string;
   alternatives: { startISO: string; endISO: string; score: number; features: SlotFeatures }[];
+  /** "plan my week": the task this block is a session of */
+  taskId?: string;
+  /** "plan my week": the existing block this one takes the place of, deleted on accept */
+  replacesEventId?: string;
 };
 
 export type StoredProposal = ProposalInput & { id: string };
@@ -393,8 +397,8 @@ export async function saveProposals(
       await c.query(
         `insert into ai_suggestions
            (id, draft_id, user_id, "index", kind, title, category, proposed_start, proposed_end,
-            rationale, confidence, score, features, alternatives)
-         values ($1,$2,$3,$4,'create',$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13::jsonb)`,
+            rationale, confidence, score, features, alternatives, task_id, event_id)
+         values ($1,$2,$3,$4,'create',$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13::jsonb,$14,$15)`,
         [
           p.id,
           draftId,
@@ -409,6 +413,8 @@ export async function saveProposals(
           p.score,
           JSON.stringify(p.features),
           JSON.stringify(p.alternatives),
+          p.taskId ?? null,
+          p.replacesEventId ?? null,
         ],
       );
     }
@@ -427,11 +433,14 @@ export type SuggestionRow = {
   features: SlotFeatures;
   alternatives: { startISO: string; endISO: string; score: number; features: SlotFeatures }[];
   status: string;
+  task_id: string | null;
+  /** the block an accepted "plan my week" session replaces */
+  event_id: string | null;
 };
 
 export async function getSuggestion(userId: string, sugId: string): Promise<SuggestionRow | null> {
   return queryOne<SuggestionRow>(
-    `select id, title, category, proposed_start, proposed_end, features, alternatives, status
+    `select id, title, category, proposed_start, proposed_end, features, alternatives, status, task_id, event_id
        from ai_suggestions where user_id = $1 and id = $2`,
     [userId, sugId],
   );

@@ -44,6 +44,12 @@ export const TOOL_TIME_OFF = 'block_time_off';
 export const TOOL_PLACE_AT = 'place_at';
 /** Rule-read only (src/server/ai/understand.ts): remove Find Time blocks, always after a yes. */
 export const TOOL_DELETE = 'delete_blocks';
+/** Rule-read only: the task backlog and "plan my week" (src/server/ai/plan-week.ts). */
+export const TOOL_ADD_TASK = 'add_task';
+export const TOOL_PLAN_WEEK = 'plan_week';
+export const TOOL_LIST_TASKS = 'list_tasks';
+export const TOOL_TASK_DONE = 'task_done';
+export const TOOL_TASK_UPDATE = 'update_task';
 
 const CATS = [...CATEGORIES];
 

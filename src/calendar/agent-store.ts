@@ -260,6 +260,8 @@ export async function acceptProposal(p: ChatProposal): Promise<AcceptResult> {
     return { ok: false, notes: [] };
   }
   const notes = await reportFeedback({ suggestionId: p.id, outcome: 'accepted' });
+  // A planned task session may replace an older one server-side: show that.
+  if (p.taskId) void refresh();
   return { ok: true, notes };
 }
 
@@ -290,6 +292,7 @@ export async function acceptAlternative(
     finalStartISO: alt.startISO,
     finalEndISO: alt.endISO,
   });
+  if (p.taskId) void refresh();
   return { ok: true, notes };
 }
 

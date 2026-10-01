@@ -5,8 +5,9 @@ question that matters, proposes a whole plan with reasons, takes pushback in
 plain language, remembers what it is taught, and checks back in. The scheduler
 stays deterministic underneath, so every plan is actually feasible.
 
-Written 2026-09-14. Nothing past Phase 0 is built. Supersedes the shorter
-version of this file (commit `25c05b6`).
+Written 2026-09-14. Supersedes the shorter version of this file (commit
+`25c05b6`). Status 2026-10-02: the task part of §8's engine is built — see
+"Built so far" at the end of §8. The rest is not.
 
 Related: [ai-learning.md](ai-learning.md) (how the agent learns),
 [training-capture.md](training-capture.md) (what every turn logs),
@@ -335,6 +336,22 @@ separate pure function that checks any plan against the hard constraints.
 **Budget:** a week plan under 200 ms. Stay in TypeScript with `.check.mjs`
 coverage; consider a constraint solver (e.g. OR-Tools as a service) only if
 the heuristic fails the evaluation set.
+
+**Built so far (2026-10-02):** `src/server/ai/plan-week.ts` + `plan-week.check.mjs`.
+Tasks (the `tasks` table, `src/server/tasks-repo.ts`) are placed
+earliest-deadline-first, then priority, then slack; a deadline is a hard bound
+(end of the due day); splittable tasks go in ≤2h sessions, one a day where
+possible, shrinking toward `min_chunk_min` before giving up; `prefer_by` is a
+small score bonus; whatever does not fit comes back as `unplaced` with a reason
+and something to say back. Re-planning keeps every future session that still
+works, keeps pinned (non-flexible) ones regardless, moves only the ones a new
+meeting or a moved deadline broke (the replacement retires the old block on
+accept), and treats past sessions as history, not progress. `verifyPlan` checks
+every plan independently and the route refuses to show one that fails. In chat:
+"add task: …", "plan my week" / "replan", "my tasks", "done with …", "split …",
+"… due …", "… takes …". **Not yet:** habits, travel, time away as its own
+entity, the repair pass (§8 step 4), trade-off options beyond one suggestion,
+a tasks screen in the app.
 
 **Prior art:** [fluidcalendar-lessons.md](fluidcalendar-lessons.md) — what an
 open-source Motion clone got right (task model, pin-on-drag) and 20 traps to

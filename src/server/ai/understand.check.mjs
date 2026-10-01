@@ -181,4 +181,60 @@ assert.match(r.args.reply, /Tomorrow at 09:00: it's when your energy is highest/
 const kept = say('why?', { tool: 'propose_blocks', title: 'X', durationMin: 60, placed: true });
 assert.equal(kept.draft?.title, 'X');
 
+// ── the task backlog ──
+r = say('Add task: write the quarterly report, 3h, due Friday');
+assert.equal(r.name, 'add_task');
+assert.equal(r.args.title, 'Write the quarterly report');
+assert.equal(r.args.durationMin, 180);
+assert.equal(r.args.dueByISO, '2026-10-03T00:00:00.000Z', 'due Friday = the whole of Friday');
+assert.equal(r.args.splittable, true, 'over 2h splits unless told otherwise');
+assert.equal(r.args.priority, 'medium');
+
+r = say('add a task: urgent tax forms 90 min by tomorrow in one go');
+assert.equal(r.name, 'add_task');
+assert.equal(r.args.title, 'Tax forms');
+assert.equal(r.args.priority, 'high');
+assert.equal(r.args.splittable, false);
+assert.equal(r.args.dueByISO, '2026-10-03T00:00:00.000Z');
+
+r = say('todo: read the design doc, 1 hour, mornings, no rush');
+assert.deepEqual([r.name, r.args.title, r.args.priority, r.args.preferredWindow, r.args.category], ['add_task', 'Read the design doc', 'low', 'morning', 'design']);
+assert.equal(r.args.dueByISO, undefined, 'no due date is fine');
+
+// "add task: work out why the build is slow" is a task, not a "why?"
+r = say('add task: work out why the build is slow, 2h');
+assert.equal(r.name, 'add_task');
+
+// no length: ask, never guess — and the answer finishes the task
+r = say('add task: prepare the board deck due Monday');
+assert.equal(r.name, 'ask_clarification');
+assert.match(r.args.question, /How long will Prepare the board deck take/);
+r = talk('add task: prepare the board deck due Monday', '2 hours');
+assert.equal(r.name, 'add_task');
+assert.equal(r.args.durationMin, 120);
+assert.equal(r.args.dueByISO, '2026-10-06T00:00:00.000Z');
+r = talk('add task: prepare the board deck due Monday', 'never mind');
+assert.equal(r.name, 'answer');
+
+for (const s of ['plan my week', 'Plan my tasks', 'replan', 'schedule my backlog for next week', 'can you organise my to-do list?']) {
+  assert.equal(say(s).name, 'plan_week', s);
+}
+for (const s of ['my tasks', 'show my tasks', 'what are my tasks?', 'todos']) assert.equal(say(s).name, 'list_tasks', s);
+
+const titles = ['Write the quarterly report', 'Tax forms'];
+const sayT = (text) => understand(text, { nowISO, previous: null, lastProposals: [], taskTitles: titles });
+r = sayT('done with the quarterly report');
+assert.deepEqual([r.name, r.args.match], ['task_done', 'Write the quarterly report']);
+r = sayT('mark tax forms as done');
+assert.deepEqual([r.name, r.args.match], ['task_done', 'Tax forms']);
+r = sayT('split the quarterly report');
+assert.deepEqual([r.name, r.args.match, r.args.splittable], ['update_task', 'Write the quarterly report', true]);
+r = sayT('tax forms due next week');
+assert.deepEqual([r.name, r.args.match, r.args.dueByISO], ['update_task', 'Tax forms', '2026-10-12T00:00:00.000Z']);
+r = sayT('Tax forms takes 2h');
+assert.deepEqual([r.name, r.args.durationMin], ['update_task', 120]);
+// …but only for tasks that exist: ordinary requests are untouched
+assert.equal(sayT('gym takes 1h on Friday').name !== 'update_task', true);
+assert.equal(sayT('2h of deep work on Thursday').name, 'propose_blocks');
+
 console.log('understand.check: ok');
