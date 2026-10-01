@@ -13,7 +13,7 @@ the mobile nav's "Ask AI". `src/lib/*` is now unreferenced but left on disk.
 
 | Area | Files |
 |---|---|
-| Tokens / themes / dates / seed | `tokens.ts`, `themes.ts`, `cal-date.ts`, `seed.ts`, `types.ts` |
+| Tokens / themes / dates | `tokens.ts`, `themes.ts`, `cal-date.ts`, `types.ts` |
 | State + store | `state.ts`, `cal-store.ts` (in-memory, `useSyncExternalStore`), `theme-context.tsx` (AsyncStorage, key `ft-theme`) |
 | Geometry | `layout.ts` (`monthCells`, `laidOut` overlap split, block px), `useResponsive.ts` (1024px breakpoint) |
 | Readings | `kpi.ts` — the numbers on Insights, derived from the events the grid draws |

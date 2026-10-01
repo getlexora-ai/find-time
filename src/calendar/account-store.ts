@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 import { useSyncExternalStore } from 'react';
 
 import type { AccountsResponse, ApiAccount } from '@/lib/api-types';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, currentUserId, onTokenGetter } from '@/lib/api';
 
 import { refresh as refreshEvents } from './cal-store';
 
@@ -56,16 +56,31 @@ export function previewAccounts(accounts: ApiAccount[]) {
   set({ loading: false, signedIn: false, accounts, syncing: false, error: null });
 }
 
+/** Whose accounts are in `state`. */
+let owner: string | null = null;
+
+// A different account signed in: clear the last one's Google accounts before
+// loading this one's, so they never show under the wrong person.
+onTokenGetter(() => {
+  const userId = currentUserId();
+  if (userId === owner || previewing) return;
+  owner = userId;
+  set({ loading: true, signedIn: false, user: null, accounts: [], syncing: false, error: null });
+  void refreshAccounts();
+});
+
 export function useAccounts(): AccountState {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
 export async function refreshAccounts(): Promise<void> {
   if (previewing) return;
+  const userId = currentUserId();
   try {
     const res = await apiFetch(`/api/calendar/accounts`);
     if (!res.ok) throw new Error(`GET /api/calendar/accounts ${res.status}`);
     const data = (await res.json()) as AccountsResponse;
+    if (currentUserId() !== userId) return; // switched accounts mid-request
     set({
       loading: false,
       signedIn: data.signedIn,

@@ -24,14 +24,23 @@ import type {
   RejectReason,
   ReportReason,
 } from '@/lib/api-types';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, currentUserId, onTokenGetter } from '@/lib/api';
 
 import { createAgentBlock, refresh } from './cal-store';
 
-const SESSION_KEY = 'ft.agent.session';
+/** Per user: two accounts on one browser must not reopen each other's thread. */
+const sessionKey = () => `ft.agent.session:${currentUserId() ?? 'anon'}`;
 
 /** The open conversation id, kept in memory for the app's lifetime. */
 let sessionId: string | null = null;
+let sessionOwner: string | null = null;
+
+// A different account signed in: forget the last one's open conversation.
+onTokenGetter(() => {
+  if (currentUserId() === sessionOwner) return;
+  sessionOwner = currentUserId();
+  sessionId = null;
+});
 
 export function currentSessionId(): string | null {
   return sessionId;
@@ -40,7 +49,7 @@ export function currentSessionId(): string | null {
 export function resetSession(): void {
   sessionId = null;
   try {
-    globalThis.localStorage?.removeItem(SESSION_KEY);
+    globalThis.localStorage?.removeItem(sessionKey());
   } catch {
     // no localStorage on native — the in-memory id is enough there
   }
@@ -49,7 +58,7 @@ export function resetSession(): void {
 function rememberSession(id: string): void {
   sessionId = id;
   try {
-    globalThis.localStorage?.setItem(SESSION_KEY, id);
+    globalThis.localStorage?.setItem(sessionKey(), id);
   } catch {
     // ignore
   }
@@ -58,7 +67,7 @@ function rememberSession(id: string): void {
 function restoreSession(): string | null {
   if (sessionId) return sessionId;
   try {
-    const v = globalThis.localStorage?.getItem(SESSION_KEY);
+    const v = globalThis.localStorage?.getItem(sessionKey());
     if (v) sessionId = v;
   } catch {
     // ignore

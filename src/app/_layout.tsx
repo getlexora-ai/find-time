@@ -23,11 +23,12 @@ import '../global.css';
 const PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 function AuthBridge() {
-  const { getToken } = useAuth();
+  const { getToken, userId } = useAuth();
   useEffect(() => {
-    setTokenGetter(() => getToken());
+    // The user id rides along so stores can tell an account switch from a token refresh.
+    setTokenGetter(() => getToken(), userId ?? null);
     return () => setTokenGetter(null);
-  }, [getToken]);
+  }, [getToken, userId]);
   return null;
 }
 

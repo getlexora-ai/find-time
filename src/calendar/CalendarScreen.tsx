@@ -3,7 +3,7 @@ import { Platform, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { syncNow, useAccounts } from './account-store';
-import { useCalEvents } from './cal-store';
+import { refresh as refreshEvents, useCalEvents, useCalLoad } from './cal-store';
 import { addDays, fromIso, fromMin, iso, MO, startOfWeek, today, WD_LONG, wdIndex } from './cal-date';
 import { AiPanel } from './components/AiPanel';
 import { CommandBar } from './components/CommandBar';
@@ -21,8 +21,9 @@ import { WeekView } from './components/WeekView';
 import { getHours, useHours, workFor } from './hours';
 import { computeKpis, slicesIn } from './kpi';
 import type { CalActions, CalState, ComposePreset, Page, PointAnchor, Slot, ViewKind } from './state';
-import { N } from './tokens';
+import { N, SANS } from './tokens';
 import type { CalEvent, EventKind } from './types';
+import { Press, Txt } from './ui';
 import { useResponsive } from './useResponsive';
 
 /**
@@ -96,6 +97,7 @@ function nextFreeSlot(): { date: string; at: string } {
 
 export function CalendarScreen() {
   const all = useCalEvents();
+  const load = useCalLoad();
   const toast = useToast();
   const hours = useHours();
   const { isDesktop } = useResponsive();
@@ -325,6 +327,15 @@ export function CalendarScreen() {
         );
         const body = (
           <View style={[styles.main, !isDesktop && { paddingBottom: NAV_H + Math.max(10, insets.bottom) }]}>
+            {load.status === 'error' && (
+              // Said out loud rather than covered with a cached or sample week.
+              <View style={styles.loadErr} accessibilityRole="alert">
+                <Txt style={styles.loadErrTxt}>{"Couldn't load your calendar from the server."}</Txt>
+                <Press hoverBg={N.hover} style={styles.loadErrBtn} accessibilityRole="button" onPress={() => void refreshEvents()}>
+                  <Txt style={styles.loadErrBtnTxt}>Try again</Txt>
+                </Press>
+              </View>
+            )}
             {page === 'insights' ? (
               <Insights
                 k={kpis}
@@ -455,6 +466,10 @@ const styles = StyleSheet.create({
   main: { flex: 1, minWidth: 0, minHeight: 0 },
   row: { flex: 1, minHeight: 0, flexDirection: 'row' },
   grid: { flex: 1, minHeight: 0 },
+  loadErr: { flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: 20, marginBottom: 12, paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: N.line, borderRadius: 10 },
+  loadErrTxt: { flex: 1, fontFamily: SANS, fontSize: 13, lineHeight: 18, color: N.accentInk },
+  loadErrBtn: { paddingVertical: 4, paddingHorizontal: 8, borderRadius: 6 },
+  loadErrBtnTxt: { fontFamily: SANS, fontSize: 13, lineHeight: 18, color: N.ink, textDecorationLine: 'underline' },
   // The grid sits on the page as one card, ruled once — no frame, no brackets.
   gridDesktop: { marginHorizontal: 20, marginBottom: 20, borderWidth: 1, borderColor: N.line, borderRadius: 12, overflow: 'hidden' },
 });

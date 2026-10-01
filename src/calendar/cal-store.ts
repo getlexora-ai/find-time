@@ -2,13 +2,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 
 import type { FindTimeProposal } from '@/lib/api-types';
-import { apiFetch, hasTokenGetter, onTokenGetter } from '@/lib/api';
+import { apiFetch, currentUserId, hasTokenGetter, onTokenGetter } from '@/lib/api';
 import { IMPORTED_ORIGIN, lockedFields } from '@/lib/synced-fields';
 
 import { DEFAULT_RRULE, toCalEvent, toEventInput, toEventPatch } from './api-adapter';
 import { toMin } from './cal-date';
 import { PendingSaves } from './pending-saves';
-import { seedEvents } from './seed';
 import type { CatKey } from './tokens';
 import type { CalEvent } from './types';
 
@@ -17,8 +16,10 @@ import type { CalEvent } from './types';
  * before — every export below is unchanged for callers — but the data now comes
  * from `/api/events` (Postgres, via the +api.ts routes).
  *
- * Reads:  fetch on load, fall back to an AsyncStorage cache, then to the seed
- *         fixtures (offline / first run).
+ * Reads:  the signed-in user's own cache instantly, then server truth. A
+ *         failed load is reported (useCalLoad), never papered over: no sample
+ *         week, and never another account's cache — the cache is keyed by the
+ *         Clerk user, because two accounts on one browser share its storage.
  * Writes: optimistic local update + emit immediately, network in the
  *         background. Every mutation returns a promise of whether the server
  *         actually took the write, so callers confirm once it has landed
@@ -26,9 +27,13 @@ import type { CalEvent } from './types';
  *         re-fetches, which puts what is really saved back on screen.
  */
 
-const CACHE_KEY = 'ft-cal-events-v1';
+/** The old shared cache, readable by whoever signed in next. Deleted on load. */
+const LEGACY_CACHE_KEY = 'ft-cal-events-v1';
+const cacheKey = (userId: string) => `ft-cal-events-v2:${userId}`;
 
-let events: CalEvent[] = seedEvents();
+let events: CalEvent[] = [];
+/** Whose events `events` holds. Nothing is cached until this is known. */
+let owner: string | null = null;
 /** numeric CalEvent.id -> server (text) id. Rebuilt from every fetch. */
 const idMap = new Map<number, string>();
 /** ids for events created locally before the server has answered. */
@@ -63,7 +68,47 @@ export const SAVE_FAILED = "Couldn't save that change. Check your connection and
 function emit() {
   events = [...events];
   listeners.forEach((l) => l());
-  AsyncStorage.setItem(CACHE_KEY, JSON.stringify(events)).catch(() => {});
+  if (owner && !preview) AsyncStorage.setItem(cacheKey(owner), JSON.stringify(events)).catch(() => {});
+}
+
+export type CalLoad = { status: 'loading' | 'ready' | 'error'; error: string | null };
+let load: CalLoad = { status: 'loading', error: null };
+const loadListeners = new Set<() => void>();
+function setLoad(next: CalLoad) {
+  load = next;
+  loadListeners.forEach((l) => l());
+}
+
+/** Whether the calendar on screen is the server's — so a failed load can say so. */
+export function useCalLoad(): CalLoad {
+  return useSyncExternalStore(
+    (l) => {
+      loadListeners.add(l);
+      return () => {
+        loadListeners.delete(l);
+      };
+    },
+    () => load,
+    () => load,
+  );
+}
+
+/**
+ * A different account is now signed in: drop everything the last one had on
+ * screen, fail its queued writes rather than send them as the new user, and
+ * show the new user's own cache while the fetch runs.
+ */
+function switchOwner(userId: string) {
+  owner = userId;
+  events = [];
+  idMap.clear();
+  loadedFromServer = false;
+  for (const id of pending.ids()) pending.take(id)?.settle(false);
+  setLoad({ status: 'loading', error: null });
+  // Notify without emit(): emit() would write this empty list over the new
+  // user's cache before hydrateFromCache gets to read it.
+  listeners.forEach((l) => l());
+  void hydrateFromCache(userId);
 }
 function subscribe(l: () => void) {
   listeners.add(l);
@@ -105,17 +150,26 @@ async function fetchList(): Promise<CalEvent[]> {
 
 /**
  * Replace the store with server truth, then send any writes that were waiting
- * for it. Silent on failure — keeps the cache/seed snapshot.
+ * for it. On failure the user's own cached copy stays, and useCalLoad reports it.
  */
 export async function refresh() {
   if (preview) return;
+  const userId = currentUserId();
+  if (!userId) return; // not signed in yet; onTokenGetter runs this again
+  if (userId !== owner) switchOwner(userId);
   let fresh: CalEvent[];
   try {
     fresh = await fetchList();
-  } catch {
-    return; // offline, API down, or not signed in yet
+  } catch (err) {
+    if (owner === userId && !loadedFromServer) {
+      setLoad({ status: 'error', error: err instanceof Error ? err.message : String(err) });
+    }
+    return;
   }
+  // Signed out or switched while the request was in flight: not ours to show.
+  if (currentUserId() !== userId) return;
   loadedFromServer = true;
+  setLoad({ status: 'ready', error: null });
   events = fresh;
   // Queued writes are applied to the fresh rows BEFORE emitting, so an edit
   // does not flash back to its old value between the fetch and the flush.
@@ -124,11 +178,11 @@ export async function refresh() {
   await Promise.all(sends.map((send) => send()));
 }
 
-async function hydrateFromCache() {
+async function hydrateFromCache(userId: string) {
   try {
-    const raw = await AsyncStorage.getItem(CACHE_KEY);
+    const raw = await AsyncStorage.getItem(cacheKey(userId));
     // A fetch that finished first is newer than anything cached.
-    if (raw && !loadedFromServer) {
+    if (raw && !loadedFromServer && owner === userId) {
       events = JSON.parse(raw) as CalEvent[];
       emit();
     }
@@ -145,7 +199,7 @@ async function hydrateFromCache() {
 // and every edit in between changed the screen without ever being sent. So:
 // load now only if a getter already exists, and again whenever one arrives.
 void (async () => {
-  await hydrateFromCache();
+  await AsyncStorage.removeItem(LEGACY_CACHE_KEY).catch(() => {});
   if (hasTokenGetter()) await refresh();
 })();
 onTokenGetter(() => {

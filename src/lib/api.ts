@@ -13,15 +13,27 @@ const BASE = process.env.EXPO_PUBLIC_API_URL ?? '';
 
 type TokenGetter = () => Promise<string | null>;
 let getToken: TokenGetter | null = null;
+/** Clerk id of the signed-in user, or null. Stores key their local caches by it. */
+let userId: string | null = null;
 const tokenListeners = new Set<() => void>();
 
-export function setTokenGetter(fn: TokenGetter | null): void {
+export function setTokenGetter(fn: TokenGetter | null, user: string | null = null): void {
   getToken = fn;
+  userId = fn ? user : null;
   if (fn) tokenListeners.forEach((l) => l());
 }
 
 export function hasTokenGetter(): boolean {
   return getToken !== null;
+}
+
+/**
+ * Who the data on screen belongs to. Anything cached on the device must be
+ * keyed by this: two accounts signed in on one browser share its storage, and
+ * an unkeyed cache shows the first account's calendar to the second.
+ */
+export function currentUserId(): string | null {
+  return userId;
 }
 
 /**
