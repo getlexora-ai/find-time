@@ -160,7 +160,7 @@ const hatchLight = (a: number, gap: number): ViewStyle =>
 
 export const HATCH = {
   /** white hatch over a solid tile: routine / break (§12) */
-  onSolid: hatchLight(0.22, 6),
+  onSolid: hatchLight(0.14, 7),
   ground: hatch(0.02, 8),
   off: hatch(0.035, 6),
   tile: hatch(0.05, 5),
@@ -208,6 +208,9 @@ export const CATS: Record<CatKey, { label: string; color: string }> = {
   research: { label: 'Research', color: '#0F766E' },
   admin: { label: 'Admin', color: '#A16207' },
 };
+
+/** Breaks are recovery, not a category: one calm green of their own (white text 5.5:1). */
+export const BREAK_COLOR = '#047857';
 export const CAT_KEYS = Object.keys(CATS) as CatKey[];
 
 /* ───────────────────────── time grid ───────────────────────── */

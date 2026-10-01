@@ -1,7 +1,7 @@
 import type { TextStyle, ViewStyle } from 'react-native';
 
 import type { IconName } from './Icon';
-import { CATS, type CatKey, HATCH, N, SHADOW } from './tokens';
+import { BREAK_COLOR, CATS, type CatKey, HATCH, N, SHADOW } from './tokens';
 import type { CalEvent, EventKind } from './types';
 
 /**
@@ -113,7 +113,7 @@ function boxOf(kind: EventKind, color: string): ViewStyle[] {
     case 'routine':
       return [{ backgroundColor: color }, HATCH.onSolid];
     case 'break':
-      return [{ backgroundColor: color, opacity: 0.75 }, HATCH.onSolid];
+      return [{ backgroundColor: BREAK_COLOR }];
     case 'event':
       return [{ backgroundColor: N.surface }, SHADOW.sm];
     case 'task':
@@ -138,7 +138,7 @@ const SOLID_INK = { title: N.onInk, meta: 'rgba(255,255,255,0.78)', glyph: 'rgba
 export function paint(ev: Pick<CalEvent, 'kind'> & { cat?: CatKey }): Paint {
   const spec = specOf(ev);
   const cat = ev.cat ?? DEFAULT_CAT[spec.key];
-  const color = CATS[cat].color;
+  const color = spec.key === 'break' ? BREAK_COLOR : CATS[cat].color;
   const solid = SOLID.has(spec.key);
   const ink = solid ? SOLID_INK : WHITE_INK[spec.key as 'event' | 'task' | 'ai'];
   return {
