@@ -469,3 +469,17 @@ planner was the guide, not the template.
   day in the deep-work tint, and the shown week as a soft band. It opens
   under the heading (desktop) and inline in the sheet for Date. The Show sheet
   opens under the eye button. No surface draws its own chip or input style.
+
+## 14. Insights, week and day (2026-10-01)
+
+Insights follows the planner's Week | Day switch (the toolbar shows it on both pages; phone has it in-page). Readings come from `src/calendar/insights.ts` (the shape of each day) and `kpi.ts` (totals and targets), both cut with `sliceOn`, so they always match the grid. Checked by `node --experimental-strip-types src/calendar/insights.check.mjs`.
+
+- **Headline:** two generated sentences, each clause a reading shown on the page, plus a bar of working time split by category, breaks and open time.
+- **Week tiles:** Booked (in working hours) · Focus protected (ring vs goal) · Meetings (share of working time) · Focus-ready time (free gaps ≥ 1h). Each has a 7-day mini chart and a change vs last week. The change is hidden when last week has no bookings: no data is not zero.
+- **Day tiles:** Booked · Still open (gaps after now, plus the next slot of 30m or more) · Meetings (+ back-to-back runs) · Focus (longest block).
+- **Needs you:** clashes and proposals; 3 rows, then "Show all".
+- **Week at a glance:** 7 rows across your hours, hatched outside working hours. Booked blocks are in category colour, proposals dashed orange, and free windows of 1h+ dashed blue (click → Plan with AI prefilled). Booked and open totals per day sit on the right.
+- **Day:** one large timeline (titles inside blocks, open windows of 30m+ labelled), an agenda (past blocks faded, "Now"), and open windows each with a Plan button.
+- **Rhythm (week):** context switches a day, back-to-back runs, booked outside working hours, days with a break, fragmented time (gaps < 30m). Each has a Fine or Watch tag (icon + word, never colour alone).
+- **Breaks are not a category:** `kpi.ts` no longer counts break blocks toward category targets.
+- The category palette fails the CVD check for Deep work vs Meetings (blue/violet). Every chart therefore carries a legend or direct labels.

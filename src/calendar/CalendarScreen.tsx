@@ -68,6 +68,12 @@ function titleFor(view: ViewKind, cursor: Date, selected: Date) {
   return `${short(a)} ${a.getFullYear()} – ${short(b)} ${b.getFullYear()}`;
 }
 
+/** `?page=insights` / `?view=day` on web — deep links into Insights, and `/preview` screenshots. */
+function urlParam(name: string): string | null {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return null;
+  return new URLSearchParams(window.location.search).get(name);
+}
+
 /** Insights is about a span, not a month: "Week of 28 Sep", "Thursday 1 October". */
 function insightsTitle(view: ViewKind, cursor: Date, selected: Date) {
   if (view === 'day') return titleFor(view, cursor, selected);
@@ -110,7 +116,7 @@ export function CalendarScreen() {
   }, [toast]);
 
   const [state, setState] = useState<CalState>(() => ({
-    view: 'week',
+    view: urlParam('view') === 'day' ? 'day' : 'week',
     cursor: today(),
     selected: today(),
     loading: false,
@@ -215,7 +221,7 @@ export function CalendarScreen() {
     () => events.filter((e) => e.kind === 'ai' && days.includes(e.date)),
     [events, days],
   );
-  const [page, setPage] = useState<Page>('planner');
+  const [page, setPage] = useState<Page>(() => (urlParam('page') === 'insights' ? 'insights' : 'planner'));
 
   /* ── web keyboard ── */
   // The docked AI panel is part of the page on desktop: arrows and T still work beside it.
@@ -322,9 +328,12 @@ export function CalendarScreen() {
             {page === 'insights' ? (
               <Insights
                 k={kpis}
+                events={events}
+                days={days}
+                hours={hours}
+                view={state.view}
                 clashes={clashes.pairs}
                 proposals={proposals}
-                scope={state.view === 'day' ? 'today' : 'this week'}
                 actions={actions}
                 onResolve={resolvePair}
               />

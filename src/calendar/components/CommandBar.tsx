@@ -161,23 +161,24 @@ export function CommandBar({
 
         <View style={styles.spacer} />
 
+        {/* Week | Day scopes Insights too, so it stays on both pages. */}
+        <View style={styles.seg} accessibilityRole="tablist" aria-label="Calendar view">
+          {VIEWS.map((v) => {
+            const on = state.view === v.key;
+            return (
+              <Press
+                key={v.key}
+                onPress={() => actions.setView(v.key)}
+                accessibilityRole="tab"
+                aria-selected={on}
+                style={[styles.segItem, on && [styles.segOn, SHADOW.sm]]}>
+                <Txt style={[styles.segTxt, on && styles.segTxtOn]}>{v.label}</Txt>
+              </Press>
+            );
+          })}
+        </View>
         {page === 'planner' && (
           <>
-            <View style={styles.seg} accessibilityRole="tablist" aria-label="Calendar view">
-              {VIEWS.map((v) => {
-                const on = state.view === v.key;
-                return (
-                  <Press
-                    key={v.key}
-                    onPress={() => actions.setView(v.key)}
-                    accessibilityRole="tab"
-                    aria-selected={on}
-                    style={[styles.segItem, on && [styles.segOn, SHADOW.sm]]}>
-                    <Txt style={[styles.segTxt, on && styles.segTxtOn]}>{v.label}</Txt>
-                  </Press>
-                );
-              })}
-            </View>
             <Button
               variant="secondary"
               label="New"

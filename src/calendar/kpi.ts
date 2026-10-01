@@ -113,7 +113,12 @@ export function computeKpis(events: CalEvent[], days: string[], clashes: number,
   /* ── 1. planned hours, split by category ── */
   const hours = {} as Record<CatKey, number>;
   for (const k of CAT_KEYS) hours[k] = 0;
-  for (const sl of booked) hours[sl.ev.cat] = (hours[sl.ev.cat] ?? 0) + hoursOf(sl);
+  // Breaks are recovery, not a category (tokens.ts BREAK_COLOR): a lunch tagged
+  // "admin" must not count toward the admin target. Insights shows them apart.
+  for (const sl of booked) {
+    if (sl.ev.kind === 'break') continue;
+    hours[sl.ev.cat] = (hours[sl.ev.cat] ?? 0) + hoursOf(sl);
+  }
 
   // Day view should be measured against a day's worth of target, not a week's.
   const scale = days.length / 7;
