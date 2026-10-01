@@ -1,4 +1,6 @@
-import { toMin, WD } from './cal-date';
+import { WD } from './cal-date';
+import { type Hours, workFor } from './hours';
+import { type DaySlice, sliceOn } from './layout';
 import { CATS, CAT_KEYS, type CatKey } from './tokens';
 import type { CalEvent } from './types';
 
@@ -15,14 +17,6 @@ import type { CalEvent } from './types';
  * there is no "tasks ticked" and no "overdue" count. Inventing either would put
  * a number on screen that nothing can ever move.
  */
-
-/**
- * The window "open capacity" is measured inside. Narrower than the grid's own
- * 07:00–21:00: free time at 07:00 is not capacity you would actually schedule
- * into, and counting it made every week look half empty.
- */
-export const WAKE_START = 8;
-export const WAKE_END = 20;
 
 /**
  * Weekly hour targets per category, and the weekly protected-focus goal.
@@ -43,7 +37,24 @@ export const FOCUS_GOAL_WEEK_H = 14;
 /** Kinds that occupy real time. A proposal is not booked until you accept it. */
 const isBooked = (e: CalEvent) => e.kind !== 'ai';
 
-const hoursOf = (e: CalEvent) => Math.max(0, toMin(e.end) - toMin(e.start)) / 60;
+/** Hours of one day's slice — an overnight block counts on each day it covers. */
+const hoursOf = (sl: DaySlice) => Math.max(0, sl.t - sl.s) / 60;
+
+/**
+ * Every timed slice on the days in view. Built with the grid's own `sliceOn`,
+ * so a weekly routine counts in every week it repeats in, and a block that runs
+ * past midnight counts on both days — exactly what the grid draws.
+ */
+export function slicesIn(events: CalEvent[], days: string[]): DaySlice[] {
+  const out: DaySlice[] = [];
+  for (const day of days) {
+    for (const e of events) {
+      const sl = sliceOn(e, day);
+      if (sl) out.push(sl.ev.date === day ? sl : { ...sl, ev: { ...sl.ev, date: day } });
+    }
+  }
+  return out;
+}
 
 export type CatSlice = {
   key: CatKey;
@@ -95,15 +106,14 @@ export type Kpis = {
  * the conflict banner; recomputing them here would be a second definition of
  * "clash" that could drift from the one the banner uses.
  */
-export function computeKpis(events: CalEvent[], days: string[], clashes: number): Kpis {
-  const inView = new Set(days);
-  const scoped = events.filter((e) => inView.has(e.date));
-  const booked = scoped.filter(isBooked);
+export function computeKpis(events: CalEvent[], days: string[], clashes: number, h: Hours): Kpis {
+  const scoped = slicesIn(events, days);
+  const booked = scoped.filter((sl) => isBooked(sl.ev));
 
   /* ── 1. planned hours, split by category ── */
   const hours = {} as Record<CatKey, number>;
   for (const k of CAT_KEYS) hours[k] = 0;
-  for (const e of booked) hours[e.cat] = (hours[e.cat] ?? 0) + hoursOf(e);
+  for (const sl of booked) hours[sl.ev.cat] = (hours[sl.ev.cat] ?? 0) + hoursOf(sl);
 
   // Day view should be measured against a day's worth of target, not a week's.
   const scale = days.length / 7;
@@ -121,15 +131,15 @@ export function computeKpis(events: CalEvent[], days: string[], clashes: number)
   const lead = ranked[0] && ranked[0].hours > 0 ? ranked[0] : null;
 
   /* ── 2. protected focus ── */
-  const focusBlocks = booked.filter((e) => e.kind === 'focus');
-  const focusH = focusBlocks.reduce((a, e) => a + hoursOf(e), 0);
-  const focusLongestH = focusBlocks.reduce((a, e) => Math.max(a, hoursOf(e)), 0);
+  const focusBlocks = booked.filter((sl) => sl.ev.kind === 'focus');
+  const focusH = focusBlocks.reduce((a, sl) => a + hoursOf(sl), 0);
+  const focusLongestH = focusBlocks.reduce((a, sl) => Math.max(a, hoursOf(sl)), 0);
 
   /* ── 3. open capacity, per day ── */
   const free: FreeDay[] = days.map((date) => ({
     date,
     label: WD[wdOf(date)],
-    hours: freeHoursOn(booked, date),
+    hours: freeHoursOn(booked, date, h),
     isToday: date === todayIso(),
   }));
   const freeH = free.reduce((a, f) => a + f.hours, 0);
@@ -152,22 +162,24 @@ export function computeKpis(events: CalEvent[], days: string[], clashes: number)
     clashes,
     proposals: scoped.length - booked.length,
     blocks: booked.length,
-    movable: booked.filter((e) => e.flexible).length,
+    movable: booked.filter((sl) => sl.ev.flexible).length,
   };
 }
 
 /**
- * Unbooked hours inside the waking window on one day. Overlapping blocks are
- * merged first, so a double-booked morning costs an hour of capacity once, not
- * twice — which is what made the naive "sum the durations" version report
- * negative free time on a clashing day.
+ * Unbooked hours inside that day's WORKING hours (clipped to your hours). A
+ * non-working day has no capacity: a free Saturday is not room the plan should
+ * count on. Overlapping blocks are merged first, so a double-booked morning
+ * costs an hour of capacity once, not twice.
  */
-function freeHoursOn(booked: CalEvent[], date: string): number {
-  const lo = WAKE_START * 60;
-  const hi = WAKE_END * 60;
+function freeHoursOn(booked: DaySlice[], date: string, h: Hours): number {
+  const work = workFor(h, wdOf(date));
+  if (!work) return 0;
+  const lo = work.start * 60;
+  const hi = work.end * 60;
   const spans = booked
-    .filter((e) => e.date === date)
-    .map((e) => [Math.max(toMin(e.start), lo), Math.min(toMin(e.end), hi)] as const)
+    .filter((sl) => sl.ev.date === date)
+    .map((sl) => [Math.max(sl.s, lo), Math.min(sl.t, hi)] as const)
     .filter(([s, t]) => t > s)
     .sort((a, b) => a[0] - b[0]);
 

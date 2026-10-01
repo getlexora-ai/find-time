@@ -19,10 +19,13 @@ type Row = {
   rrule: string | null;
   project_label: string | null;
   description: string | null;
+  calendar_id: string | null;
+  all_day: boolean;
 };
 
 const COLS = `id, title, start_at, end_at, category, item_type, flexibility,
-              origin, is_draft, rrule, project_label, description`;
+              origin, is_draft, rrule, project_label, description,
+              calendar_id, all_day`;
 
 function toApi(r: Row): ApiEvent {
   return {
@@ -38,6 +41,8 @@ function toApi(r: Row): ApiEvent {
     rrule: r.rrule,
     projectLabel: r.project_label,
     notes: r.description,
+    calendarId: r.calendar_id,
+    allDay: r.all_day,
   };
 }
 

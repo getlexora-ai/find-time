@@ -13,9 +13,8 @@ import { META } from '@/landing/copy';
  * want their own title override these with `<Head>` (expo-router/head) —
  * `/`, `/login`, `/app`, `/privacy`, `/terms` do.
  *
- * No JetBrains Mono `<link>`: shipping the webfont is still an open question with
- * the user, so web keeps the platform-mono fallback that `MONO` in
- * `src/design/ui.tsx` already declares.
+ * Fonts: Google Sans Flex + JetBrains Mono, the calendar's two faces
+ * (src/calendar/tokens.ts, docs/calendar-spec.md §1.2).
  */
 
 // The deployed origin — used for canonical + absolute OG image URLs. Set
@@ -51,6 +50,13 @@ export default function Root({ children }: PropsWithChildren) {
         <meta name="twitter:title" content={META.title} />
         <meta name="twitter:description" content={META.description} />
         <meta name="twitter:image" content={OG_IMAGE} />
+
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        />
 
         {/* Disables body scrolling on web so a root <ScrollView> behaves natively. */}
         <ScrollViewStyleReset />

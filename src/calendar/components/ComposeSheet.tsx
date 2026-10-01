@@ -3,31 +3,64 @@ import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react
 
 import { IMPORTED_LOCKED_MESSAGE } from '@/lib/synced-fields';
 
-import { allEvents, byDate, createEventAsync, deleteEvent, SAVE_FAILED, updateEvent } from '../cal-store';
-import { fromMin, iso, toMin, today } from '../cal-date';
+import { allEvents, createEventAsync, deleteEvent, SAVE_FAILED, updateEvent } from '../cal-store';
+import { fromIso, fromMin, iso, MO, pad, toMin, today, WD, wdIndex } from '../cal-date';
+import { getHours, workFor } from '../hours';
 import { Icon } from '../Icon';
-import { useCalTheme } from '../theme-context';
-import { KIND_KEYS, KINDS } from '../kinds';
+import { KINDS, PICKABLE } from '../kinds';
+import { sliceOn } from '../layout';
+import type { ComposePreset } from '../state';
+import { CATS, CAT_KEYS, type CatKey, durLabel, MONO, N, R, SANS, SHADOW, SNAP, T } from '../tokens';
 import type { EventKind } from '../types';
-import { CATS, CAT_KEYS, type CatKey, C, R, w } from '../tokens';
-import { MONO, Press, Txt } from '../ui';
+import { Button, Label, Mono, Press, Txt } from '../ui';
 import { useResponsive } from '../useResponsive';
 
-const DURATIONS = [
-  { v: 30, label: '30 min' },
-  { v: 45, label: '45 min' },
-  { v: 60, label: '60 min' },
-  { v: 90, label: '90 min' },
-  { v: 120, label: '120 min' },
-  { v: 180, label: '3 hours' },
-];
-const PROJECTS = ['Mobile launch', 'Website v2', 'User research', 'No project'];
+const DURATIONS = [15, 30, 45, 60, 90, 120, 180];
 
+/** The category a new block of a kind most likely is — one less tap. */
+export const DEFAULT_CAT: Record<EventKind, CatKey> = {
+  focus: 'deep',
+  event: 'sync',
+  task: 'admin',
+  routine: 'admin',
+  break: 'admin',
+  ai: 'deep',
+};
+
+const isDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(fromIso(s).getTime());
+const isTime = (s: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(s);
+
+/**
+ * First free `dur` minutes on `date` inside that day's working hours, at or
+ * after `from` (minutes). Uses the grid's own slicing, so repeats and blocks
+ * that run past midnight count as taken. Null if the day has no room.
+ */
+export function firstFree(date: string, dur: number, from = 0, ignoreId?: number): number | null {
+  const h = getHours();
+  const work = workFor(h, wdIndex(fromIso(date)));
+  if (!work) return null;
+  const taken = allEvents()
+    .filter((e) => e.id !== ignoreId && e.kind !== 'ai')
+    .map((e) => sliceOn(e, date))
+    .filter((sl): sl is NonNullable<typeof sl> => !!sl)
+    .map((sl) => [sl.s, sl.t] as const);
+  const startAt = Math.max(work.start * 60, Math.ceil(from / SNAP) * SNAP);
+  for (let m = startAt; m + dur <= work.end * 60; m += SNAP) {
+    if (!taken.some(([a, b]) => m < b && m + dur > a)) return m;
+  }
+  return null;
+}
+
+/**
+ * The full sheet: new block, or edit one. Quick-create's "More" lands here
+ * with the slot and kind already filled in.
+ */
 export function ComposeSheet({
   composeId,
   defaultDate,
   defaultStart,
   autoPlace,
+  preset,
   onClose,
   onSaved,
   toast,
@@ -35,237 +68,244 @@ export function ComposeSheet({
   composeId: number | null;
   defaultDate: string;
   defaultStart: string;
-  /** Open with "Let AI place it" already on — how Reschedule moves a block. */
+  /** Open with "Find a time" on — how Reschedule moves a block. */
   autoPlace?: boolean;
+  preset?: ComposePreset;
   onClose: () => void;
   onSaved: (dateIso: string) => void;
   toast: (m: string) => void;
 }) {
-  const { theme } = useCalTheme();
   const { isPhone } = useResponsive();
-  // The parent remounts this sheet per open (key={compose.id}), so plain lazy
-  // initialisers are enough — no prop→state effect needed.
   const editing = composeId ? allEvents().find((e) => e.id === composeId) ?? null : null;
+  const hours = getHours();
 
-  const [title, setTitle] = useState(editing?.title ?? '');
+  const initialDur = editing
+    ? toMin(editing.end) - toMin(editing.start)
+    : preset?.end
+      ? toMin(preset.end) - toMin(defaultStart)
+      : 60;
+
+  const [title, setTitle] = useState(editing?.title ?? preset?.title ?? '');
   const [date, setDate] = useState(editing?.date ?? defaultDate);
   const [start, setStart] = useState(editing?.start ?? defaultStart);
-  const [dur, setDur] = useState(editing ? toMin(editing.end) - toMin(editing.start) : 60);
-  const [cat, setCat] = useState<CatKey>(editing?.cat ?? 'deep');
-  const [kind, setKindState] = useState<EventKind>(editing?.kind ?? 'event');
-  const [project, setProject] = useState(editing?.project || 'No project');
-  const [ai, setAi] = useState(autoPlace ?? !editing);
+  const [dur, setDur] = useState(Math.max(15, initialDur));
+  const [kind, setKindState] = useState<EventKind>(editing?.kind === 'ai' ? 'event' : editing?.kind ?? preset?.kind ?? 'event');
+  const [cat, setCat] = useState<CatKey>(editing?.cat ?? DEFAULT_CAT[preset?.kind ?? 'event']);
+  const [project, setProject] = useState(editing?.project ?? '');
   const [notes, setNotes] = useState(editing?.notes ?? '');
+  const [find, setFind] = useState(autoPlace ?? false);
+  /** set once the person has seen the "outside your hours" line and pressed Save again */
+  const [confirmOutside, setConfirmOutside] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const s = isTime(start) ? toMin(start) : NaN;
+  const outside =
+    !find && Number.isFinite(s) && (s < hours.start * 60 || s + dur > hours.end * 60);
 
   function save() {
     const t = title.trim();
-    if (!t) {
-      toast('Give the block a name');
-      return;
+    if (!t) return setError('Give the block a name.');
+    if (editing?.imported) return toast(IMPORTED_LOCKED_MESSAGE);
+    if (!isDate(date)) return setError('Date must look like 2026-10-05.');
+    if (!find && !isTime(start)) return setError('Start must look like 09:30 (24-hour).');
+    if (!find && s + dur > 24 * 60) return setError('That runs past midnight — make it shorter or start earlier.');
+    if (outside && !confirmOutside) {
+      setConfirmOutside(true);
+      return setError(null);
     }
-    // EventDetail does not offer Edit on a Google event, and the store and the
-    // API both refuse the write — this just says why if something opens it anyway.
-    if (editing?.imported) {
-      toast(IMPORTED_LOCKED_MESSAGE);
-      return;
+
+    let at = start;
+    if (find) {
+      const from = date === iso(today()) ? new Date().getHours() * 60 + new Date().getMinutes() : 0;
+      const m = firstFree(date, dur, from, composeId ?? undefined);
+      if (m == null) return setError(`No free ${durLabel(dur)} in working hours that day. Pick another day or a time.`);
+      at = fromMin(m);
     }
-    const d = date || iso(today());
-    let s = start || '09:00';
-    let placed = false;
-    // Also runs when editing, which is what makes "Reschedule" a real move.
-    if (ai) {
-      // Exclude the block being edited — otherwise it collides with where it
-      // already is and the placer skips its own slot.
-      const taken = byDate(allEvents(), d)
-        .filter((e) => e.id !== composeId)
-        .map((e) => [toMin(e.start), toMin(e.end)] as const);
-      for (let m = 8 * 60; m + dur <= 18 * 60; m += 15) {
-        if (!taken.some(([a, b]) => m < b && m + dur > a)) {
-          s = fromMin(m);
-          placed = true;
-          break;
-        }
-      }
-    }
-    const proj = project === 'No project' ? '' : project;
-    // The sheet closes straight away — the store updates optimistically — but
-    // the confirmation waits for the server. It used to fire immediately, so a
-    // write that failed still said "Event updated" and then quietly reverted.
-    if (composeId) {
-      const done = placed ? `Moved to ${s}. No conflicts.` : 'Event updated';
-      void updateEvent(composeId, {
-        title: t,
-        date: d,
-        start: s,
-        end: fromMin(toMin(s) + dur),
-        cat,
-        kind,
-        project: proj,
-        notes: notes.trim(),
-      }).then((ok) => toast(ok ? done : SAVE_FAILED));
+    const end = fromMin(toMin(at) + dur);
+    const fields = { title: t, date, start: at, end, cat, kind, project: project.trim(), notes: notes.trim() };
+    const when = `${WD[wdIndex(fromIso(date))]} ${at}`;
+
+    if (editing) {
+      void updateEvent(editing.id, fields).then((ok) => toast(ok ? `Saved · ${when}` : SAVE_FAILED));
     } else {
-      const done = placed ? `Time found at ${s}. No conflicts.` : `Added at ${s}`;
-      createEventAsync({
-        date: d,
-        start: s,
-        end: fromMin(toMin(s) + dur),
-        title: t,
-        cat,
-        kind,
-        project: proj,
-        notes: notes.trim(),
-      }).then(
-        () => toast(done),
+      createEventAsync(fields).then(
+        () => toast(`Added · ${when}`),
         () => toast(SAVE_FAILED),
       );
     }
-    onSaved(d);
+    onSaved(date);
   }
+
+  const d = isDate(date) ? fromIso(date) : null;
 
   return (
     <Modal visible transparent animationType={isPhone ? 'slide' : 'fade'} onRequestClose={onClose}>
       <Pressable
         onPress={onClose}
-        style={[styles.backdrop, { backgroundColor: C.scrim }, isPhone ? styles.backdropSheet : styles.backdropCenter]}>
+        style={[styles.backdrop, isPhone ? styles.backdropSheet : styles.backdropCenter]}>
         <Pressable
           onPress={(e) => e.stopPropagation()}
-          style={[
-            styles.panel,
-            { backgroundColor: theme.panel, borderColor: theme.panelBorder },
-            isPhone ? styles.panelSheet : styles.panelModal,
-          ]}>
-          <ScrollView contentContainerStyle={{ padding: 20 }} keyboardShouldPersistTaps="handled">
-            {isPhone && <View style={styles.grab} />}
+          style={[styles.panel, SHADOW.lg, isPhone ? styles.panelSheet : styles.panelModal]}>
+          <ScrollView contentContainerStyle={styles.pad} keyboardShouldPersistTaps="handled">
             <View style={styles.head}>
-              <View>
-                <Txt style={styles.eyebrow}>{editing ? 'Edit block' : 'New block'}</Txt>
-                <Txt style={styles.title}>{editing ? 'Adjust this event' : 'Add to your calendar'}</Txt>
+              <View style={{ flex: 1 }}>
+                <Label>{editing ? 'Edit block' : 'New block'}</Label>
+                <Txt style={styles.title}>
+                  {d ? `${WD[wdIndex(d)]} ${d.getDate()} ${MO[d.getMonth()].slice(0, 3)}` : 'Pick a date'}
+                  {!find && isTime(start) ? ` · ${start}–${fromMin(Math.min(1440, toMin(start) + dur))}` : ''}
+                </Txt>
               </View>
-              <Press onPress={onClose} hoverBg={w(0.1)} style={styles.close} aria-label="Close">
-                <Icon name="close" size={20} color={w(0.5)} />
-              </Press>
+              <Button variant="ghost" onPress={onClose} accessibilityLabel="Close" icon={<Icon name="close" size={18} color={N.muted} />} />
             </View>
 
             <Field label="Title">
               <TextInput
                 value={title}
-                onChangeText={setTitle}
-                placeholder="e.g. Deep work · Onboarding spec"
-                placeholderTextColor={w(0.25)}
+                onChangeText={(v) => {
+                  setTitle(v);
+                  setError(null);
+                }}
+                autoFocus={!editing}
+                onSubmitEditing={save}
+                placeholder="What is it?"
+                placeholderTextColor={N.faint}
                 style={styles.input}
               />
             </Field>
 
+            <Field label="Kind">
+              <View style={styles.chips}>
+                {PICKABLE.map((k) => (
+                  <Chip
+                    key={k}
+                    on={k === kind}
+                    onPress={() => {
+                      setKindState(k);
+                      if (!editing) setCat(DEFAULT_CAT[k]);
+                    }}
+                    icon={KINDS[k].icon}
+                    label={KINDS[k].label}
+                  />
+                ))}
+              </View>
+              <Txt style={styles.hint}>{KINDS[kind].blurb}</Txt>
+            </Field>
+
             <View style={styles.two}>
               <Field label="Date" style={{ flex: 1 }}>
-                <TextInput value={date} onChangeText={setDate} placeholder="YYYY-MM-DD" placeholderTextColor={w(0.25)} style={styles.input} />
+                <TextInput
+                  value={date}
+                  onChangeText={(v) => {
+                    setDate(v);
+                    setConfirmOutside(false);
+                  }}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={N.faint}
+                  style={[styles.input, styles.mono]}
+                />
               </Field>
               <Field label="Start" style={{ flex: 1 }}>
-                <TextInput value={start} onChangeText={setStart} placeholder="HH:MM" placeholderTextColor={w(0.25)} style={styles.input} />
+                <TextInput
+                  value={find ? 'found for you' : start}
+                  editable={!find}
+                  onChangeText={(v) => {
+                    setStart(v);
+                    setConfirmOutside(false);
+                  }}
+                  placeholder="HH:MM"
+                  placeholderTextColor={N.faint}
+                  style={[styles.input, styles.mono, find && styles.inputOff]}
+                />
               </Field>
             </View>
 
-            <Field label="Duration">
-              <ChipRow
-                options={DURATIONS.map((d) => ({ key: String(d.v), label: d.label }))}
-                value={String(dur)}
-                onChange={(k) => setDur(Number(k))}
-              />
-            </Field>
-
-            {/* "Repeats" lived here as three decorative chips that save() never
-                read. Recurrence is real now, but it is not a separate control:
-                picking Routine is what writes the rule (see api-adapter). */}
-            <Field label="Kind">
+            <Field label="Length">
               <View style={styles.chips}>
-                {KIND_KEYS.filter((k) => k !== 'ai').map((k) => {
-                  const on = k === kind;
-                  return (
-                    <Press
-                      key={k}
-                      onPress={() => setKindState(k)}
-                      accessibilityRole="radio"
-                      aria-checked={on}
-                      style={[styles.catChip, on ? styles.catChipOn : styles.catChipOff]}>
-                      <Icon name={KINDS[k].icon} size={13} color={on ? '#fff' : w(0.45)} />
-                      <Txt style={[styles.catChipTxt, { color: on ? '#fff' : w(0.5) }]}>{KINDS[k].label}</Txt>
-                    </Press>
-                  );
-                })}
+                {(DURATIONS.includes(dur) ? DURATIONS : [...DURATIONS, dur].sort((a, b) => a - b)).map((m) => (
+                  <Chip key={m} on={m === dur} onPress={() => setDur(m)} label={durLabel(m)} mono />
+                ))}
               </View>
-              <Txt style={styles.kindHint}>{KINDS[kind].blurb}</Txt>
-            </Field>
-
-            <Field label="Category">
-              <View style={styles.chips}>
-                {CAT_KEYS.map((k) => {
-                  const on = k === cat;
-                  return (
-                    <Press
-                      key={k}
-                      onPress={() => setCat(k)}
-                      style={[styles.catChip, on ? styles.catChipOn : styles.catChipOff]}>
-                      <View style={[styles.catDot, { backgroundColor: CATS[k].color }]} />
-                      <Txt style={[styles.catChipTxt, { color: on ? '#fff' : w(0.5) }]}>{CATS[k].label}</Txt>
-                    </Press>
-                  );
-                })}
-              </View>
-            </Field>
-
-            <Field label="Project">
-              <ChipRow
-                options={PROJECTS.map((p) => ({ key: p, label: p }))}
-                value={project}
-                onChange={setProject}
-              />
             </Field>
 
             <Press
-              onPress={() => setAi(!ai)}
+              onPress={() => setFind(!find)}
               accessibilityRole="switch"
-              aria-checked={ai}
-              style={[styles.aiToggle, ai ? styles.aiToggleOn : styles.aiToggleOff]}>
-              <Icon name="magic" size={18} color={C.lime} />
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Txt style={styles.aiToggleTitle}>Let AI place it</Txt>
-                <Txt style={styles.aiToggleHint}>
-                  {ai ? 'Find the best slot around my energy and deadlines.' : 'Use exactly the time I picked.'}
+              aria-checked={find}
+              hoverBg={N.hover}
+              style={styles.toggle}>
+              <View style={{ flex: 1 }}>
+                <Txt style={styles.toggleTitle}>Find a time for me</Txt>
+                <Txt style={styles.hint}>
+                  {find
+                    ? `First free ${durLabel(dur)} in your working hours that day.`
+                    : 'Off — use exactly the time above.'}
                 </Txt>
               </View>
-              <View style={[styles.track, { backgroundColor: ai ? C.lime : w(0.18) }]}>
-                <View style={[styles.knob, { left: ai ? 18 : 2, backgroundColor: ai ? C.surface : C.light }]} />
+              <View style={[styles.track, find && styles.trackOn]}>
+                <View style={[styles.knob, find && styles.knobOn]} />
               </View>
             </Press>
 
-            <Field label="Notes">
+            <Field label="Category">
+              <View style={styles.chips}>
+                {CAT_KEYS.map((k) => (
+                  <Chip key={k} on={k === cat} onPress={() => setCat(k)} label={CATS[k].label} />
+                ))}
+              </View>
+            </Field>
+
+            <Field label="Project (optional)">
+              <TextInput
+                value={project}
+                onChangeText={setProject}
+                placeholder="e.g. Q4 launch"
+                placeholderTextColor={N.faint}
+                style={styles.input}
+              />
+            </Field>
+
+            <Field label="Notes (optional)">
               <TextInput
                 value={notes}
                 onChangeText={setNotes}
                 multiline
                 numberOfLines={3}
-                placeholder="Agenda, links, what done looks like…"
-                placeholderTextColor={w(0.25)}
+                placeholder="Agenda, links, what done looks like"
+                placeholderTextColor={N.faint}
                 style={[styles.input, styles.textarea]}
               />
             </Field>
 
+            {outside && confirmOutside && (
+              <View style={styles.warn}>
+                <Icon name="clock" size={14} color={N.accentInk} />
+                <Txt style={styles.warnTxt}>
+                  Outside your hours ({pad(hours.start)}:00–{pad(hours.end % 24)}:00). It will show as a chip at the
+                  edge of the day. Press Save again to keep it.
+                </Txt>
+              </View>
+            )}
+            {!!error && <Txt style={styles.error}>{error}</Txt>}
+
             <View style={styles.footer}>
-              <Press onPress={save} hoverBg={C.limeHover} style={styles.saveBtn}>
-                <Icon name="check" size={18} color={C.surface} />
-                <Txt style={styles.saveTxt}>Save {KINDS[kind].label.toLowerCase()}</Txt>
-              </Press>
               {editing && !editing.imported && (
-                <Press
+                <Button
+                  variant="secondary"
                   onPress={() => {
                     onClose();
-                    void deleteEvent(editing.id).then((ok) => toast(ok ? 'Event removed' : SAVE_FAILED));
+                    void deleteEvent(editing.id).then((ok) => toast(ok ? 'Deleted' : SAVE_FAILED));
                   }}
-                  hoverBg="rgba(255,68,0,0.1)"
-                  style={styles.delBtn}>
-                  <Icon name="trash" size={18} color={C.orange} />
-                </Press>
+                  accessibilityLabel="Delete"
+                  icon={<Icon name="trash" size={16} color={N.ink2} />}
+                />
               )}
+              <View style={{ flex: 1 }} />
+              <Button variant="ghost" label="Cancel" onPress={onClose} />
+              <Button
+                variant="primary"
+                label={outside && confirmOutside ? 'Save anyway' : editing ? 'Save' : `Add ${KINDS[kind].label.toLowerCase()}`}
+                onPress={save}
+              />
             </View>
           </ScrollView>
         </Pressable>
@@ -276,118 +316,100 @@ export function ComposeSheet({
 
 function Field({ label, children, style }: { label: string; children: React.ReactNode; style?: object }) {
   return (
-    <View style={[{ marginTop: 16 }, style]}>
-      <Txt style={styles.fieldLabel}>{label}</Txt>
+    <View style={[{ marginTop: 18 }, style]}>
+      <Label>{label}</Label>
       <View style={{ marginTop: 8 }}>{children}</View>
     </View>
   );
 }
 
-function ChipRow({
-  options,
-  value,
-  onChange,
+export function Chip({
+  on,
+  onPress,
+  label,
+  icon,
+  mono,
 }: {
-  options: { key: string; label: string }[];
-  value: string;
-  onChange: (k: string) => void;
+  on: boolean;
+  onPress: () => void;
+  label: string;
+  icon?: Parameters<typeof Icon>[0]['name'];
+  mono?: boolean;
 }) {
   return (
-    <View style={styles.chips}>
-      {options.map((o) => {
-        const on = o.key === value;
-        return (
-          <Press
-            key={o.key}
-            onPress={() => onChange(o.key)}
-            style={[styles.chip, on ? styles.chipOn : styles.chipOff]}>
-            <Txt style={[styles.chipTxt, { color: on ? '#fff' : w(0.5) }]}>{o.label}</Txt>
-          </Press>
-        );
-      })}
-    </View>
+    <Press
+      onPress={onPress}
+      accessibilityRole="radio"
+      aria-checked={on}
+      hoverBg={on ? undefined : N.sunken}
+      style={[styles.chip, on ? styles.chipOn : [styles.chipOff, SHADOW.sm]]}>
+      {icon && <Icon name={icon} size={13} color={on ? N.onInk : N.muted} />}
+      {mono ? (
+        <Mono style={[styles.chipTxt, styles.chipMono, { color: on ? N.onInk : N.ink2 }]}>{label}</Mono>
+      ) : (
+        <Txt style={[styles.chipTxt, { color: on ? N.onInk : N.ink2 }]}>{label}</Txt>
+      )}
+    </Press>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1 },
+  backdrop: { flex: 1, backgroundColor: N.scrim },
   backdropSheet: { justifyContent: 'flex-end' },
   backdropCenter: { justifyContent: 'center', alignItems: 'center', padding: 20 },
-  panel: {
-    borderWidth: 1,
-    maxHeight: '92%',
-    shadowColor: '#000',
-    shadowOpacity: 0.5,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 16,
-  },
-  panelSheet: { width: '100%', borderTopLeftRadius: R.xl2, borderTopRightRadius: R.xl2 },
-  panelModal: { width: '100%', maxWidth: 512, borderRadius: R.xl2 },
-  grab: { alignSelf: 'center', marginBottom: 16, height: 4, width: 40, borderRadius: R.full, backgroundColor: w(0.2) },
-  head: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  eyebrow: { color: C.lime, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1.2 },
-  title: { marginTop: 4, color: '#fff', fontSize: 20, fontWeight: '500', letterSpacing: -0.4 },
-  close: { height: 36, width: 36, alignItems: 'center', justifyContent: 'center', borderRadius: R.lg, borderWidth: 1, borderColor: w(0.1) },
-  kindHint: { marginTop: 8, color: w(0.35), fontSize: 11, lineHeight: 16 },
-  fieldLabel: { color: w(0.5), fontSize: 12 },
+  panel: { backgroundColor: N.surface, maxHeight: '92%' },
+  panelSheet: { width: '100%', borderTopLeftRadius: R.xl, borderTopRightRadius: R.xl },
+  panelModal: { width: '100%', maxWidth: 520, borderRadius: R.xl },
+  pad: { padding: 20 },
+  head: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  title: { marginTop: 6, fontFamily: SANS, ...T.heading, color: N.ink },
+  hint: { marginTop: 6, fontFamily: SANS, ...T.caption, color: N.muted },
   input: {
-    height: 44,
-    borderRadius: R.lg,
+    height: 40,
+    borderRadius: R.md,
     borderWidth: 1,
-    borderColor: w(0.1),
-    backgroundColor: w(0.05),
+    borderColor: N.lineStrong,
+    backgroundColor: N.surface,
     paddingHorizontal: 12,
-    color: '#fff',
+    color: N.ink,
+    fontFamily: SANS,
     fontSize: 14,
-    fontFamily: MONO,
   },
-  textarea: { height: 84, paddingTop: 12, textAlignVertical: 'top' },
+  inputOff: { backgroundColor: N.sunken, color: N.muted },
+  mono: { fontFamily: MONO, fontSize: 13 },
+  textarea: { height: 80, paddingTop: 10, textAlignVertical: 'top' },
   two: { flexDirection: 'row', gap: 12 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { borderRadius: R.full, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8 },
-  chipOn: { borderColor: w(0.4), backgroundColor: w(0.1) },
-  chipOff: { borderColor: w(0.1) },
-  chipTxt: { fontSize: 12 },
-  catChip: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: R.full, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8 },
-  catChipOn: { borderColor: w(0.4), backgroundColor: w(0.1) },
-  catChipOff: { borderColor: w(0.1) },
-  catDot: { height: 8, width: 8, borderRadius: 4 },
-  catChipTxt: { fontSize: 12 },
-  aiToggle: {
-    marginTop: 16,
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 32, borderRadius: R.md, paddingHorizontal: 11 },
+  chipOn: { backgroundColor: N.ink },
+  chipOff: { backgroundColor: N.surface },
+  chipTxt: { fontFamily: SANS, fontSize: 12, lineHeight: 16, fontWeight: '500' },
+  chipMono: { fontFamily: MONO, fontWeight: '400', fontSize: 11 },
+  toggle: {
+    marginTop: 18,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    borderRadius: R.xl,
+    borderRadius: R.lg,
     borderWidth: 1,
+    borderColor: N.line,
     padding: 12,
   },
-  aiToggleOn: { borderColor: 'rgba(204,255,0,0.4)', backgroundColor: 'rgba(204,255,0,0.1)' },
-  aiToggleOff: { borderColor: w(0.1), backgroundColor: w(0.05) },
-  aiToggleTitle: { color: '#fff', fontSize: 12 },
-  aiToggleHint: { marginTop: 4, color: w(0.45), fontSize: 12 },
-  track: { width: 36, height: 20, borderRadius: R.full },
-  knob: { position: 'absolute', top: 2, height: 16, width: 16, borderRadius: R.full },
-  footer: { marginTop: 20, flexDirection: 'row', gap: 8 },
-  saveBtn: {
-    flex: 1,
-    height: 44,
+  toggleTitle: { fontFamily: SANS, ...T.body, color: N.ink },
+  track: { width: 34, height: 20, borderRadius: R.full, backgroundColor: N.ghost },
+  trackOn: { backgroundColor: N.ink },
+  knob: { position: 'absolute', top: 2, left: 2, height: 16, width: 16, borderRadius: R.full, backgroundColor: N.surface },
+  knobOn: { left: 16 },
+  warn: {
+    marginTop: 18,
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
     gap: 8,
-    borderRadius: R.lg,
-    backgroundColor: C.lime,
-  },
-  saveTxt: { color: C.surface, fontSize: 12, fontWeight: '500' },
-  delBtn: {
-    height: 44,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: R.lg,
+    borderRadius: R.md,
     borderWidth: 1,
-    borderColor: 'rgba(255,68,0,0.4)',
+    borderColor: N.accent,
+    padding: 10,
   },
+  warnTxt: { flex: 1, fontFamily: SANS, ...T.caption, color: N.ink2 },
+  error: { marginTop: 14, fontFamily: SANS, ...T.caption, color: N.accentInk },
+  footer: { marginTop: 22, flexDirection: 'row', alignItems: 'center', gap: 8 },
 });

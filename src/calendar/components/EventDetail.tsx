@@ -1,337 +1,236 @@
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { useAccounts } from '../account-store';
 import { acceptEvent, deleteEvent, SAVE_FAILED, setKind } from '../cal-store';
 import { fromIso, MO, toMin, wdIndex, WD_LONG } from '../cal-date';
-import { Icon } from '../Icon';
+import { Icon, type IconName } from '../Icon';
+import { KINDS, paint, PICKABLE } from '../kinds';
 import type { CalActions, PointAnchor } from '../state';
-import { useCalTheme } from '../theme-context';
-import { KIND_KEYS, KINDS, paint } from '../kinds';
-import { CATS, C, durLabel, R, rgba, w } from '../tokens';
+import { CATS, durLabel, N, R, SANS, T } from '../tokens';
 import type { CalEvent } from '../types';
-import { Press, Txt } from '../ui';
-import { useResponsive } from '../useResponsive';
+import { Button, CalSwatch, Label, Mono, Txt } from '../ui';
+import { Chip } from './ComposeSheet';
+import { Popover } from './Popover';
 import { useToast } from './Toast';
 
-type Anchor = PointAnchor;
+/** Plain words for the rules Find Time writes and Google commonly sends. */
+function repeatLabel(rrule: string): string {
+  const r = rrule.toUpperCase();
+  const every = /INTERVAL=(\d+)/.exec(r)?.[1];
+  const n = every && every !== '1' ? `every ${every} ` : '';
+  if (r.includes('FREQ=DAILY')) return n ? `Repeats ${n}days` : 'Repeats daily';
+  if (r.includes('FREQ=MONTHLY')) return n ? `Repeats ${n}months` : 'Repeats monthly';
+  if (r.includes('FREQ=WEEKLY')) {
+    const by = /BYDAY=([A-Z,]+)/.exec(r)?.[1];
+    if (by === 'MO,TU,WE,TH,FR') return 'Repeats every weekday';
+    return n ? `Repeats ${n}weeks` : 'Repeats weekly';
+  }
+  return 'Repeats';
+}
 
-/** Event detail — anchored popover ≥1024px, bottom sheet below (spec §2.12/§2.13).
- *  Read-only; Edit and Reschedule are explicit next steps. */
+/** Event detail — anchored popover on desktop, sheet on a phone. */
 export function EventDetail({
   event,
   anchor,
-  isDesktop,
   onClose,
   actions,
+  clash,
 }: {
-  event: CalEvent | null;
-  anchor: Anchor | null;
-  isDesktop: boolean;
+  clash?: boolean;
+  event: CalEvent;
+  anchor: PointAnchor | null;
   onClose: () => void;
   actions: CalActions;
 }) {
-  const { theme } = useCalTheme();
-  const { width, height } = useResponsive();
   const toast = useToast();
-  if (!event) return null;
+  const { accounts } = useAccounts();
   const ev = event;
-  const c = CATS[ev.cat];
-  const p = paint(ev, ev.conflict);
+  const p = paint(ev);
   const date = fromIso(ev.date);
+  const cal = ev.calendarId
+    ? accounts.flatMap((a) => a.calendars).find((c) => c.id === ev.calendarId)
+    : undefined;
 
-  const W = 336;
-  const H = 460;
-  let left = 12;
-  let top = 12;
-  if (isDesktop && anchor) {
-    left = anchor.x + 12;
-    top = anchor.y - 8;
-    if (left + W > width - 12) left = Math.max(12, anchor.x - W - 12);
-    if (top + H > height - 12) top = Math.max(12, height - H - 12);
-  }
-
-  const body = (
-    <View style={[styles.card, { backgroundColor: theme.panel, borderColor: theme.panelBorder }]}>
-      <View style={[styles.catBar, { backgroundColor: c.color }]} />
-      <ScrollView contentContainerStyle={{ padding: 20 }}>
-        <View style={styles.top}>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <View style={styles.eyebrowRow}>
-              {/* Kind first, category second — the same order the block is
-                  read in: what it is, then what it is about. */}
-              <Icon name={p.spec.icon} size={13} color={p.tint} />
-              <Txt style={[styles.eyebrow, { color: p.tint }]}>{p.spec.label}</Txt>
-              <Txt style={styles.eyebrowSep}>·</Txt>
-              <View style={[styles.dot, { backgroundColor: c.color }]} />
-              <Txt style={styles.eyebrow}>{c.label}</Txt>
-              {ev.conflict && (
-                <View style={styles.tagOrange}>
-                  <Txt style={styles.tagOrangeTxt}>Clash</Txt>
-                </View>
-              )}
-            </View>
-            <Txt style={styles.title}>{ev.title}</Txt>
-          </View>
-          <Press onPress={onClose} hoverBg={w(0.1)} style={styles.close} aria-label="Close">
-            <Icon name="close" size={18} color={w(0.45)} />
-          </Press>
-        </View>
-
-        <View style={styles.meta}>
-          <Line icon="clock">
-            {WD_LONG[wdIndex(date)]} {date.getDate()} {MO[date.getMonth()].slice(0, 3)} · {ev.start}–{ev.end} ·{' '}
-            {durLabel(toMin(ev.end) - toMin(ev.start))}
-          </Line>
-          {!!ev.project && <Line icon="folder">{ev.project}</Line>}
-          <Line icon="bolt">
-            {ev.imported && ev.kind === 'event' ? 'From Google Calendar — Find time plans around it' : p.spec.blurb}
-          </Line>
-          {!!ev.notes && (
-            <View style={styles.notes}>
-              <Txt style={styles.notesTxt}>{ev.notes}</Txt>
-            </View>
-          )}
-          {ev.imported && (
-            <View style={styles.notes}>
-              <Txt style={styles.notesTxt}>
-                Synced from Google Calendar. Change its title, time or notes in Google — Find time only reads
-                them, so an edit made here would never reach your calendar.
-              </Txt>
-            </View>
-          )}
-        </View>
-
-        {ev.conflict && (
-          <View style={styles.conflictBox}>
-            <Icon name="triangle" size={16} color={C.orange} />
-            <Txt style={styles.conflictTxt}>
-              Overlaps another block on this day. Reschedule whichever one is flexible.
-            </Txt>
-          </View>
-        )}
-
-        {/* The grid/agenda label an AI block "tap to accept"; this is where that
-            actually happens. Accepting persists origin 'manual', so it stops
-            rendering as a dashed proposal after a reload. */}
-        {ev.kind === 'ai' && (
-          <Press
-            onPress={() => {
-              onClose();
-              void acceptEvent(ev.id).then((ok) => toast(ok ? 'Block accepted' : SAVE_FAILED));
-            }}
-            hoverBg={C.limeHover}
-            style={styles.acceptBtn}>
-            <Icon name="check" size={16} color={C.surface} />
-            <Txt style={styles.acceptBtnTxt}>Accept this block</Txt>
-          </Press>
-        )}
-
-        {/* Edit and Reschedule change title and time, which Google owns on an
-            imported event (src/lib/synced-fields.ts). */}
-        {!ev.imported && (
-          <View style={styles.actionsGrid}>
-            <Press
-              onPress={() => {
-                onClose();
-                actions.openCompose(ev.id);
-              }}
-              hoverBg={w(0.1)}
-              style={styles.ghostBtn}>
-              <Icon name="pen" size={16} color={w(0.75)} />
-              <Txt style={styles.ghostTxt}>Edit</Txt>
-            </Press>
-            {/* Opens the compose sheet on THIS block, where "Let AI place it"
-                moves it to the next free slot on the day. It used to open the AI
-                panel with a prefill, which created a SECOND block and left the
-                original exactly where it was. */}
-            <Press
-              onPress={() => {
-                onClose();
-                actions.openCompose(ev.id, undefined, undefined, true);
-              }}
-              hoverBg={C.limeHover}
-              style={styles.limeBtn}>
-              <Icon name="magic" size={16} color={C.surface} />
-              <Txt style={styles.limeTxt}>Reschedule</Txt>
-            </Press>
-          </View>
-        )}
-        {/* Was a single Protect/Unprotect switch, which could only ever say
-            `focus` or `event` — there was no way to tell the app that a block
-            is a task or a routine, so the grid could not draw it as one.
-            Kind stays on imported events: it is Find time's own planning
-            metadata, which sync never touches. Routine is the exception —
-            it is a recurrence rule, and Google owns an imported event's. */}
-        <Txt style={styles.kindLabel}>Change kind</Txt>
-        <View style={styles.kindGrid}>
-          {KIND_KEYS.filter((k) => k !== 'ai' && !(ev.imported && k === 'routine')).map((k) => {
-            const on = ev.kind === k;
-            return (
-              <Press
-                key={k}
-                onPress={() => {
-                  void setKind(ev.id, k).then((ok) =>
-                    toast(ok ? `Now a ${KINDS[k].label.toLowerCase()}` : SAVE_FAILED),
-                  );
-                }}
-                hoverBg={w(0.1)}
-                accessibilityRole="radio"
-                aria-checked={on}
-                style={[styles.kindChip, on && styles.kindChipOn]}>
-                <Icon name={KINDS[k].icon} size={13} color={on ? '#fff' : w(0.45)} />
-                <Txt style={[styles.kindChipTxt, on && styles.kindChipTxtOn]}>{KINDS[k].label}</Txt>
-              </Press>
-            );
-          })}
-        </View>
-
-        {!ev.imported && (
-          <View style={styles.actionsRow}>
-            <Press
-              onPress={() => {
-                onClose();
-                void deleteEvent(ev.id).then((ok) => toast(ok ? 'Event removed' : SAVE_FAILED));
-              }}
-              hoverBg={rgba('#ff4400', 0.1)}
-              style={styles.delBtn}
-              aria-label="Delete event">
-              <Icon name="trash" size={16} color={C.orange} />
-            </Press>
-          </View>
-        )}
-      </ScrollView>
-    </View>
-  );
+  const dur = ev.endDate && !ev.allDay ? 1440 - toMin(ev.start) + toMin(ev.end) : toMin(ev.end) - toMin(ev.start);
+  const when = ev.allDay
+    ? `${WD_LONG[wdIndex(date)]} ${date.getDate()} ${MO[date.getMonth()].slice(0, 3)} · all day`
+    : `${WD_LONG[wdIndex(date)]} ${date.getDate()} ${MO[date.getMonth()].slice(0, 3)} · ${ev.start}–${ev.end}${ev.endDate ? ' next day' : ''} · ${durLabel(dur)}`;
 
   return (
-    <Modal visible transparent animationType={isDesktop ? 'fade' : 'slide'} onRequestClose={onClose}>
-      <Pressable
-        onPress={onClose}
-        style={[styles.backdrop, !isDesktop && styles.backdropSheet, !isDesktop && { backgroundColor: C.scrim }]}>
-        <Pressable
-          onPress={(e) => e.stopPropagation()}
-          style={
-            isDesktop
-              ? [styles.popoverPos, { left, top, width: W }]
-              : styles.sheetPos
-          }>
-          {body}
-        </Pressable>
-      </Pressable>
-    </Modal>
+    <Popover anchor={anchor} width={340} estHeight={420} onClose={onClose} label={ev.title}>
+      <View style={styles.top}>
+        <View style={[styles.kindMark, ...p.box]}>
+          <Icon name={p.spec.icon} size={12} color={p.glyph} />
+        </View>
+        <Label style={styles.kindLabel}>
+          {p.spec.label} · {CATS[ev.cat].label}
+        </Label>
+        <View style={{ flex: 1 }} />
+        <Button
+          variant="ghost"
+          onPress={onClose}
+          accessibilityLabel="Close"
+          icon={<Icon name="close" size={16} color={N.muted} />}
+          style={styles.close}
+        />
+      </View>
+
+      <Txt style={styles.title}>{ev.title}</Txt>
+
+      <View style={styles.meta}>
+        <Line icon="clock">{when}</Line>
+        {!!ev.rrule && <Line icon="refresh-plain">{repeatLabel(ev.rrule)}</Line>}
+        {cal ? (
+          <View style={styles.line}>
+            <View style={styles.lineIcon}>
+              <CalSwatch color={/^#/.test(cal.color) ? cal.color : N.faint} size={8} />
+            </View>
+            <Txt style={styles.lineTxt}>{cal.name}</Txt>
+          </View>
+        ) : (
+          <Line icon="calendar">Find Time</Line>
+        )}
+        {!!ev.project && <Line icon="folder">{ev.project}</Line>}
+      </View>
+
+      {!!ev.notes && <Txt style={styles.notes}>{ev.notes}</Txt>}
+
+      {ev.imported && (
+        <View style={styles.box}>
+          <Txt style={styles.boxTxt}>
+            From Google Calendar. Change its title or time there — Find Time reads it and plans around it.
+          </Txt>
+        </View>
+      )}
+      {clash && (
+        <View style={[styles.box, styles.boxWarn]}>
+          <Icon name="triangle" size={14} color={N.accent} />
+          <Txt style={styles.boxTxt}>Overlaps another block. Move whichever one can move.</Txt>
+        </View>
+      )}
+
+      {ev.kind === 'ai' && (
+        <View style={styles.row}>
+          <Button
+            variant="primary"
+            label="Approve"
+            style={{ flex: 1 }}
+            onPress={() => {
+              onClose();
+              void acceptEvent(ev.id).then((ok) => toast(ok ? 'Approved — it is on your calendar' : SAVE_FAILED));
+            }}
+          />
+          <Button
+            variant="secondary"
+            label="Dismiss"
+            style={{ flex: 1 }}
+            onPress={() => {
+              onClose();
+              void deleteEvent(ev.id).then((ok) => toast(ok ? 'Proposal dismissed' : SAVE_FAILED));
+            }}
+          />
+        </View>
+      )}
+
+      {!ev.imported && ev.kind !== 'ai' && (
+        <View style={styles.row}>
+          <Button
+            variant="secondary"
+            label="Edit"
+            style={{ flex: 1 }}
+            icon={<Icon name="pen" size={14} color={N.ink2} />}
+            onPress={() => {
+              onClose();
+              actions.openCompose(ev.id);
+            }}
+          />
+          <Button
+            variant="secondary"
+            label="Find another time"
+            style={{ flex: 1.4 }}
+            icon={<Icon name="magic" size={14} color={N.ink2} />}
+            onPress={() => {
+              onClose();
+              actions.openCompose(ev.id, undefined, undefined, true);
+            }}
+          />
+          <Button
+            variant="secondary"
+            accessibilityLabel="Delete"
+            icon={<Icon name="trash" size={14} color={N.ink2} />}
+            onPress={() => {
+              onClose();
+              void deleteEvent(ev.id).then((ok) => toast(ok ? 'Deleted' : SAVE_FAILED));
+            }}
+          />
+        </View>
+      )}
+
+      {ev.kind !== 'ai' && (
+        <>
+          <Label style={styles.kindHead}>Kind</Label>
+          <View style={styles.chips}>
+            {PICKABLE.filter((k) => !(ev.imported && k === 'routine')).map((k) => (
+              <Chip
+                key={k}
+                on={ev.kind === k}
+                icon={KINDS[k].icon}
+                label={KINDS[k].label}
+                onPress={() =>
+                  void setKind(ev.id, k).then((ok) =>
+                    toast(ok ? `Now a ${KINDS[k].label.toLowerCase()}` : SAVE_FAILED),
+                  )
+                }
+              />
+            ))}
+          </View>
+        </>
+      )}
+      {!ev.allDay && (
+        <Mono style={styles.tip}>
+          {ev.imported ? 'Read-only on the grid' : 'Tip: drag the tile to move it, its edges to resize'}
+        </Mono>
+      )}
+    </Popover>
   );
 }
 
-function Line({ icon, children }: { icon: 'clock' | 'folder' | 'bolt'; children: React.ReactNode }) {
+function Line({ icon, children }: { icon: IconName; children: React.ReactNode }) {
   return (
     <View style={styles.line}>
-      <Icon name={icon} size={15} color={w(0.35)} />
+      <View style={styles.lineIcon}>
+        <Icon name={icon} size={14} color={N.faint} />
+      </View>
       <Txt style={styles.lineTxt}>{children}</Txt>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1 },
-  backdropSheet: { justifyContent: 'flex-end' },
-  popoverPos: { position: 'absolute' },
-  sheetPos: { width: '100%' },
-  card: {
-    borderRadius: R.xl2,
-    borderWidth: 1,
-    overflow: 'hidden',
-    maxHeight: 640,
-    shadowColor: '#000',
-    shadowOpacity: 0.5,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 16,
-  },
-  catBar: { height: 4, width: '100%' },
-  top: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  dot: { height: 6, width: 6, borderRadius: 3 },
-  eyebrowSep: { color: w(0.25), fontSize: 11 },
-  kindLabel: { marginTop: 18, color: w(0.35), fontSize: 10, letterSpacing: 1.2, textTransform: 'uppercase' },
-  kindGrid: { marginTop: 8, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  kindChip: {
+  top: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  kindMark: { width: 20, height: 20, borderRadius: R.sm, alignItems: 'center', justifyContent: 'center' },
+  kindLabel: { color: N.muted },
+  close: { width: 28, height: 28 },
+  title: { marginTop: 10, fontFamily: SANS, ...T.heading, color: N.ink },
+  meta: { marginTop: 12, gap: 8 },
+  line: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  lineIcon: { width: 16, alignItems: 'center' },
+  lineTxt: { flex: 1, fontFamily: SANS, ...T.caption, color: N.ink2 },
+  notes: { marginTop: 12, fontFamily: SANS, ...T.caption, color: N.ink2 },
+  box: {
+    marginTop: 12,
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+    gap: 8,
     borderRadius: R.md,
     borderWidth: 1,
-    borderColor: w(0.1),
-    backgroundColor: w(0.05),
-    paddingHorizontal: 9,
-    paddingVertical: 6,
+    borderColor: N.line,
+    backgroundColor: N.sunken,
+    padding: 10,
   },
-  kindChipOn: { borderColor: w(0.4), backgroundColor: w(0.16) },
-  kindChipTxt: { color: w(0.5), fontSize: 11 },
-  kindChipTxtOn: { color: '#fff', fontWeight: '500' },
-  eyebrow: { color: w(0.4), fontSize: 12, textTransform: 'uppercase', letterSpacing: 1.2 },
-  tagOrange: { borderRadius: R.full, backgroundColor: rgba('#ff4400', 0.2), paddingHorizontal: 8, paddingVertical: 2 },
-  tagOrangeTxt: { color: C.orange, fontSize: 12 },
-  title: { marginTop: 8, color: '#fff', fontSize: 16, lineHeight: 22, fontWeight: '500', letterSpacing: -0.3 },
-  close: { height: 32, width: 32, alignItems: 'center', justifyContent: 'center', borderRadius: R.lg, borderWidth: 1, borderColor: w(0.1) },
-  meta: { marginTop: 16, gap: 10 },
-  line: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  lineTxt: { flex: 1, color: w(0.55), fontSize: 12, lineHeight: 16 },
-  notes: { borderRadius: R.lg, borderWidth: 1, borderColor: w(0.1), backgroundColor: w(0.05), padding: 12 },
-  notesTxt: { color: w(0.6), fontSize: 12, lineHeight: 18 },
-  conflictBox: {
-    marginTop: 16,
-    flexDirection: 'row',
-    gap: 8,
-    borderRadius: R.lg,
-    borderWidth: 1,
-    borderColor: rgba('#ff4400', 0.4),
-    backgroundColor: rgba('#ff4400', 0.1),
-    padding: 12,
-  },
-  conflictTxt: { flex: 1, color: w(0.7), fontSize: 12, lineHeight: 16 },
-  acceptBtn: {
-    marginTop: 20,
-    height: 40,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderRadius: R.lg,
-    backgroundColor: C.lime,
-  },
-  acceptBtnTxt: { color: C.surface, fontSize: 12, fontWeight: '500' },
-  actionsGrid: { marginTop: 20, flexDirection: 'row', gap: 8 },
-  ghostBtn: {
-    flex: 1,
-    height: 40,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderRadius: R.lg,
-    borderWidth: 1,
-    borderColor: w(0.1),
-    backgroundColor: w(0.05),
-  },
-  ghostTxt: { color: w(0.75), fontSize: 12 },
-  limeBtn: {
-    flex: 1,
-    height: 40,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderRadius: R.lg,
-    backgroundColor: C.lime,
-  },
-  limeTxt: { color: C.surface, fontSize: 12 },
-  actionsRow: { marginTop: 8, flexDirection: 'row', gap: 8 },
-  delBtn: {
-    height: 40,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: R.lg,
-    borderWidth: 1,
-    borderColor: rgba('#ff4400', 0.3),
-  },
+  boxWarn: { borderColor: N.accent, backgroundColor: N.surface },
+  boxTxt: { flex: 1, fontFamily: SANS, ...T.caption, color: N.ink2 },
+  row: { marginTop: 16, flexDirection: 'row', gap: 6 },
+  kindHead: { marginTop: 18 },
+  chips: { marginTop: 8, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  tip: { marginTop: 14, color: N.faint },
 });

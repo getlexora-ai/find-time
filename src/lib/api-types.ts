@@ -18,6 +18,11 @@ export type ApiEvent = {
   rrule: string | null;
   projectLabel: string | null;
   notes: string | null;
+  /** The source calendar (calendars.id). null = Find Time's own block. Optional
+   *  so older cached payloads still parse. */
+  calendarId?: string | null;
+  /** Google all-day event: start/end are midnights, end exclusive. */
+  allDay?: boolean;
 };
 
 export type EventInput = {
@@ -215,4 +220,7 @@ export type PreferenceItem = {
 
 export type PreferencesResponse = {
   items: PreferenceItem[];
+  /** Working hours per weekday ('mon'..'sun'), hours as numbers; null = day off.
+   *  The calendar hatches everything outside these. */
+  workHours?: Record<string, { start: number; end: number } | null>;
 };

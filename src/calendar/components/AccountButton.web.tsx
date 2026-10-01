@@ -4,7 +4,8 @@ import { StyleSheet, View } from 'react-native';
 
 import { apiFetch } from '@/lib/api';
 
-import { T } from '../tokens';
+import { Icon } from '../Icon';
+import { N, SANS } from '../tokens';
 import { Txt } from '../ui';
 
 /**
@@ -42,7 +43,7 @@ export function AccountButton({ showName = false }: { showName?: boolean }) {
         <UserButton.MenuItems>
           <UserButton.Action
             label="Delete account"
-            labelIcon={<Txt style={styles.trash}>🗑️</Txt>}
+            labelIcon={<Icon name="trash" size={14} color={N.ink2} />}
             onClick={handleDelete}
           />
         </UserButton.MenuItems>
@@ -58,6 +59,5 @@ export function AccountButton({ showName = false }: { showName?: boolean }) {
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 0 },
-  name: { flex: 1, color: '#fff', fontSize: T.sm.fontSize, minWidth: 0 },
-  trash: { fontSize: 14 },
+  name: { flex: 1, color: N.ink2, fontFamily: SANS, fontSize: 13, minWidth: 0 },
 });

@@ -1,182 +1,111 @@
-import { useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
+
+import { Logo } from '@/design/Logo';
 
 import { useAccounts } from '../account-store';
 import { Icon } from '../Icon';
-import { Logo } from '@/design/Logo';
 import type { CalActions, CalState, ViewKind } from '../state';
-import { useCalTheme } from '../theme-context';
-import { C, R, w } from '../tokens';
-import { CHROME_BLUR, Press, Txt } from '../ui';
+import { N, R, SANS, SHADOW, T } from '../tokens';
+import { Button, Mono, Press, Txt } from '../ui';
 import { useResponsive } from '../useResponsive';
 import { AccountButton } from './AccountButton';
 
-const VIEWS: { key: ViewKind; label: string; short: string }[] = [
-  { key: 'week', label: 'Week', short: 'W' },
-  { key: 'day', label: 'Day', short: 'D' },
+const VIEWS: { key: ViewKind; label: string }[] = [
+  { key: 'week', label: 'Week' },
+  { key: 'day', label: 'Day' },
 ];
 
-function agoShort(iso: string): string {
-  const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
-  if (s < 60) return 'just now';
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
-}
-
 /**
- * The single bar above the grid — period, navigation, view, actions.
- *
- * Replaces the stacked Header + Toolbar, which together spent ~190px of every
- * screen before any calendar appeared: a 64px chrome bar (breadcrumb, a search
- * box that raised "Search is not built yet", a bell that raised "No
- * notifications yet") over a ~120px title block (a letter-spaced eyebrow, a
- * 30px title and a sentence of prose restating the counts beside it).
- *
- * What survived is what you act on. The prose is gone, the two inert controls
- * are gone, and the counts that were narrated in a paragraph are now a clash
- * pill you can click. ~56px total, so the grid starts near the top of the
- * viewport instead of halfway down it.
+ * The header (B artboard): mark + name, Week | Day, the period in mono,
+ * ‹ Today ›, New, and the one primary action — Plan with AI.
+ * On a phone it is one row: mark, the period (opens the date picker), ‹ ›, account.
  */
 export function CommandBar({
   state,
   actions,
-  title,
-  onOpenTheme,
+  range,
 }: {
   state: CalState;
   actions: CalActions;
-  title: string;
-  onOpenTheme: (anchor: { x: number; y: number }) => void;
+  /** "21 – 27 SEP 2026" */
+  range: string;
 }) {
-  const { theme } = useCalTheme();
   const { isDesktop, isPhone } = useResponsive();
   const { accounts, syncing } = useAccounts();
-  const themeBtn = useRef<View>(null);
-
-  const lastSync = accounts
-    .map((a) => a.lastSyncAt)
-    .filter((t): t is string => Boolean(t))
-    .sort()
-    .at(-1);
-  const syncLabel = syncing
-    ? 'Syncing…'
-    : lastSync
-      ? `Synced ${agoShort(lastSync)}`
-      : accounts.length
-        ? 'Not synced'
-        : 'No calendar';
+  const failed = accounts.some((a) => a.syncStatus === 'error');
 
   return (
-    <View style={[styles.bar, isPhone && styles.barPhone, CHROME_BLUR, { backgroundColor: theme.chrome }]}>
-      {!isDesktop && (
-        <View style={[styles.logo, isPhone && styles.logoPhone]}>
-          <Logo size={isPhone ? 17 : 20} color={C.surface} />
+    <View style={[styles.bar, isPhone && styles.barPhone]}>
+      <View style={styles.brand}>
+        <View style={[styles.mark, SHADOW.sm]}>
+          <Logo size={16} color={N.onInk} />
+        </View>
+        {!isPhone && <Txt style={styles.name}>Find Time</Txt>}
+      </View>
+
+      {isDesktop && (
+        <View style={styles.tabs} accessibilityRole="tablist" aria-label="Calendar view">
+          {VIEWS.map((v) => {
+            const on = state.view === v.key;
+            return (
+              <Press
+                key={v.key}
+                onPress={() => actions.setView(v.key)}
+                hoverBg={on ? undefined : N.hover}
+                accessibilityRole="tab"
+                aria-selected={on}
+                style={[styles.tab, on && [styles.tabOn, SHADOW.sm]]}>
+                <Txt style={[styles.tabTxt, on && styles.tabTxtOn]}>{v.label}</Txt>
+              </Press>
+            );
+          })}
         </View>
       )}
 
-      <Press
-        disabled={isDesktop}
-        onPress={actions.openPicker}
-        style={styles.titleBtn}
-        accessibilityRole="button">
-        <Txt numberOfLines={1} style={[styles.title, isPhone && styles.titlePhone]}>
-          {title}
-        </Txt>
-        {!isDesktop && <Icon name="arrow-down" size={14} color={w(0.4)} />}
-      </Press>
-
       <View style={styles.spacer} />
 
-      <View style={styles.group}>
-        <Press
-          onPress={() => actions.step(-1)}
-          hoverBg={w(0.1)}
-          style={styles.navIcon}
-          accessibilityRole="button"
-          aria-label="Previous period">
-          <Icon name="arrow-left" size={16} color={w(0.6)} />
-        </Press>
-        <Press onPress={actions.goToday} hoverBg={w(0.1)} style={styles.today} accessibilityRole="button">
-          <Txt style={styles.todayTxt}>Today</Txt>
-        </Press>
-        <Press
-          onPress={() => actions.step(1)}
-          hoverBg={w(0.1)}
-          style={styles.navIcon}
-          accessibilityRole="button"
-          aria-label="Next period">
-          <Icon name="arrow-right" size={16} color={w(0.6)} />
-        </Press>
-      </View>
+      <Press
+        onPress={actions.openPicker}
+        disabled={isDesktop}
+        accessibilityRole="button"
+        aria-label={`Showing ${range}. Pick a date`}
+        style={styles.range}>
+        <Mono style={styles.rangeTxt} numberOfLines={1}>
+          {range}
+        </Mono>
+        {!isDesktop && <Icon name="arrow-down" size={12} color={N.muted} />}
+      </Press>
+      {(syncing || failed) && isDesktop && (
+        <Mono style={[styles.sync, failed && styles.syncErr]}>{failed ? 'SYNC FAILED' : 'SYNCING…'}</Mono>
+      )}
 
-      {/* The clash count used to live here as a pill. It is now one of the four
-          readings in the KPI panel directly below, where it sits next to the
-          other three numbers that describe the same period — one instrument,
-          not a stray warning bolted to the navigation. */}
+      <Button
+        variant="secondary"
+        onPress={() => actions.step(-1)}
+        accessibilityLabel={state.view === 'week' ? 'Previous week' : 'Previous day'}
+        icon={<Icon name="arrow-left" size={14} color={N.ink2} />}
+        style={styles.navBtn}
+      />
+      {!isPhone && <Button variant="secondary" label="Today" onPress={actions.goToday} style={styles.today} />}
+      <Button
+        variant="secondary"
+        onPress={() => actions.step(1)}
+        accessibilityLabel={state.view === 'week' ? 'Next week' : 'Next day'}
+        icon={<Icon name="arrow-right" size={14} color={N.ink2} />}
+        style={styles.navBtn}
+      />
 
-      {/*
-        Below 1024px the view tabs, New and Find time live in the bottom nav
-        instead. They are thumb-reachable there, and taking them out is what
-        lets this bar be one clean row on a phone rather than the two ragged
-        wrapped rows it used to be at 390px.
-      */}
       {isDesktop && (
         <>
-          <View style={styles.group} accessibilityRole="tablist" aria-label="Calendar view">
-            {VIEWS.map((v) => {
-              const on = state.view === v.key;
-              return (
-                <Press
-                  key={v.key}
-                  onPress={() => actions.setView(v.key)}
-                  hoverBg={on ? undefined : w(0.1)}
-                  accessibilityRole="tab"
-                  aria-selected={on}
-                  style={[styles.tab, on && styles.tabOn]}>
-                  <Txt style={[styles.tabTxt, on && styles.tabTxtOn]}>{v.label}</Txt>
-                </Press>
-              );
-            })}
-          </View>
-
-          <Txt style={styles.sync}>{syncLabel}</Txt>
-
-          <Press
+          <Button
+            variant="secondary"
+            label="New"
             onPress={() => actions.openCompose(null)}
-            hoverBg={w(0.1)}
-            style={styles.newBtn}
-            accessibilityRole="button">
-            <Icon name="add" size={16} color={w(0.7)} />
-            <Txt style={styles.newTxt}>New</Txt>
-          </Press>
-
-          <Press
-            onPress={() => actions.openAI()}
-            hoverBg={C.limeHover}
-            style={styles.findBtn}
-            accessibilityRole="button">
-            <Icon name="magic" size={15} color={C.surface} />
-            <Txt style={styles.findTxt}>Find time</Txt>
-          </Press>
+            icon={<Icon name="add" size={14} color={N.ink2} />}
+          />
+          <Button variant="primary" label="Plan with AI" onPress={() => actions.openAI()} />
         </>
       )}
-
-      {/* The phone reaches the themes from the filter sheet — one 32px button
-          is not worth the width here when the row is already this tight. */}
-      {!isPhone && (
-        <Press
-          ref={themeBtn}
-          hoverBg={w(0.1)}
-          style={styles.iconBtn}
-          accessibilityRole="button"
-          aria-label="Change background theme"
-          onPress={() => themeBtn.current?.measureInWindow((x, y) => onOpenTheme({ x, y }))}>
-          <Icon name="palette" size={16} color={w(0.55)} />
-        </Press>
-      )}
-
-      {/* Desktop keeps the account control in the sidebar. */}
       {!isDesktop && <AccountButton />}
     </View>
   );
@@ -184,82 +113,28 @@ export function CommandBar({
 
 const styles = StyleSheet.create({
   bar: {
+    height: 64,
     flexDirection: 'row',
-    flexWrap: 'wrap',
     alignItems: 'center',
     gap: 8,
+    paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: w(0.1),
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    zIndex: 40,
+    borderBottomColor: N.line,
   },
-  // One row, no wrapping: the title shrinks and elides before anything is
-  // allowed to fall onto a second line.
-  barPhone: { flexWrap: 'nowrap', gap: 6, paddingHorizontal: 10, paddingVertical: 8 },
-  logo: {
-    height: 30,
-    width: 30,
-    borderRadius: R.md,
-    backgroundColor: C.lime,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoPhone: { height: 26, width: 26 },
-  titleBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, minWidth: 0, flexShrink: 1 },
-  title: { color: '#fff', fontSize: 17, lineHeight: 24, fontWeight: '500', letterSpacing: -0.4 },
-  titlePhone: { fontSize: 15 },
-  spacer: { flexGrow: 1, flexBasis: 0 },
-  group: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    borderRadius: R.md,
-    borderWidth: 1,
-    borderColor: w(0.1),
-    backgroundColor: w(0.05),
-    padding: 3,
-  },
-  navIcon: { height: 26, width: 26, alignItems: 'center', justifyContent: 'center', borderRadius: R.sm },
-  today: { height: 26, borderRadius: R.sm, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center' },
-  todayTxt: { color: w(0.8), fontSize: 11 },
-  tab: { height: 26, borderRadius: R.sm, paddingHorizontal: 11, alignItems: 'center', justifyContent: 'center' },
-  // White, not lime: lime is reserved for the two things that are genuinely
-  // about the AI (a proposal, and a protected block), so it stays meaningful.
-  tabOn: { backgroundColor: w(0.16) },
-  tabTxt: { color: w(0.5), fontSize: 11 },
-  tabTxtOn: { color: '#fff', fontWeight: '500' },
-  sync: { color: w(0.3), fontSize: 11 },
-  newBtn: {
-    height: 32,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: R.md,
-    borderWidth: 1,
-    borderColor: w(0.1),
-    backgroundColor: w(0.05),
-    paddingHorizontal: 10,
-  },
-  newTxt: { color: w(0.7), fontSize: 11 },
-  findBtn: {
-    height: 32,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: R.md,
-    backgroundColor: C.lime,
-    paddingHorizontal: 12,
-  },
-  findTxt: { color: C.surface, fontSize: 11, fontWeight: '500' },
-  iconBtn: {
-    height: 32,
-    width: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: R.md,
-    borderWidth: 1,
-    borderColor: w(0.1),
-    backgroundColor: w(0.05),
-  },
+  barPhone: { height: 56, paddingHorizontal: 12, gap: 6 },
+  brand: { flexDirection: 'row', alignItems: 'center', gap: 10, marginRight: 16 },
+  mark: { width: 30, height: 30, borderRadius: R.sm, backgroundColor: N.ink, alignItems: 'center', justifyContent: 'center' },
+  name: { fontFamily: SANS, ...T.title, color: N.ink },
+  tabs: { flexDirection: 'row', gap: 4 },
+  tab: { height: 30, paddingHorizontal: 12, borderRadius: R.md, alignItems: 'center', justifyContent: 'center' },
+  tabOn: { backgroundColor: N.surface },
+  tabTxt: { fontFamily: SANS, ...T.body, color: N.muted },
+  tabTxtOn: { color: N.ink },
+  spacer: { flex: 1 },
+  range: { flexDirection: 'row', alignItems: 'center', gap: 4, marginRight: 4, minWidth: 0, flexShrink: 1 },
+  rangeTxt: { fontSize: 11, color: N.muted },
+  sync: { fontSize: 10, color: N.faint, marginRight: 4 },
+  syncErr: { color: N.accentInk },
+  navBtn: { width: 32, height: 32 },
+  today: { height: 32 },
 });

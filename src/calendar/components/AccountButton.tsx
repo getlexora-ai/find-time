@@ -3,7 +3,7 @@ import { Alert, StyleSheet, View } from 'react-native';
 
 import { apiFetch } from '@/lib/api';
 
-import { C, R, T, w } from '../tokens';
+import { N, R, SANS } from '../tokens';
 import { Press, Txt } from '../ui';
 
 /**
@@ -45,7 +45,7 @@ export function AccountButton({ showName = false }: { showName?: boolean }) {
   }
 
   return (
-    <Press onPress={open} hoverBg={w(0.1)} style={styles.row} accessibilityRole="button" aria-label="Account">
+    <Press onPress={open} hoverBg={N.hover} style={styles.row} accessibilityRole="button" aria-label="Account">
       <View style={styles.avatar}>
         <Txt style={styles.avatarTxt}>{initials(name)}</Txt>
       </View>
@@ -70,10 +70,10 @@ const styles = StyleSheet.create({
     height: 32,
     width: 32,
     borderRadius: R.full,
-    backgroundColor: '#c8c8ff',
+    backgroundColor: N.ink,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarTxt: { color: C.surface, fontSize: 12, fontWeight: '500' },
-  name: { flex: 1, color: '#fff', fontSize: T.sm.fontSize, minWidth: 0 },
+  avatarTxt: { color: N.onInk, fontSize: 12, fontWeight: '500' },
+  name: { flex: 1, color: N.ink2, fontFamily: SANS, fontSize: 13, minWidth: 0 },
 });

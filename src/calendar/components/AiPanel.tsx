@@ -15,9 +15,9 @@ import {
   sendMessage,
 } from '../agent-store';
 import { Icon } from '../Icon';
-import { useCalTheme } from '../theme-context';
-import { C, R, rgba, w } from '../tokens';
-import { MONO, Press, Txt } from '../ui';
+
+import { C, R, rgba, w } from '@/design/tokens';
+import { MONO, Press, Txt } from '@/design/ui';
 import { useResponsive } from '../useResponsive';
 
 /**
@@ -80,7 +80,8 @@ export function AiPanel({
   onApplied: (firstISO?: string, count?: number, asked?: number) => void;
   toast: (m: string) => void;
 }) {
-  const { theme } = useCalTheme();
+  // The Ask panel is the dark terminal card from the B artboard, on purpose.
+  const theme = { panel: '#111111', panelBorder: 'rgba(255,255,255,0.08)' };
   const { isDesktop } = useResponsive();
 
   const [text, setText] = useState(prefill ?? '');

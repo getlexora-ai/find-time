@@ -20,7 +20,7 @@ export default function AppLayout() {
   return (
     <CalendarThemeProvider>
       <ToastProvider>
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#2047e6' } }}>
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#FAFAFA' } }}>
           <Stack.Screen name="index" />
         </Stack>
       </ToastProvider>

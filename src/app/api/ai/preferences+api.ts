@@ -61,7 +61,10 @@ export async function GET(request: Request): Promise<Response> {
     })
     .sort((a, b) => Number(b.active) - Number(a.active) || b.evidence - a.evidence);
 
-  return Response.json({ items: [...rules, ...learned] } satisfies PreferencesResponse);
+  return Response.json({
+    items: [...rules, ...learned],
+    workHours: profile.workHours,
+  } satisfies PreferencesResponse);
 }
 
 export async function DELETE(request: Request): Promise<Response> {

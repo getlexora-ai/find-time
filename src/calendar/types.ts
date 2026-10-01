@@ -46,13 +46,31 @@ export type CalEvent = {
    * the calendar shows those read-only (src/lib/synced-fields.ts).
    */
   imported?: boolean;
+  /** Source calendar (calendars.id). Absent = Find Time's own block. */
+  calendarId?: string;
+  /** Google all-day event — drawn in the all-day lane, never on the hours. */
+  allDay?: boolean;
+  /**
+   * yyyy-mm-dd the event ends on, only when that is not `date`: an overnight
+   * block (22:00 → 02:00) or a multi-day all-day event. For all-day events it
+   * is exclusive (Google's convention); for timed ones it is the real end day.
+   */
+  endDate?: string;
 };
 
 /** A laid-out block: source event + its column slot within an overlap cluster. */
 export type LaidBlock = {
   ev: CalEvent;
-  s: number; // start minutes
-  t: number; // end minutes
+  /** drawn start / end, minutes of day, already clipped to your hours */
+  s: number;
+  t: number;
   col: number;
   cols: number;
+  /** the event really starts above the drawn top (earlier hour or earlier day) */
+  cutTop: boolean;
+  /** the event really ends below the drawn bottom */
+  cutBottom: boolean;
+  /** real start / end minute on this day; null = it runs over midnight */
+  trueStart: number | null;
+  trueEnd: number | null;
 };

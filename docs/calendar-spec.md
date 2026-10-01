@@ -7,7 +7,7 @@ instead of improvising. Visual source: `nexus-ai-data-pipeline-2.html` and the
 Scope is the calendar surface only: the week and day grids, tiles, creating,
 moving and resizing, calendars, hours. Landing and phone chrome come later.
 
-Items marked **[DECIDE]** need the user's call before the build reaches them.
+Decisions agreed 2026-10-01: the recommended option in every case.
 
 ---
 
@@ -31,13 +31,13 @@ hard-code a colour, shadow or size.
 | `line` | `rgba(229,229,229,.9)` | every divider and hour line |
 | `lineSoft` | `rgba(229,229,229,.45)` | half-hour lines |
 | `hatch` | `rgba(0,0,0,.05)` 1px / 5px gap | routine & break tiles, off-hours |
-| `accent` | `#EA580C` | **[DECIDE]** see below |
+| `accent` | `#EA580C` | 1px strokes and text only: proposal outline, now-line |
 
 No coloured fills anywhere. Category colour is deliberately absent for now and
 comes back later as one more token per category (`CATS[k].color`) without
 touching any component.
 
-**[DECIDE] orange.** B uses orange for three things: the proposal tile's fill,
+**Orange (decided: A).** B uses orange for three things: the proposal tile's fill,
 its dashed border, and the now-line with its time chip. The fill goes either
 way. Options:
 - **A (recommended):** orange survives only as a 1px stroke and text — the
@@ -132,7 +132,7 @@ already explained.
 | keyboard focus | same ring |
 | dragging | `lg` shadow, 96% opacity, follows pointer; origin keeps a dashed ghost |
 | past (ended before now) | 55% opacity, still clickable |
-| clash | **[DECIDE]** with 1.1: a warning glyph + double outline, no fill change |
+| clash | a warning glyph + double outline, no fill change |
 | read-only (from Google) | no resize handle, `not-allowed` cursor on drag, small source mark |
 | saving | normal look; on failure snaps back and a toast says why |
 
@@ -162,7 +162,7 @@ Rules:
   the KPI numbers.
 - **Where new events go**: the write-target calendar. With nothing connected,
   Find Time's own store.
-- **[DECIDE] how a tile shows its calendar.**
+- **How a tile shows its calendar (decided: A).**
   - **A (recommended):** a 6px square in the calendar's own Google colour in the
     tile's meta line, the detail popover and the calendars list. The user picked
     those colours in Google, so it identifies rather than decorates — and it is
@@ -190,7 +190,7 @@ hatched top to bottom.
 |---|---|
 | Event inside the window | drawn normally |
 | Event starts before / ends after the window (e.g. 05:00 flight) | clipped at the edge with a `↑ 05:00` marker on the tile |
-| Event entirely outside the window (23:30 call) | **[DECIDE]** A (recommended): a pinned mono chip at the column's top or bottom edge, `1 after 22:00`, opens it. B: the window grows to include it, as today. |
+| Event entirely outside the window (23:30 call) | (decided: A) a pinned mono chip at the column's top or bottom edge, `1 after 22:00`, opens it. B: the window grows to include it, as today. |
 | Overnight event (22:00 → 02:00) | shown in both days, each part clipped, with a `continues` / `from Mon` marker |
 | Drag or resize toward the edge | stops at the edge; a hint reads `Your hours end at 22:00` |
 | Drag-create outside working hours (but inside the window) | allowed, no warning — it's your time |
@@ -206,7 +206,7 @@ user sets it; working hours read from the scheduler profile.
 ## 6. Views and navigation
 
 - **Week**: 7 columns while each stays ≥ 88px, otherwise 3 at a time, swiped.
-  **[DECIDE]** show weekends always (hatched when non-working), or default to the
+  Decided: show weekends always (hatched when non-working), or default to the
   working days only with a toggle. Recommended: always 7, hatched.
 - **Day**: one column, the same tiles, more room for meta.
 - No month view. The date picker behind the title jumps to any week.

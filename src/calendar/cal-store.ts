@@ -36,6 +36,17 @@ let tempSeq = -1;
 const listeners = new Set<() => void>();
 /** Set by the first successful fetch; the cache must never overwrite it. */
 let loadedFromServer = false;
+/**
+ * Dev-only `/preview`: a fixture week, no network. Writes apply locally and
+ * report success, so every gesture can be exercised without an account.
+ */
+let preview = false;
+export function startPreview(list: CalEvent[]) {
+  preview = true;
+  loadedFromServer = true;
+  events = list;
+  emit();
+}
 
 /** How long a write may wait for its server id before it is reported failed. */
 const PENDING_TIMEOUT_MS = 15_000;
@@ -97,6 +108,7 @@ async function fetchList(): Promise<CalEvent[]> {
  * for it. Silent on failure — keeps the cache/seed snapshot.
  */
 export async function refresh() {
+  if (preview) return;
   let fresh: CalEvent[];
   try {
     fresh = await fetchList();
@@ -170,6 +182,7 @@ function optimistic(input: NewEvent): CalEvent {
 /** POST an optimistically-added block. Resolves with the reconciled server row;
  *  rolls the optimistic row back and rejects if the write fails. */
 async function persist(temp: CalEvent): Promise<CalEvent> {
+  if (preview) return temp;
   let saved: CalEvent;
   let serverId: string;
   try {
@@ -318,6 +331,7 @@ export function updateEvent(id: number, patch: Partial<CalEvent>): Promise<boole
 
   events = events.map((e) => (e.id === id ? { ...e, ...patch } : e));
   emit();
+  if (preview) return Promise.resolve(true);
 
   const serverId = idMap.get(id);
   // No server id yet — a create still in flight, or the first load has not
@@ -336,6 +350,7 @@ export function deleteEvent(id: number): Promise<boolean> {
 
   events = events.filter((e) => e.id !== id);
   emit();
+  if (preview) return Promise.resolve(true);
 
   const serverId = idMap.get(id);
   if (!serverId) return pending.enqueue(id, { kind: 'delete' });

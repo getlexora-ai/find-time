@@ -1,111 +1,235 @@
-import { type GestureResponderEvent, StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, Text, View, type GestureResponderHandlers, type ViewStyle } from 'react-native';
 
+import { fromMin } from '../cal-date';
 import { Icon } from '../Icon';
-import { KindGlyph, KindRail, paint } from '../kinds';
+import { metaLine, paint } from '../kinds';
 import { blockGeometry } from '../layout';
-import type { PointAnchor } from '../state';
-import { CATS, C, R, w } from '../tokens';
+import { CATS, MONO, N, R, SANS, SHADOW, T, TRANSITION } from '../tokens';
 import type { LaidBlock } from '../types';
-import { MONO, Press, Txt } from '../ui';
-
-const at = (e: GestureResponderEvent): PointAnchor => ({
-  x: e.nativeEvent.pageX,
-  y: e.nativeEvent.pageY,
-});
+import { CalSwatch } from '../ui';
 
 /**
- * Week / day time-grid block.
+ * One tile on the time grid (docs/calendar-spec.md §3).
  *
- * One code path for all six kinds — the kind decides the left rail, the fill
- * weight and the glyph, and `paint()` in kinds.tsx is the only thing that
- * knows how.
+ * Presentational: TimeGrid owns every gesture and hands the handlers in, so
+ * there is one place that knows what a press, a drag and a resize mean.
  *
- * Three height bands, because a block has to stay legible at 22px and use the
- * room at 120px:
- *
- *   < 30px  title only, no glyph — the rail is the sole kind signal
- *   < 46px  title + glyph
- *   ≥ 58px  title wraps to two lines, so a long one reads instead of eliding
- *
- * The meta line names the category rather than the project. The category is
- * what the block's hue encodes, so printing it is what teaches the colour code:
- * after a day of reading "· Deep work" next to the same lime, the legend in the
- * rail stops being necessary.
+ * Height bands (56px/hour):
+ *   < 24px   title only, one line — a 15-minute block
+ *   24–45    title + glyph on one row
+ *   46–89    title, meta line
+ *   ≥ 90     title on two lines, meta, glyph pinned to the bottom
  */
+export type TileState = {
+  selected?: boolean;
+  /** this tile is the one being dragged (drawn at the preview position) */
+  dragging?: boolean;
+  /** the dashed outline left at the origin while the tile is dragged */
+  ghost?: boolean;
+  past?: boolean;
+  clash?: boolean;
+};
+
 export function EventBlock({
   it,
-  dayStart,
-  onPress,
+  winStart,
+  state = {},
+  calColor,
+  body,
+  top,
+  bottom,
+  canResize,
+  locked,
+  onKeyDown,
+  label,
 }: {
   it: LaidBlock;
-  dayStart?: number;
-  onPress: (anchor: PointAnchor) => void;
+  winStart: number;
+  state?: TileState;
+  /** the source calendar's own colour — the 6px square (spec §4) */
+  calColor?: string;
+  body?: GestureResponderHandlers;
+  top?: GestureResponderHandlers;
+  bottom?: GestureResponderHandlers;
+  canResize: boolean;
+  /** why it cannot be dragged, if it cannot (sets the cursor) */
+  locked?: boolean;
+  onKeyDown?: (e: { key: string; shiftKey: boolean; altKey: boolean; preventDefault: () => void }) => void;
+  /** the full sentence a screen reader hears */
+  label: string;
 }) {
-  const { top, height, widthPct, leftPct, tight } = blockGeometry(it, dayStart);
+  const { top: y, height, widthPct, leftPct } = blockGeometry(it, winStart);
   const ev = it.ev;
-  const p = paint(ev, ev.conflict);
-  const cramped = height < 30;
-  const tall = height >= 58;
+  const p = paint(ev);
+
+  const tiny = height < 24;
+  const short = height < 46;
+  const tall = height >= 90;
+
+  const times =
+    `${it.cutTop ? (it.trueStart == null ? '…' : `↑${fromMin(it.trueStart)}`) : fromMin(it.s)}` +
+    `–${it.cutBottom ? (it.trueEnd == null ? '…' : `${fromMin(it.trueEnd)}↓`) : fromMin(it.t)}`;
+
+  const webProps = Platform.OS === 'web' ? ({ tabIndex: 0, onKeyDown } as object) : {};
+
+  if (state.ghost) {
+    return (
+      <View
+        pointerEvents="none"
+        style={[
+          styles.wrap,
+          { top: y, height, left: `${leftPct}%` as const, width: `${widthPct}%` as const },
+        ]}>
+        <View style={[styles.tile, styles.ghost]} />
+      </View>
+    );
+  }
 
   return (
     <View
-      style={[styles.wrap, { top, height, left: `${leftPct}%` as const, width: `${widthPct}%` as const }]}
-      pointerEvents="box-none">
-      <Press
-        onPress={(e) => onPress(at(e))}
-        hoverBg={w(0.08)}
-        hoverTransform={{ translateY: -1 }}
+      style={[
+        styles.wrap,
+        { top: y, height, left: `${leftPct}%` as const, width: `${widthPct}%` as const },
+        state.dragging && styles.wrapDragging,
+      ]}>
+      <View
+        {...body}
+        {...webProps}
+        accessibilityRole="button"
+        aria-label={label}
         style={[
-          styles.block,
-          { backgroundColor: p.fill, borderColor: p.border, borderStyle: p.borderStyle },
-          // A task is the one kind you are meant to close, so it gets its own
-          // silhouette: softer corners than the rectangles around it, readable
-          // as "chip" at a glance without relying on the colour or the glyph.
-          ev.kind === 'task' && styles.task,
-          ev.conflict && styles.clash,
-          p.spec.ring ? { borderColor: p.spec.ring } : null,
+          TRANSITION,
+          styles.tile,
+          ...p.box,
+          it.cutTop && styles.cutTop,
+          it.cutBottom && styles.cutBottom,
+          tiny && styles.tileTiny,
+          state.past && !state.dragging && styles.past,
+          state.selected && (p.dark ? styles.selectedOnDark : styles.selected),
+          state.clash && styles.clash,
+          state.dragging && [SHADOW.lg, styles.dragging],
+          cursor(locked ? 'not-allowed' : 'grab'),
         ]}>
-        <KindRail p={p} radius={ev.kind === 'task' ? R.lg : R.md} />
-        <View style={styles.body}>
-          <View style={styles.titleRow}>
-            {!cramped && <KindGlyph p={p} size={11} />}
-            <Txt numberOfLines={tall ? 2 : 1} style={[styles.title, { color: p.title }]}>
+        {tiny ? (
+          <Row>
+            {!!calColor && <CalSwatch color={calColor} size={5} />}
+            <Title p={p.title} lines={1} small>
               {ev.title}
-            </Txt>
-            {ev.conflict && <Icon name="triangle" size={11} color={C.orange} />}
-          </View>
-          {!tight && (
-            <Txt numberOfLines={1} style={[styles.meta, { color: p.meta }]}>
-              {ev.start}–{ev.end}
-              {ev.kind === 'ai' ? ' · tap to accept' : ` · ${CATS[ev.cat].label}`}
-            </Txt>
-          )}
-        </View>
-      </Press>
+            </Title>
+          </Row>
+        ) : short ? (
+          <Row>
+            {!!calColor && <CalSwatch color={calColor} />}
+            <Title p={p.title} lines={1}>
+              {ev.title}
+            </Title>
+            {state.clash ? (
+              <Icon name="triangle" size={11} color={N.accent} />
+            ) : (
+              <Icon name={p.spec.icon} size={11} color={p.glyph} />
+            )}
+          </Row>
+        ) : (
+          <>
+            <Title p={p.title} lines={tall ? 2 : 1}>
+              {ev.title}
+            </Title>
+            <Row>
+              {!!calColor && <CalSwatch color={calColor} />}
+              <Meta p={p.meta}>{metaLine(ev, CATS[ev.cat].label, times)}</Meta>
+            </Row>
+            {tall && (
+              <View style={styles.foot}>
+                {state.clash ? (
+                  <Icon name="triangle" size={13} color={N.accent} />
+                ) : (
+                  <Icon name={p.spec.icon} size={13} color={p.glyph} />
+                )}
+              </View>
+            )}
+          </>
+        )}
+      </View>
+
+      {canResize && !tiny && (
+        <>
+          <View {...top} style={[styles.handle, styles.handleTop, cursor('ns-resize')]} aria-hidden />
+          <View {...bottom} style={[styles.handle, styles.handleBottom, cursor('ns-resize')]} aria-hidden />
+        </>
+      )}
     </View>
   );
 }
 
+const cursor = (c: string) =>
+  Platform.OS === 'web' ? ({ cursor: c } as unknown as ViewStyle) : null;
+
+function Row({ children }: { children: React.ReactNode }) {
+  return <View style={styles.row}>{children}</View>;
+}
+
+function Title({
+  children,
+  p,
+  lines,
+  small,
+}: {
+  children: React.ReactNode;
+  p: object;
+  lines: number;
+  small?: boolean;
+}) {
+  return (
+    <View style={styles.titleWrap}>
+      <Text style={[styles.title, small && styles.titleSmall, p]} numberOfLines={lines}>
+        {children}
+      </Text>
+    </View>
+  );
+}
+
+function Meta({ children, p }: { children: React.ReactNode; p: object }) {
+  return (
+    <Text style={[styles.meta, p]} numberOfLines={1}>
+      {children}
+    </Text>
+  );
+}
+
 const styles = StyleSheet.create({
-  wrap: { position: 'absolute' },
-  block: {
+  wrap: { position: 'absolute', paddingHorizontal: 2, paddingBottom: 2 },
+  wrapDragging: { zIndex: 50 },
+  tile: {
     flex: 1,
-    flexDirection: 'row',
-    gap: 6,
-    // 3px each side, so neighbouring columns never touch and a packed day still
-    // reads as separate tiles rather than one striped mass.
-    marginHorizontal: 3,
     overflow: 'hidden',
     borderRadius: R.md,
-    borderWidth: 1,
-    padding: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    gap: 3,
   },
-  task: { borderRadius: R.lg },
-  clash: { borderColor: C.orange },
-  body: { flex: 1, minWidth: 0, justifyContent: 'center' },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  title: { flex: 1, fontSize: 11, lineHeight: 15, fontWeight: '500' },
-  // Mono on the meta line only: it is all times and short labels, and the
-  // tabular figures stop 09:00 and 11:30 from jittering column to column.
-  meta: { fontFamily: MONO, marginTop: 2, fontSize: 10, lineHeight: 13 },
+  tileTiny: { paddingVertical: 0, justifyContent: 'center', borderRadius: R.sm },
+  // A tile that carries on past the drawn edge loses that edge's rounding, so
+  // it reads as cut, not as ending there.
+  cutTop: { borderTopLeftRadius: 0, borderTopRightRadius: 0 },
+  cutBottom: { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
+  past: { opacity: 0.55 },
+  selected: { outlineColor: N.ink, outlineWidth: 2, outlineStyle: 'solid', outlineOffset: 1 } as ViewStyle,
+  selectedOnDark: { outlineColor: N.ink, outlineWidth: 2, outlineStyle: 'solid', outlineOffset: 2 } as ViewStyle,
+  clash: { outlineColor: N.accent, outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 1 } as ViewStyle,
+  dragging: { opacity: 0.96 },
+  ghost: {
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: N.faint,
+    backgroundColor: 'rgba(250,250,250,0.6)',
+  },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 5, minWidth: 0 },
+  titleWrap: { flex: 1, minWidth: 0 },
+  title: { fontFamily: SANS, ...T.tile },
+  titleSmall: { fontSize: 10, lineHeight: 13 },
+  meta: { flex: 1, fontFamily: MONO, ...T.meta, fontVariant: ['tabular-nums'] },
+  foot: { marginTop: 'auto' },
+  handle: { position: 'absolute', left: 6, right: 6, height: 7, zIndex: 2 },
+  handleTop: { top: -1 },
+  handleBottom: { bottom: 0 },
 });

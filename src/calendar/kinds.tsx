@@ -1,199 +1,134 @@
-import { StyleSheet, View } from 'react-native';
+import type { TextStyle, ViewStyle } from 'react-native';
 
-import { Icon, type IconName } from './Icon';
-import { CATS, C, R, rgba, w } from './tokens';
+import type { IconName } from './Icon';
+import { HATCH, N, SHADOW } from './tokens';
 import type { CalEvent, EventKind } from './types';
 
 /**
- * What a block *is*, as one table every surface reads.
+ * What a block *is*, as one table every surface reads (docs/calendar-spec.md §3.1).
  *
- * The calendar carries two orthogonal taxonomies and they were previously
- * collapsed into one flat "tinted rectangle" everywhere, so a standup, a
- * to-do and two hours of protected deep work were indistinguishable:
+ * There is no colour channel in the Nexus calendar, so each kind is told apart
+ * by fill, edge and glyph alone — which also means the taxonomy survives
+ * greyscale, print and a colour-vision deficiency:
  *
- *   kind      → the SHAPE. Edge treatment, fill weight, glyph. Six values.
- *   category  → the HUE. Deep work / Design / Research / Meetings / Admin.
+ *   focus     ink, solid           the heaviest thing on the grid
+ *   event     white, sm shadow     a commitment, usually with people
+ *   task      white, hairline      yours to close (checkbox glyph)
+ *   routine   hatched grey         backdrop, repeats
+ *   break     hatched grey, quiet  backdrop, recovery
+ *   ai        white, dashed        not real until approved
  *
- * Keeping them on separate channels is the whole point: you can read "this is
- * a routine" from the edge without decoding the colour, and "this is design
- * work" from the colour without reading the label. Each kind also differs in
- * *shape*, not only in colour, so the distinction survives greyscale, a
- * colour-vision deficiency, and a 22px-tall block in a packed week.
+ * The kinds are not invented for the UI — each maps onto a real column of
+ * `calendar_events` (see types.ts).
  */
-
-/** Edge treatment — the primary, colour-independent channel. */
-export type EdgeStyle =
-  /** solid 3px rail: a real commitment */
-  | 'rail'
-  /** split rail with a gap: unfinished, yours to close */
-  | 'split'
-  /** dotted rail: repeats, background rhythm */
-  | 'dotted'
-  /** no rail; the whole outline is dashed: not yet real */
-  | 'dashed';
 
 export type KindSpec = {
   key: EventKind;
-  /** singular noun shown in the detail popover and the legend */
+  /** singular noun: legend, detail popover, quick-create */
   label: string;
-  /** one line explaining what the kind means, for the legend */
+  /** one line explaining what the kind means */
   blurb: string;
   icon: IconName;
-  edge: EdgeStyle;
-  /**
-   * How loudly it fills, 0–3. This is the second channel: a routine should sink
-   * into the grid, a protected focus block should be the heaviest thing on it.
-   */
-  weight: 0 | 1 | 2 | 3;
-  /** Fixed colour, for kinds whose meaning is not the category's. */
-  accent?: string;
-  /** Ring drawn around the whole block, on top of the kind's own edge. */
-  ring?: string;
 };
 
-/** Kinds whose colour is the kind, not the category. */
-const STEEL = C.steel;
-
 export const KINDS: Record<EventKind, KindSpec> = {
+  focus: {
+    key: 'focus',
+    label: 'Focus',
+    blurb: 'Protected deep work. Find Time will never move it.',
+    icon: 'lock',
+  },
   event: {
     key: 'event',
     label: 'Event',
-    blurb: 'A commitment at a fixed time — usually with other people.',
+    blurb: 'A commitment at a fixed time, usually with other people.',
     icon: 'calendar-mark',
-    edge: 'rail',
-    weight: 2,
   },
   task: {
     key: 'task',
     label: 'Task',
-    blurb: 'Work you time-boxed for yourself. Hollow until it is done.',
+    blurb: 'Work you time-boxed for yourself.',
     icon: 'check',
-    edge: 'split',
-    weight: 1,
   },
   routine: {
     key: 'routine',
     label: 'Routine',
     blurb: 'Repeats on a schedule. Deliberately quiet — it is the backdrop.',
     icon: 'refresh-plain',
-    edge: 'dotted',
-    weight: 0,
-    accent: STEEL,
-  },
-  focus: {
-    key: 'focus',
-    label: 'Focus',
-    blurb: 'Protected deep work. Find time will never move it.',
-    icon: 'shield',
-    edge: 'rail',
-    weight: 3,
-    ring: 'rgba(204,255,0,0.45)',
-  },
-  ai: {
-    key: 'ai',
-    label: 'Suggested',
-    blurb: 'Proposed by Find time. Nothing is booked until you accept it.',
-    icon: 'magic',
-    edge: 'dashed',
-    weight: 1,
-    accent: C.lime,
   },
   break: {
     key: 'break',
     label: 'Break',
     blurb: 'Recovery time, held open on purpose.',
     icon: 'cup',
-    edge: 'dotted',
-    weight: 0,
-    accent: STEEL,
+  },
+  ai: {
+    key: 'ai',
+    label: 'Proposed',
+    blurb: 'Suggested by Find Time. Nothing is booked until you approve it.',
+    icon: 'magic',
   },
 };
 
-/** Legend / filter order: loudest commitment first, backdrop last. */
-export const KIND_KEYS: EventKind[] = ['event', 'task', 'focus', 'routine', 'break', 'ai'];
+/** Legend / filter order: heaviest commitment first, backdrop, then proposals. */
+export const KIND_KEYS: EventKind[] = ['focus', 'event', 'task', 'routine', 'break', 'ai'];
+
+/** The kinds a person can pick when making or changing a block. */
+export const PICKABLE: EventKind[] = ['event', 'focus', 'task', 'routine', 'break'];
 
 export const specOf = (ev: Pick<CalEvent, 'kind'>): KindSpec => KINDS[ev.kind] ?? KINDS.event;
 
-/** Fill alpha per weight — the second channel, tuned against the dark panels. */
-const FILL: Record<KindSpec['weight'], number> = { 0: 0.05, 1: 0.06, 2: 0.14, 3: 0.22 };
-/** Border alpha per weight. Task is the outlier: hollow fill, loud outline. */
-const EDGE_ALPHA: Record<KindSpec['weight'], number> = { 0: 0.28, 1: 0.55, 2: 0.42, 3: 0.6 };
-
+/** Everything a surface needs to draw one kind. */
 export type Paint = {
   spec: KindSpec;
-  /** the solid colour the kind's marks are drawn in */
-  tint: string;
-  /** block / card background */
-  fill: string;
-  /** block / card border colour */
-  border: string;
-  borderStyle: 'solid' | 'dashed' | 'dotted';
-  /** title ink */
-  title: string;
-  /** secondary ink (times, project, meta) */
-  meta: string;
+  box: ViewStyle[];
+  title: TextStyle;
+  meta: TextStyle;
+  /** colour for the kind's glyph */
+  glyph: string;
+  /** dark tile: the selection ring and the drag label flip to suit */
+  dark: boolean;
+};
+
+const BOX: Record<EventKind, ViewStyle[]> = {
+  focus: [{ backgroundColor: N.ink }],
+  event: [{ backgroundColor: N.surface }, SHADOW.sm],
+  task: [{ backgroundColor: N.surface, borderWidth: 1, borderColor: N.lineStrong }],
+  routine: [{ backgroundColor: N.sunken, borderWidth: 1, borderColor: 'rgba(0,0,0,0.08)' }, HATCH.tile],
+  break: [{ backgroundColor: N.sunken }, HATCH.tile],
+  ai: [{ backgroundColor: N.surface, borderWidth: 1, borderStyle: 'dashed', borderColor: N.accent }],
+};
+
+const INK: Record<EventKind, { title: string; meta: string; glyph: string }> = {
+  focus: { title: N.onInk, meta: N.onInkMuted, glyph: N.onInkMuted },
+  event: { title: N.ink, meta: N.muted, glyph: N.faint },
+  task: { title: N.ink2, meta: N.muted, glyph: N.ink2 },
+  routine: { title: N.ink2, meta: N.muted, glyph: N.faint },
+  break: { title: N.muted, meta: N.faint, glyph: N.faint },
+  ai: { title: N.ink, meta: N.accentInk, glyph: N.accent },
 };
 
 /**
- * Resolve one event to the colours every surface draws it with. Week blocks,
- * month chips and agenda cards all go through here, so a kind can never look
- * like one thing in the grid and another in the list.
+ * Resolve one event to its drawing. Grid tiles, the all-day lane, the legend
+ * swatches and the detail popover all go through here, so a kind can never
+ * look like one thing in one place and another elsewhere.
  */
-export function paint(ev: CalEvent, clash = false): Paint {
+export function paint(ev: Pick<CalEvent, 'kind'>): Paint {
   const spec = specOf(ev);
-  const tint = spec.accent ?? CATS[ev.cat].color;
-  const quiet = spec.weight === 0;
-
+  const ink = INK[spec.key];
   return {
     spec,
-    tint,
-    fill: quiet ? w(FILL[0]) : rgba(tint, FILL[spec.weight]),
-    border: clash ? C.orange : quiet ? w(EDGE_ALPHA[0]) : rgba(tint, EDGE_ALPHA[spec.weight]),
-    borderStyle: spec.edge === 'dashed' ? 'dashed' : spec.edge === 'dotted' ? 'dotted' : 'solid',
-    title: quiet ? w(0.62) : spec.key === 'ai' ? C.lime : '#fff',
-    meta: quiet ? w(0.34) : spec.key === 'ai' ? rgba(C.lime, 0.7) : w(0.5),
+    box: BOX[spec.key],
+    title: { color: ink.title },
+    meta: { color: ink.meta },
+    glyph: ink.glyph,
+    dark: spec.key === 'focus',
   };
 }
 
-/**
- * The left edge. `rail` / `split` / `dotted` render a 3px column; `dashed`
- * renders nothing because that kind's signal is the outline around the whole
- * block. Three visually distinct silhouettes at any block height.
- */
-export function KindRail({ p, radius = R.md }: { p: Paint; radius?: number }) {
-  if (p.spec.edge === 'dashed') return null;
-
-  if (p.spec.edge === 'dotted') {
-    return (
-      <View style={[styles.rail, { borderRadius: radius }]}>
-        {Array.from({ length: 24 }, (_, i) => (
-          <View key={i} style={[styles.railDot, { backgroundColor: p.tint }]} />
-        ))}
-      </View>
-    );
-  }
-
-  if (p.spec.edge === 'split') {
-    return (
-      <View style={[styles.rail, { borderRadius: radius }]}>
-        <View style={[styles.railSeg, { backgroundColor: p.tint }]} />
-        <View style={styles.railGap} />
-        <View style={[styles.railSeg, { backgroundColor: rgba(p.tint, 0.45) }]} />
-      </View>
-    );
-  }
-
-  return <View style={[styles.rail, { backgroundColor: p.tint, borderRadius: radius }]} />;
+/** Meta line under a tile's title: what the shape means, in words. */
+export function metaLine(ev: CalEvent, catLabel: string, times: string): string {
+  if (ev.kind === 'ai') return `${times} · proposed · needs OK`;
+  if (ev.kind === 'focus') return `${times} · protected`;
+  return `${times} · ${catLabel.toLowerCase()}`;
 }
-
-/** The kind's glyph. The third, redundant channel — shape, weight, then icon. */
-export function KindGlyph({ p, size = 12 }: { p: Paint; size?: number }) {
-  return <Icon name={p.spec.icon} size={size} color={p.tint} />;
-}
-
-const styles = StyleSheet.create({
-  rail: { width: 3, alignSelf: 'stretch', overflow: 'hidden' },
-  railDot: { height: 2, width: 3, marginBottom: 3 },
-  railSeg: { flex: 1, width: 3 },
-  railGap: { height: 5 },
-});

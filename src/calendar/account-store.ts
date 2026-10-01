@@ -49,11 +49,19 @@ function getSnapshot() {
   return state;
 }
 
+/** Dev-only `/preview`: fixed accounts, no network. */
+let previewing = false;
+export function previewAccounts(accounts: ApiAccount[]) {
+  previewing = true;
+  set({ loading: false, signedIn: false, accounts, syncing: false, error: null });
+}
+
 export function useAccounts(): AccountState {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
 export async function refreshAccounts(): Promise<void> {
+  if (previewing) return;
   try {
     const res = await apiFetch(`/api/calendar/accounts`);
     if (!res.ok) throw new Error(`GET /api/calendar/accounts ${res.status}`);
@@ -117,6 +125,7 @@ export async function setCalRead(calendarId: string, readEnabled: boolean): Prom
       calendars: a.calendars.map((c) => (c.id === calendarId ? { ...c, readEnabled } : c)),
     })),
   });
+  if (previewing) return;
   try {
     const res = await apiFetch(`/api/calendar/calendars/${calendarId}`, {
       method: 'PATCH',
@@ -132,6 +141,7 @@ export async function setCalRead(calendarId: string, readEnabled: boolean): Prom
 
 let lastSync = 0;
 export async function syncNow(force = false): Promise<void> {
+  if (previewing) return;
   if (state.syncing) return;
   if (!force && Date.now() - lastSync < 30_000) return;
   lastSync = Date.now();

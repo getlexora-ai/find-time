@@ -1,76 +1,97 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useCalEvents } from './cal-store';
 import { syncNow, useAccounts } from './account-store';
-import {
-  addDays,
-  fromIso,
-  iso,
-  MO,
-  startOfWeek,
-  today,
-  toMin,
-  WD,
-  wdIndex,
-  WD_LONG,
-} from './cal-date';
+import { useCalEvents } from './cal-store';
+import { addDays, fromIso, fromMin, iso, MO, startOfWeek, today, WD, wdIndex } from './cal-date';
 import { AiPanel } from './components/AiPanel';
 import { CommandBar } from './components/CommandBar';
-import { ComposeSheet } from './components/ComposeSheet';
-import { ConflictBanner } from './components/ConflictBanner';
+import { ComposeSheet, firstFree } from './components/ComposeSheet';
 import { DayView } from './components/DayView';
 import { EventDetail } from './components/EventDetail';
+import { EventList } from './components/EventList';
 import { FilterSheet } from './components/FilterSheet';
 import { Frame } from './components/Frame';
 import { KpiStrip } from './components/KpiStrip';
 import { MobileNav, NAV_H } from './components/MobileNav';
 import { PickerSheet } from './components/PickerSheet';
+import { QuickCreate } from './components/QuickCreate';
 import { Sidebar } from './components/Sidebar';
-import { Skeleton } from './components/Skeleton';
-import { ThemeMenu } from './components/ThemeMenu';
 import { useToast } from './components/Toast';
 import { WeekView } from './components/WeekView';
-import { computeKpis } from './kpi';
-import type { CalActions, CalState, PointAnchor, ViewKind } from './state';
+import { getHours, useHours, workFor } from './hours';
+import { computeKpis, slicesIn } from './kpi';
+import type { CalActions, CalState, ComposePreset, PointAnchor, Slot, ViewKind } from './state';
+import { N } from './tokens';
 import type { CalEvent, EventKind } from './types';
+import { Brackets } from './ui';
 import { useResponsive } from './useResponsive';
 
 /**
- * Real conflicts: two non-break blocks on the same day whose times overlap.
- * This used to be a `conflict: true` flag that only the seed fixtures carried —
- * so a real calendar never showed a clash, while the toolbar printed a
- * hardcoded "1 conflict" for any month that had events in it at all.
+ * Real clashes on the days in view: two fixed commitments whose times overlap.
+ * Built on the grid's own slices, so a weekly routine clashes in every week it
+ * repeats in. Breaks, proposals and all-day events never clash — a proposal is
+ * not booked, and an all-day event is context, not a time.
  */
-function overlapping(list: CalEvent[]): { a: CalEvent; b: CalEvent }[] {
-  const out: { a: CalEvent; b: CalEvent }[] = [];
-  const byDay = new Map<string, CalEvent[]>();
-  for (const e of list) {
-    if (e.kind === 'break') continue;
-    const arr = byDay.get(e.date);
-    if (arr) arr.push(e);
-    else byDay.set(e.date, [e]);
+function clashesIn(events: CalEvent[], days: string[]) {
+  const pairs: { a: CalEvent; b: CalEvent }[] = [];
+  const ids = new Set<number>();
+  const slices = slicesIn(
+    events.filter((e) => e.kind !== 'break' && e.kind !== 'ai'),
+    days,
+  );
+  const byDay = new Map<string, typeof slices>();
+  for (const sl of slices) {
+    const list = byDay.get(sl.ev.date) ?? [];
+    list.push(sl);
+    byDay.set(sl.ev.date, list);
   }
-  for (const day of byDay.values()) {
-    const sorted = [...day].sort((x, y) => toMin(x.start) - toMin(y.start));
-    for (let i = 0; i < sorted.length; i++) {
-      for (let j = i + 1; j < sorted.length; j++) {
-        if (toMin(sorted[j].start) < toMin(sorted[i].end)) out.push({ a: sorted[i], b: sorted[j] });
+  for (const list of byDay.values()) {
+    list.sort((x, y) => x.s - y.s);
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length && list[j].s < list[i].t; j++) {
+        pairs.push({ a: list[i].ev, b: list[j].ev });
+        ids.add(list[i].ev.id);
+        ids.add(list[j].ev.id);
       }
     }
   }
-  return out;
+  return { pairs, ids };
+}
+
+/** "21 – 27 SEP 2026", "28 SEP – 4 OCT 2026", "THU 24 SEP 2026". */
+function rangeLabel(view: ViewKind, cursor: Date, selected: Date) {
+  const mo = (d: Date) => MO[d.getMonth()].slice(0, 3).toUpperCase();
+  if (view === 'day') return `${WD[wdIndex(selected)].toUpperCase()} ${selected.getDate()} ${mo(selected)} ${selected.getFullYear()}`;
+  const a = startOfWeek(cursor);
+  const b = addDays(a, 6);
+  if (a.getMonth() === b.getMonth()) return `${a.getDate()} – ${b.getDate()} ${mo(b)} ${b.getFullYear()}`;
+  if (a.getFullYear() === b.getFullYear()) return `${a.getDate()} ${mo(a)} – ${b.getDate()} ${mo(b)} ${b.getFullYear()}`;
+  return `${a.getDate()} ${mo(a)} ${a.getFullYear()} – ${b.getDate()} ${mo(b)} ${b.getFullYear()}`;
+}
+
+/** Where "+ New" should start: the next free 30 min in working hours, today or after. */
+function nextFreeSlot(): { date: string; at: string } {
+  const now = new Date();
+  for (let i = 0; i < 14; i++) {
+    const d = addDays(today(), i);
+    const from = i === 0 ? now.getHours() * 60 + now.getMinutes() : 0;
+    const m = firstFree(iso(d), 30, from);
+    if (m != null) return { date: iso(d), at: fromMin(m) };
+  }
+  const w = workFor(getHours(), wdIndex(today()));
+  return { date: iso(today()), at: `${String(w?.start ?? 9).padStart(2, '0')}:00` };
 }
 
 export function CalendarScreen() {
   const all = useCalEvents();
   const toast = useToast();
-  const { isDesktop, isPhone } = useResponsive();
+  const hours = useHours();
+  const { isDesktop } = useResponsive();
   const insets = useSafeAreaInsets();
-  const { signedIn } = useAccounts();
+  const { signedIn, accounts } = useAccounts();
 
-  // Pull Google Calendar on mount (throttled in the store) and once we're signed in.
   useEffect(() => {
     if (signedIn) void syncNow();
   }, [signedIn]);
@@ -84,11 +105,6 @@ export function CalendarScreen() {
     window.history.replaceState(null, '', window.location.pathname);
   }, [toast]);
 
-  /**
-   * Week is the only sensible landing view now that month is gone. Month was a
-   * density map you could not act on: it showed which days were busy and hid
-   * every time, so the first thing you did on opening the app was leave it.
-   */
   const [state, setState] = useState<CalState>(() => ({
     view: 'week',
     cursor: today(),
@@ -96,15 +112,19 @@ export function CalendarScreen() {
     loading: false,
   }));
 
-  /**
-   * Kinds hidden from every surface. The sidebar legend doubles as the filter,
-   * which is what makes the taxonomy worth having: "show me only what I
-   * committed to" and "hide the routines" are one click each.
-   */
+  /* ── what is shown: kinds you hid, calendars you switched off ── */
   const [hidden, setHidden] = useState<Set<EventKind>>(() => new Set());
+  const offCals = useMemo(
+    () => new Set(accounts.flatMap((a) => a.calendars.filter((c) => !c.readEnabled).map((c) => c.id))),
+    [accounts],
+  );
+  const shown = useMemo(
+    () => all.filter((e) => !(e.calendarId && offCals.has(e.calendarId))),
+    [all, offCals],
+  );
   const events = useMemo(
-    () => (hidden.size ? all.filter((e) => !hidden.has(e.kind)) : all),
-    [all, hidden],
+    () => (hidden.size ? shown.filter((e) => !hidden.has(e.kind)) : shown),
+    [shown, hidden],
   );
   const toggleKind = useCallback(
     (k: EventKind) =>
@@ -117,61 +137,55 @@ export function CalendarScreen() {
     [],
   );
 
-  const [themeMenu, setThemeMenu] = useState(false);
+  /* ── surfaces ── */
   const [compose, setCompose] = useState<{
     id: number | null;
     date: string;
     at: string;
     autoPlace?: boolean;
+    preset?: ComposePreset;
   } | null>(null);
   const [detail, setDetail] = useState<{ id: number; anchor: PointAnchor | null } | null>(null);
+  const [quick, setQuick] = useState<Slot | null>(null);
+  const [list, setList] = useState<{ title: string; events: CalEvent[]; anchor: PointAnchor | null } | null>(null);
   const [ai, setAi] = useState<{ prefill?: string } | null>(null);
   const [picker, setPicker] = useState(false);
   const [filters, setFilters] = useState(false);
-  const loadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(
-    () => () => {
-      if (loadTimer.current != null) clearTimeout(loadTimer.current);
-    },
-    [],
-  );
 
   const step = useCallback((dir: -1 | 1) => {
-    setState((s) => ({ ...s, loading: true }));
-    if (loadTimer.current) clearTimeout(loadTimer.current);
-    loadTimer.current = setTimeout(() => {
-      setState((s) => {
-        const n = s.view === 'week' ? dir * 7 : dir;
-        return {
-          ...s,
-          loading: false,
-          cursor: addDays(s.cursor, n),
-          selected: addDays(s.selected, n),
-        };
-      });
-    }, 200);
+    setState((s) => {
+      const n = s.view === 'week' ? dir * 7 : dir;
+      return { ...s, cursor: addDays(s.cursor, n), selected: addDays(s.selected, n) };
+    });
   }, []);
 
   const actions = useMemo<CalActions>(
     () => ({
-      setView: (v: ViewKind) => setState((s) => ({ ...s, view: v })),
+      setView: (v) => setState((s) => ({ ...s, view: v, cursor: new Date(s.selected) })),
       step,
       goToday: () => {
         const t = today();
         setState((s) => ({ ...s, cursor: t, selected: new Date(t) }));
-        toast(`Back to today, ${WD[wdIndex(t)]} ${t.getDate()} ${MO[t.getMonth()].slice(0, 3)}`);
       },
       pick: (dateIso) =>
         setState((s) => {
           const d = fromIso(dateIso);
           return { ...s, selected: d, cursor: new Date(d) };
         }),
-      openCompose: (id, date, at, autoPlace) =>
-        setState((s) => {
-          setCompose({ id, date: date ?? iso(s.selected), at: at ?? '09:00', autoPlace });
-          return s;
-        }),
-      openEvent: (id, anchor) => setDetail({ id, anchor: anchor ?? null }),
+      openCompose: (id, date, at, autoPlace, preset) => {
+        if (id == null && !date) {
+          const slot = nextFreeSlot();
+          setCompose({ id, date: slot.date, at: slot.at, autoPlace, preset });
+          return;
+        }
+        setCompose({ id, date: date ?? iso(today()), at: at ?? '09:00', autoPlace, preset });
+      },
+      openQuick: (slot) => setQuick(slot),
+      openEvent: (id, anchor) => {
+        setList(null);
+        setDetail({ id, anchor: anchor ?? null });
+      },
+      openList: (title, evs, anchor) => setList({ title, events: evs, anchor: anchor ?? null }),
       openAI: (prefill) => setAi({ prefill }),
       openPicker: () => setPicker(true),
       toast,
@@ -179,64 +193,40 @@ export function CalendarScreen() {
     [step, toast],
   );
 
-  /**
-   * The exact days on screen. One list drives the conflict scope, the KPI panel
-   * and nothing else — which is what keeps the panel honest: it can only ever
-   * describe the same days the grid is drawing.
-   */
+  /** The exact days on screen — scopes the KPIs and the clash check. */
   const days = useMemo(() => {
     if (state.view === 'day') return [iso(state.selected)];
     const s = startOfWeek(state.cursor);
     return Array.from({ length: 7 }, (_, i) => iso(addDays(s, i)));
   }, [state.view, state.cursor, state.selected]);
 
-  /* ── real clashes, scoped to whatever the bar is showing ── */
-  const conflicts = useMemo(() => overlapping(events), [events]);
-  const scopedConflicts = useMemo(
-    () => conflicts.filter(({ a }) => days.includes(a.date)),
-    [conflicts, days],
-  );
-
+  const clashes = useMemo(() => clashesIn(events, days), [events, days]);
   const kpis = useMemo(
-    () => computeKpis(events, days, scopedConflicts.length),
-    [events, days, scopedConflicts.length],
+    () => computeKpis(events, days, clashes.pairs.length, hours),
+    [events, days, clashes.pairs.length, hours],
   );
+  const range = rangeLabel(state.view, state.cursor, state.selected);
 
-  /**
-   * The bar's title. The eyebrow ("SEP 2026 · 14 events · no conflicts") and
-   * the sentence of prose under it are gone — both restated counts the grid
-   * already shows, and between them they pushed the calendar ~120px down.
-   */
-  const title = useMemo(() => {
-    const s = state.selected;
-    if (state.view === 'week') {
-      const wkStart = startOfWeek(state.cursor);
-      const e2 = addDays(wkStart, 6);
-      return `${MO[wkStart.getMonth()].slice(0, 3)} ${wkStart.getDate()} – ${MO[e2.getMonth()].slice(0, 3)} ${e2.getDate()}`;
-    }
-    // "Monday 14 September" elides to "Monday 14 Septemb…" in a phone bar, which
-    // loses the month — the one part of it you cannot infer from the grid.
-    if (isPhone) return `${WD[wdIndex(s)]} ${s.getDate()} ${MO[s.getMonth()].slice(0, 3)}`;
-    return `${WD_LONG[wdIndex(s)]} ${s.getDate()} ${MO[s.getMonth()]}`;
-  }, [state.view, state.cursor, state.selected, isPhone]);
-
-  const hasConflict = scopedConflicts.length > 0;
-
-  /* ── web keyboard shortcuts ── */
+  /* ── web keyboard ── */
+  const anyOpen = !!(compose || detail || quick || list || ai || picker || filters);
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       if (e.key === 'Escape') {
         setCompose(null);
         setAi(null);
         setDetail(null);
-        setThemeMenu(false);
+        setQuick(null);
+        setList(null);
         setPicker(false);
         setFilters(false);
         return;
       }
+      if (anyOpen) return;
       const t = e.target as HTMLElement | null;
       if (t && /^(input|textarea|select)$/i.test(t.tagName)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       const k = e.key.toLowerCase();
       if (k === 'w') actions.setView('week');
       if (k === 'd') actions.setView('day');
@@ -245,90 +235,53 @@ export function CalendarScreen() {
         e.preventDefault();
         actions.openCompose(null);
       }
-      if (e.key === 'ArrowLeft') actions.step(-1);
-      if (e.key === 'ArrowRight') actions.step(1);
+      if (e.key === 'ArrowLeft' && !e.shiftKey) actions.step(-1);
+      if (e.key === 'ArrowRight' && !e.shiftKey) actions.step(1);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [actions]);
+  }, [actions, anyOpen]);
 
   const detailEvent = detail ? all.find((e) => e.id === detail.id) ?? null : null;
+  const selectedId = detail?.id ?? null;
 
-  const grid = state.loading ? (
-    <Skeleton />
-  ) : state.view === 'week' ? (
-    <WeekView state={state} actions={actions} events={events} />
-  ) : (
-    <DayView state={state} actions={actions} events={events} />
-  );
+  const resolve =
+    clashes.pairs.length > 0
+      ? () => {
+          const { a, b } = clashes.pairs[0];
+          // Move whichever of the two can move: not imported, not protected.
+          const movable = [b, a].find((e) => !e.imported && e.kind !== 'focus') ?? b;
+          actions.openCompose(movable.id, undefined, undefined, true);
+        }
+      : undefined;
+
+  const grid =
+    state.view === 'week' ? (
+      <WeekView state={state} actions={actions} events={events} selectedId={selectedId} clashIds={clashes.ids} />
+    ) : (
+      <DayView state={state} actions={actions} events={events} selectedId={selectedId} clashIds={clashes.ids} />
+    );
 
   return (
-    <SafeAreaView style={styles.root} edges={['top']}>
+    <SafeAreaView style={styles.root} edges={['top']} nativeID="ft-calendar">
       <Frame />
-      <View style={styles.row}>
-        {isDesktop && (
-          <Sidebar
-            selected={state.selected}
-            events={all}
-            hidden={hidden}
-            onToggleKind={toggleKind}
-            onPick={(d) => actions.pick(d)}
-          />
-        )}
-        <View style={styles.main}>
-          <CommandBar
-            state={state}
-            actions={actions}
-            title={title}
-            onOpenTheme={() => setThemeMenu(true)}
-          />
-
-          {/*
-            The instrument panel. It sits between the bar and the grid because
-            it is a reading of the period the bar names and the grid draws —
-            the one place the whole week answers "where am I" before you start
-            parsing blocks.
-          */}
-          <KpiStrip
-            k={kpis}
-            onResolve={
-              hasConflict
-                ? () => actions.openCompose(scopedConflicts[0].b.id, undefined, undefined, true)
-                : undefined
-            }
-          />
-
-          {hasConflict && (
-            <View style={styles.bannerWrap}>
-              <ConflictBanner
-                a={scopedConflicts[0].a}
-                b={scopedConflicts[0].b}
-                onResolve={() => actions.openCompose(scopedConflicts[0].b.id, undefined, undefined, true)}
-              />
-            </View>
+      <View style={[styles.frame, isDesktop && styles.frameDesktop]}>
+        {isDesktop && <Brackets />}
+        <CommandBar state={state} actions={actions} range={range} />
+        <View style={styles.row}>
+          {isDesktop && (
+            <Sidebar
+              selected={state.selected}
+              weekOf={state.view === 'week' ? state.cursor : undefined}
+              events={shown}
+              hidden={hidden}
+              onToggleKind={toggleKind}
+              onPick={(d) => actions.pick(d)}
+            />
           )}
-
-          {/*
-            The grid IS the page, at every width. It fills whatever is left
-            below the bar rather than living inside a padded scroll view sized
-            to 58% of the window, which is what kept the week grid at roughly
-            half the screen no matter how tall the display was.
-
-            The phone used to put the whole surface — KPI panel included —
-            inside a page ScrollView, so the instrument panel scrolled away and
-            the calendar was a short window in the middle of a long page. Now
-            only the hours scroll, exactly as on desktop, and the panel above
-            them stays put. The bottom padding is the nav's own height, so the
-            last hour of the day is never parked underneath it.
-          */}
-          <View
-            style={[
-              styles.gridFill,
-              isPhone && styles.gridFillPhone,
-              hasConflict && styles.gridFillTight,
-              !isDesktop && { paddingBottom: NAV_H + Math.max(12, insets.bottom) },
-            ]}>
-            {grid}
+          <View style={[styles.main, !isDesktop && { paddingBottom: NAV_H + Math.max(10, insets.bottom) }]}>
+            <KpiStrip k={kpis} onResolve={resolve} />
+            <View style={styles.grid}>{grid}</View>
           </View>
         </View>
       </View>
@@ -343,7 +296,14 @@ export function CalendarScreen() {
         />
       )}
 
-      <ThemeMenu visible={themeMenu} onClose={() => setThemeMenu(false)} />
+      {quick && (
+        <QuickCreate
+          slot={quick}
+          onClose={() => setQuick(null)}
+          onMore={(preset) => actions.openCompose(null, quick.date, quick.start, false, preset)}
+          toast={toast}
+        />
+      )}
       {compose && (
         <ComposeSheet
           key={`${compose.id ?? 'new'}-${compose.date}-${compose.at}-${compose.autoPlace ? 'ai' : ''}`}
@@ -351,6 +311,7 @@ export function CalendarScreen() {
           defaultDate={compose.date}
           defaultStart={compose.at}
           autoPlace={compose.autoPlace}
+          preset={compose.preset}
           onClose={() => setCompose(null)}
           onSaved={(d) => {
             setCompose(null);
@@ -363,9 +324,18 @@ export function CalendarScreen() {
         <EventDetail
           event={detailEvent}
           anchor={detail.anchor}
-          isDesktop={isDesktop}
+          clash={clashes.ids.has(detailEvent.id)}
           onClose={() => setDetail(null)}
           actions={actions}
+        />
+      )}
+      {list && (
+        <EventList
+          title={list.title}
+          events={list.events}
+          anchor={list.anchor}
+          onClose={() => setList(null)}
+          onOpen={(id) => actions.openEvent(id, list.anchor ?? undefined)}
         />
       )}
       {ai && (
@@ -387,22 +357,12 @@ export function CalendarScreen() {
         />
       )}
       {filters && (
-        <FilterSheet
-          events={all}
-          hidden={hidden}
-          onToggleKind={toggleKind}
-          onOpenTheme={() => {
-            setFilters(false);
-            setThemeMenu(true);
-          }}
-          onClose={() => setFilters(false)}
-        />
+        <FilterSheet events={shown} hidden={hidden} onToggleKind={toggleKind} onClose={() => setFilters(false)} />
       )}
       {picker && (
         <PickerSheet
-          cursor={state.cursor}
           selected={state.selected}
-          events={events}
+          events={shown}
           onPick={(d) => {
             setState((s) => ({ ...s, selected: fromIso(d), cursor: fromIso(d) }));
             setPicker(false);
@@ -420,12 +380,11 @@ export function CalendarScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  row: { flex: 1, flexDirection: 'row', width: '100%' },
-  main: { flex: 1, minWidth: 0 },
-  gridFill: { flex: 1, minHeight: 0, padding: 14 },
-  gridFillPhone: { padding: 8 },
-  // The banner already carries its own bottom margin; don't pay for it twice.
-  gridFillTight: { paddingTop: 0 },
-  bannerWrap: { paddingHorizontal: 14, paddingTop: 14 },
+  root: { flex: 1, backgroundColor: N.ground },
+  frame: { flex: 1, minHeight: 0, backgroundColor: N.frame },
+  // B artboard: the app sits in a column inset 24px, ruled left and right.
+  frameDesktop: { marginHorizontal: 24, borderLeftWidth: 1, borderRightWidth: 1, borderColor: N.line },
+  row: { flex: 1, minHeight: 0, flexDirection: 'row' },
+  main: { flex: 1, minWidth: 0, minHeight: 0 },
+  grid: { flex: 1, minHeight: 0 },
 });

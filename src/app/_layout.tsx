@@ -41,6 +41,7 @@ export default function RootLayout() {
         <Stack.Screen name="app" />
         <Stack.Screen name="privacy" />
         <Stack.Screen name="terms" />
+        <Stack.Screen name="preview" options={{ contentStyle: { backgroundColor: '#FAFAFA' } }} />
       </Stack>
       <StatusBar style="light" />
     </ClerkProvider>

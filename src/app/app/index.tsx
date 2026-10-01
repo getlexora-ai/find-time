@@ -29,7 +29,7 @@ export default function CalendarRoute() {
     if (isLoaded && isSignedIn) void refreshAccounts();
   }, [isLoaded, isSignedIn]);
 
-  if (!mounted || !isLoaded) return <View style={{ flex: 1, backgroundColor: '#2047e6' }} />;
+  if (!mounted || !isLoaded) return <View style={{ flex: 1, backgroundColor: '#FAFAFA' }} />;
   if (!isSignedIn) return <Redirect href="/login" />;
   return <CalendarScreen />;
 }
