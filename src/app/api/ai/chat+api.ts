@@ -11,6 +11,7 @@ import {
   PROMPT_VERSION,
   TOOL_ANSWER,
   TOOL_ASK,
+  TOOL_PLACE_AT,
   TOOL_PROPOSE,
   TOOL_RULE,
   TOOL_TIME_OFF,
@@ -30,9 +31,10 @@ import {
   shouldExplore,
 } from '@/server/ai/capture';
 import { buildScoreContext, rankFreeSlots, selectSlots, type RankedSlot } from '@/server/ai/find-time';
-import { SCORER_VERSION, slotNotes } from '@/server/ai/scoring';
+import { SCORER_VERSION, slotNotes, ZERO_FEATURES } from '@/server/ai/scoring';
+import { ambiguousTime, checkPlaceAt, clashNote } from '@/server/ai/place-at';
 import { describeClaim } from '@/server/ai/learn';
-import { adjustDuration, effectiveBuffer, type AgentProfile } from '@/server/ai/preferences';
+import { adjustDuration, CATEGORIES, effectiveBuffer, type AgentProfile } from '@/server/ai/preferences';
 import { dayWindowFor, durationOptions, missingInfo, questionFor, whenOptions } from '@/server/ai/clarify';
 import {
   appendMessage,
@@ -240,9 +242,12 @@ export async function POST(request: Request): Promise<Response> {
    * actually saw rather than what the model first reached for.
    */
   const missing = choice.name === TOOL_PROPOSE ? missingInfo(args) : null;
+  // "gym at 6" — never placed on a guess between 06:00 and 18:00.
+  const ampm = choice.name === TOOL_PLACE_AT ? ambiguousTime(text) : null;
 
   const ACTION_BY_TOOL: Record<string, 'propose' | 'ask' | 'record_rule' | 'time_off' | 'answer'> = {
     [TOOL_PROPOSE]: 'propose',
+    [TOOL_PLACE_AT]: 'propose',
     [TOOL_ASK]: 'ask',
     [TOOL_RULE]: 'record_rule',
     [TOOL_TIME_OFF]: 'time_off',
@@ -253,7 +258,7 @@ export async function POST(request: Request): Promise<Response> {
   const turnId = await recordTurn({
     userId,
     sessionId,
-    action: missing ? 'ask' : ACTION_BY_TOOL[choice.name] ?? 'answer',
+    action: missing || ampm ? 'ask' : ACTION_BY_TOOL[choice.name] ?? 'answer',
     modelId: choice.model,
     promptVersion: PROMPT_VERSION,
     scorerVersion: SCORER_VERSION,
@@ -465,6 +470,41 @@ export async function POST(request: Request): Promise<Response> {
           durationMin !== askedMin
             ? `I've found room — I stretched these to ${durationMin} minutes because ${category.replace('-', ' ')} usually runs over for you.`
             : `Here's what I found.`;
+      }
+    }
+  } else if (choice.name === TOOL_PLACE_AT) {
+    const title = asString(args.title, 'Block').slice(0, 120);
+    const categoryArg = asString(args.category, 'personal');
+    const category = (CATEGORIES as readonly string[]).includes(categoryArg) ? categoryArg : 'personal';
+    const checked = checkPlaceAt(args.startISO, args.endISO, nowISO, horizonISO);
+    if (ampm) {
+      kind = 'question';
+      question = { text: `Did you mean ${ampm.pm} or ${ampm.am}?`, options: [ampm.pm, ampm.am] };
+      reply = question.text;
+    } else if (!checked.ok) {
+      reply = checked.reason;
+    } else {
+      // The user's own time, not a scorer pick: no features, no runners-up, no
+      // occasion. The card and the feedback path are the same as any proposal.
+      const reason = clashNote(busy, checked.span) ?? "it's the time you asked for";
+      try {
+        const stored = await saveProposals(userId, sessionId, checked.span, [
+          { title, category, ...checked.span, score: 0, features: ZERO_FEATURES, reason, alternatives: [] },
+        ]);
+        kind = 'plan';
+        proposals = stored.map((p) => ({
+          id: p.id,
+          title: p.title,
+          startISO: p.startISO,
+          endISO: p.endISO,
+          category: p.category,
+          reason: p.reason,
+          alternatives: [],
+        }));
+        reply = reply || 'Here it is.';
+      } catch (err) {
+        console.error('ai/chat placeAt', err);
+        return Response.json({ sessionId, error: 'Could not save that plan. Try again.' }, { status: 500 });
       }
     }
   } else if (choice.name === TOOL_ASK) {

@@ -9,6 +9,8 @@
  *
  *   propose_blocks   — place (or re-place) time. The deterministic scorer does
  *                      the actual placement; the model only supplies bounds.
+ *   place_at         — the user named the time ("gym 6–8pm"): place it there,
+ *                      not where the scorer would have.
  *   ask_clarification— the request is genuinely ambiguous. Asking beats guessing
  *                      and then being corrected, because a wrong guess that the
  *                      user fixes also feeds the learner a misleading signal.
@@ -32,13 +34,14 @@ import { CATEGORIES } from './preferences.ts';
  * a change in the prompt rather than guessed at. Without it, "the agent got
  * worse last week" has no answerable form.
  */
-export const PROMPT_VERSION = 'p3';
+export const PROMPT_VERSION = 'p4';
 
 export const TOOL_PROPOSE = 'propose_blocks';
 export const TOOL_ASK = 'ask_clarification';
 export const TOOL_RULE = 'record_rule';
 export const TOOL_ANSWER = 'answer';
 export const TOOL_TIME_OFF = 'block_time_off';
+export const TOOL_PLACE_AT = 'place_at';
 
 const CATS = [...CATEGORIES];
 
@@ -222,6 +225,37 @@ export const RULE_TOOL: ToolDef = {
 };
 
 /**
+ * The user named the time themselves — "gym today 6–8pm". propose_blocks would
+ * hand that to the scorer, which picks its own slot, so the user asked for
+ * 18:00 and got something else. This passes their times through; code checks
+ * them (src/server/ai/place-at.ts) and they land on the same Add/Skip card.
+ */
+export const PLACE_AT_TOOL: ToolDef = {
+  name: TOOL_PLACE_AT,
+  description:
+    'Place ONE block at the exact start and end the user stated ("gym today 6-8pm", "dentist ' +
+    'Friday 9:30 for half an hour", "call tomorrow at 15:00 for 30 min"). Use this instead of ' +
+    'propose_blocks whenever they gave a clock time. If they gave a start but no length, ask how ' +
+    'long with ask_clarification. If a time like "at 6" has no am/pm, ask which they mean.',
+  input_schema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      title: { type: 'string', description: 'Short calendar title, e.g. "Gym". No quotes.' },
+      category: {
+        type: 'string',
+        enum: CATS,
+        description: 'personal for life outside work: gym, sport, errands, appointments, family, hobbies.',
+      },
+      startISO: { type: 'string', description: 'Start as the user said it, wall-clock, e.g. "2026-10-01T18:00:00Z".' },
+      endISO: { type: 'string', description: 'End, same format, e.g. "2026-10-01T20:00:00Z".' },
+      reply: { type: 'string', description: 'One sentence, first person. Do not repeat the times; the card shows them.' },
+    },
+    required: ['title', 'category', 'startISO', 'endISO', 'reply'],
+  },
+};
+
+/**
  * Time away, understood from however the user says it. The one tool that takes
  * exact times from the model — they are the user's own times, read out of their
  * sentence, not a slot the model chose — and src/server/ai/time-off.ts checks
@@ -282,7 +316,7 @@ export const ANSWER_TOOL: ToolDef = {
   },
 };
 
-export const CHAT_TOOLS: ToolDef[] = [PROPOSE_TOOL, ASK_TOOL, RULE_TOOL, TIME_OFF_TOOL, ANSWER_TOOL];
+export const CHAT_TOOLS: ToolDef[] = [PROPOSE_TOOL, PLACE_AT_TOOL, ASK_TOOL, RULE_TOOL, TIME_OFF_TOOL, ANSWER_TOOL];
 
 /**
  * Build the system prompt.
@@ -312,7 +346,8 @@ export function buildSystemPrompt(opts: {
     '- Understand what the user means, not only the words they use. "I\'m in Copenhagen from the 17th ' +
       'till the 22nd" is time away even though it never says "vacation" or "block".',
     '- Never invent slots for work you place. Give bounds; the scheduler picks the times. Times the user ' +
-      'stated themselves, like when they are away, are not invented — pass them through.',
+      'stated themselves are not invented — pass them through: place_at for a block at a clock time they ' +
+      'gave ("gym 6-8pm"), block_time_off when they are away.',
     '- Before placing time you need two things from the user: roughly WHEN (a day or range — "today", ' +
       '"tomorrow evening", "this week", "before Friday") and HOW LONG. If either is missing from the ' +
       'conversation, ask with ask_clarification instead of guessing. "When can I do it?" is them asking ' +
