@@ -280,16 +280,28 @@ export function TimeGrid({
   const clampMin = (m: number) => Math.max(winMin, Math.min(winMax, m));
   const minAt = (y: number) => clampMin(Math.floor((winMin + (y / ROW) * 60) / SNAP) * SNAP);
 
+  // Native: once the long-press lands, the scroll views must stop scrolling
+  // right away. A native scroll that starts can end the touch whatever the
+  // termination request answers, so waiting for the first move (`g.moved`)
+  // left a window where a held finger that drifts scrolls instead of drags.
+  const [held, setHeld] = useState(false);
   const arm = () => {
     box.set({ armed: false });
     box.set({ cancelled: false });
     if (box.timer) clearTimeout(box.timer);
     if (isWeb) box.set({ armed: true });
-    else box.set({ timer: setTimeout(() => box.set({ armed: true }), LONG_PRESS_MS) });
+    else
+      box.set({
+        timer: setTimeout(() => {
+          box.set({ armed: true });
+          setHeld(true);
+        }, LONG_PRESS_MS),
+      });
   };
   const disarm = () => {
     if (box.timer) clearTimeout(box.timer);
     box.set({ armed: false });
+    setHeld(false);
   };
   const anchorOf = (e: GestureResponderEvent): PointAnchor => ({
     x: e.nativeEvent.pageX,
@@ -748,7 +760,7 @@ export function TimeGrid({
         style={fill ? styles.fill : undefined}
         showsVerticalScrollIndicator={false}
         // A drag owns the pointer; the page must not scroll under it.
-        scrollEnabled={!g?.moved}
+        scrollEnabled={!g?.moved && !held}
         contentContainerStyle={{ minHeight: bh }}>
         <View style={[styles.row, { height: bh }]}>
           <View style={[styles.gutter, { width: gutterW, height: bh }]}>
@@ -774,7 +786,7 @@ export function TimeGrid({
               showsHorizontalScrollIndicator={false}
               onScroll={syncHead}
               scrollEventThrottle={16}
-              scrollEnabled={!g?.moved}
+              scrollEnabled={!g?.moved && !held}
               snapToInterval={step}
               decelerationRate="fast">
               <View style={[styles.row, { height: bh }]}>{columns}</View>

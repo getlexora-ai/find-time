@@ -128,7 +128,8 @@ const WHITE_INK: Record<'event' | 'task' | 'ai', { title: string; meta: string; 
   task: { title: N.ink2, meta: N.muted, glyph: N.ink2 },
   ai: { title: N.ink, meta: N.accentInk, glyph: N.accent },
 };
-const SOLID_INK = { title: N.onInk, meta: 'rgba(255,255,255,0.78)', glyph: 'rgba(255,255,255,0.78)' };
+// Meta is full white: at 78% the 10px mono line was 3.7–4.1:1 on the solids.
+const SOLID_INK = { title: N.onInk, meta: N.onInk, glyph: N.onSolidSoft };
 
 /**
  * Resolve one event to its drawing. Grid tiles, the all-day lane, the legend

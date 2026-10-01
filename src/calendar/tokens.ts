@@ -62,6 +62,8 @@ export const N = {
   /** on an ink surface */
   onInk: '#FFFFFF',
   onInkMuted: '#A3A3A3',
+  /** a glyph on a solid category tile (icons need 3:1, text gets onInk) */
+  onSolidSoft: 'rgba(255,255,255,0.78)',
 
   /** wash under a hovered row/button */
   hover: 'rgba(23,23,23,0.04)',
@@ -167,11 +169,10 @@ export const HATCH = {
 } as const;
 
 /**
- * A tile that ended before now (spec §3.3: 55%). An ink tile keeps more: at
- * 55% its white title sits on mid-grey at 4:1 and the focus block stops reading
- * as the heaviest thing on the grid; at 70% it is 6.6:1 and still unmistakably ink.
+ * A tile that ended before now keeps its colour at this opacity (spec §3.3,
+ * §12). Note: on the solids it puts the white title at ~2.2–2.7:1.
  */
-export const PAST = { light: 0.55, onInk: 0.7 } as const;
+export const PAST = 0.55;
 
 /* ───────────────────────── motion ───────────────────────── */
 

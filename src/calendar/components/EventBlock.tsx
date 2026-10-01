@@ -100,7 +100,7 @@ export function EventBlock({
           it.cutTop && styles.cutTop,
           it.cutBottom && styles.cutBottom,
           tiny && styles.tileTiny,
-          state.past && !state.dragging && (p.dark ? styles.pastOnInk : styles.past),
+          state.past && !state.dragging && styles.past,
           lifted && [styles.lifted, SHADOW.md],
           !state.ghost && state.selected && (p.dark ? styles.selectedOnDark : styles.selected),
           !state.ghost && state.clash && styles.clash,
@@ -212,8 +212,7 @@ const styles = StyleSheet.create({
   // it reads as cut, not as ending there.
   cutTop: { borderTopLeftRadius: 0, borderTopRightRadius: 0 },
   cutBottom: { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
-  past: { opacity: PAST.light },
-  pastOnInk: { opacity: PAST.onInk },
+  past: { opacity: PAST },
   lifted: { transform: [{ translateY: -1 }] },
   selected: { outlineColor: N.ink, outlineWidth: 2, outlineStyle: 'solid', outlineOffset: 2 } as ViewStyle,
   selectedOnDark: { outlineColor: N.ink, outlineWidth: 2, outlineStyle: 'solid', outlineOffset: 2 } as ViewStyle,
