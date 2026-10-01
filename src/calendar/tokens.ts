@@ -85,6 +85,19 @@ export const rgba = (hex: string, a: number) => {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 };
 
+/**
+ * hex mixed into white at `a`, as an opaque hex. The quiet calendar's tiles are
+ * tints, and an opaque tint keeps two overlapping tiles from muddying each other.
+ */
+export const tint = (hex: string, a: number) => {
+  const n = parseInt(hex.slice(1), 16);
+  const mix = (c: number) => Math.round(255 - (255 - c) * a).toString(16).padStart(2, '0');
+  return `#${mix((n >> 16) & 255)}${mix((n >> 8) & 255)}${mix(n & 255)}`;
+};
+
+/** How strong a tile's category tint is (quiet calendar, 2026-10-01). */
+export const TINT = 0.16;
+
 /* ───────────────────────── type ───────────────────────── */
 
 export const SANS = Platform.select({
@@ -105,7 +118,12 @@ export const T = {
   title: { fontSize: 15, lineHeight: 20, fontWeight: '600', letterSpacing: -0.3 },
   heading: { fontSize: 17, lineHeight: 24, fontWeight: '600', letterSpacing: -0.4 },
   body: { fontSize: 13, lineHeight: 18, fontWeight: '500' },
-  tile: { fontSize: 12, lineHeight: 16, fontWeight: '500' },
+  /** a tile's title — a step up from the old 12px: the grid carries less, so it can be read */
+  tile: { fontSize: 13, lineHeight: 17, fontWeight: '600', letterSpacing: -0.1 },
+  /** a tile's time, under or beside the title */
+  time: { fontSize: 12, lineHeight: 16, fontWeight: '400' },
+  /** the month over the grid */
+  period: { fontSize: 20, lineHeight: 26, fontWeight: '600', letterSpacing: -0.5 },
   caption: { fontSize: 12, lineHeight: 16, fontWeight: '400' },
   meta: { fontSize: 10, lineHeight: 13, fontWeight: '400' },
   label: { fontSize: 10, lineHeight: 14, fontWeight: '500', letterSpacing: 0.6 },
@@ -170,9 +188,10 @@ export const HATCH = {
 
 /**
  * A tile that ended before now keeps its colour at this opacity (spec §3.3,
- * §12). Note: on the solids it puts the white title at ~2.2–2.7:1.
+ * §12). Quiet calendar: tiles are tints with ink text, so 70% keeps the
+ * title readable while still reading as done.
  */
-export const PAST = 0.55;
+export const PAST = 0.7;
 
 /* ───────────────────────── motion ───────────────────────── */
 

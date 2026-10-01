@@ -2,7 +2,7 @@ import { Platform, StyleSheet, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon, type IconName } from '../Icon';
-import type { ViewKind } from '../state';
+import type { Page, ViewKind } from '../state';
 import { N, R, SANS, SHADOW } from '../tokens';
 import { Press, Txt } from '../ui';
 
@@ -13,20 +13,23 @@ const BLUR = Platform.select({
   default: undefined,
 });
 
-/** Phone bottom bar: the two views, New, Ask, and the "Show" sheet. */
+/** Phone bottom bar: the two views, New, Ask, and Insights. "Show" is in the top bar. */
 export function MobileNav({
   view,
+  page,
   onSetView,
   onCompose,
   onOpenAI,
-  onOpenFilters,
+  onInsights,
 }: {
   view: ViewKind;
+  page: Page;
   onSetView: (v: ViewKind) => void;
   onCompose: () => void;
   onOpenAI: () => void;
-  onOpenFilters: () => void;
+  onInsights: () => void;
 }) {
+  const planner = page === 'planner';
   const insets = useSafeAreaInsets();
 
   const item = (label: string, icon: IconName, onPress: () => void, active = false, role: 'tab' | 'button' = 'button') => (
@@ -46,15 +49,15 @@ export function MobileNav({
   return (
     <View style={[styles.bar, BLUR, { paddingBottom: Math.max(10, insets.bottom) }]} aria-label="Calendar navigation">
       <View style={styles.inner}>
-        {item('Week', 'calendar', () => onSetView('week'), view === 'week', 'tab')}
-        {item('Day', 'calendar-mark', () => onSetView('day'), view === 'day', 'tab')}
+        {item('Week', 'calendar', () => onSetView('week'), planner && view === 'week', 'tab')}
+        {item('Day', 'calendar-mark', () => onSetView('day'), planner && view === 'day', 'tab')}
         <Press onPress={onCompose} style={styles.center} accessibilityRole="button" aria-label="New block">
           <View style={[styles.centerDisc, SHADOW.md]}>
             <Icon name="add" size={20} color={N.onInk} />
           </View>
         </Press>
         {item('Ask', 'magic', onOpenAI)}
-        {item('Show', 'eye', onOpenFilters)}
+        {item('Insights', 'chart', onInsights, !planner, 'tab')}
       </View>
     </View>
   );

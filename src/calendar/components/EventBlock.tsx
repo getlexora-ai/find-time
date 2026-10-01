@@ -2,12 +2,10 @@ import { useState } from 'react';
 import { Platform, StyleSheet, Text, View, type GestureResponderHandlers, type ViewStyle } from 'react-native';
 
 import { fromMin } from '../cal-date';
-import { Icon } from '../Icon';
-import { metaLine, paint } from '../kinds';
+import { paint } from '../kinds';
 import { blockGeometry } from '../layout';
-import { CATS, MONO, N, PAST, R, SANS, SHADOW, T, TRANSITION } from '../tokens';
+import { N, PAST, R, SANS, SHADOW, T, TRANSITION } from '../tokens';
 import type { LaidBlock } from '../types';
-import { CalSwatch } from '../ui';
 
 /**
  * One tile on the time grid (docs/calendar-spec.md §3).
@@ -15,11 +13,14 @@ import { CalSwatch } from '../ui';
  * Presentational: TimeGrid owns every gesture and hands the handlers in, so
  * there is one place that knows what a press, a drag and a resize mean.
  *
+ * Quiet calendar (2026-10-01): a tile is its title and its time, nothing else —
+ * no glyphs, dots, swatches or mono meta. Colour says the category; the detail
+ * popover says the rest.
+ *
  * Height bands (56px/hour):
  *   < 24px   title only, one line — a 15-minute block
- *   24–45    title + glyph on one row
- *   46–89    title, meta line
- *   ≥ 90     title on two lines, meta, glyph pinned to the bottom
+ *   24–45    title and start time on one row
+ *   ≥ 46     title (as many lines as fit), then "13:30 – 16:00"
  */
 export type TileState = {
   selected?: boolean;
@@ -35,7 +36,6 @@ export function EventBlock({
   it,
   winStart,
   state = {},
-  calColor,
   body,
   top,
   bottom,
@@ -47,8 +47,6 @@ export function EventBlock({
   it: LaidBlock;
   winStart: number;
   state?: TileState;
-  /** the source calendar's own colour — the 6px square (spec §4) */
-  calColor?: string;
   body?: GestureResponderHandlers;
   top?: GestureResponderHandlers;
   bottom?: GestureResponderHandlers;
@@ -64,12 +62,18 @@ export function EventBlock({
   const p = paint(ev);
 
   const tiny = height < 24;
+  // two lines need 5 + 17 + 16 + 5 + the 2px gap under the tile
   const short = height < 46;
-  const tall = height >= 90;
 
-  const times =
-    `${it.cutTop ? (it.trueStart == null ? '…' : `↑${fromMin(it.trueStart)}`) : fromMin(it.s)}` +
-    `–${it.cutBottom ? (it.trueEnd == null ? '…' : `${fromMin(it.trueEnd)}↓`) : fromMin(it.t)}`;
+  const from = it.cutTop ? (it.trueStart == null ? '…' : fromMin(it.trueStart)) : fromMin(it.s);
+  const to = it.cutBottom ? (it.trueEnd == null ? '…' : fromMin(it.trueEnd)) : fromMin(it.t);
+  const times = `${from} – ${to}`;
+  const startLabel = from;
+
+  // Selected: the tile fills with its category colour and the text turns white.
+  const on = !state.ghost && !!state.selected;
+  const ink = on ? { color: N.onInk } : p.title;
+  const sub = on ? { color: N.onInk } : p.meta;
 
   const [hover, setHover] = useState(false);
   const webProps =
@@ -102,51 +106,30 @@ export function EventBlock({
           tiny && styles.tileTiny,
           state.past && !state.dragging && styles.past,
           lifted && [styles.lifted, SHADOW.md],
-          !state.ghost && state.selected && (p.dark ? styles.selectedOnDark : styles.selected),
+          on && { backgroundColor: p.color, borderColor: p.color },
           !state.ghost && state.clash && styles.clash,
           state.dragging && [SHADOW.lg, styles.dragging],
           cursor(locked ? 'not-allowed' : 'grab'),
         ]}>
-        {state.ghost ? null : tiny ? (
-          <Row>
-            {!!calColor && <CalSwatch color={calColor} size={5} />}
-            <Title p={p.title} lines={1} small>
+        {state.ghost ? null : short ? (
+          <View style={styles.row}>
+            <Text style={[styles.title, tiny && styles.titleSmall, ink]} numberOfLines={1}>
               {ev.title}
-            </Title>
-          </Row>
-        ) : short ? (
-          <Row>
-            {!p.solid && <View style={[styles.catDot, { backgroundColor: p.color }]} />}
-            {!!calColor && <CalSwatch color={calColor} />}
-            <Title p={p.title} lines={1}>
-              {ev.title}
-            </Title>
-            {state.clash ? (
-              <Icon name="triangle" size={11} color={N.accent} />
-            ) : (
-              <Icon name={p.spec.icon} size={11} color={p.glyph} />
+            </Text>
+            {!tiny && (
+              <Text style={[styles.time, sub]} numberOfLines={1}>
+                {startLabel}
+              </Text>
             )}
-          </Row>
+          </View>
         ) : (
           <>
-            <Title p={p.title} lines={tall ? 2 : 1}>
+            <Text style={[styles.title, ink]} numberOfLines={Math.max(1, Math.floor((height - 30) / 17))}>
               {ev.title}
-            </Title>
-            <Row>
-              {/* White tiles carry their category as a round dot (the square is the calendar). */}
-              {!p.solid && <View style={[styles.catDot, { backgroundColor: p.color }]} />}
-              {!!calColor && <CalSwatch color={calColor} />}
-              <Meta p={p.meta}>{metaLine(ev, CATS[ev.cat].label, times)}</Meta>
-            </Row>
-            {tall && (
-              <View style={styles.foot}>
-                {state.clash ? (
-                  <Icon name="triangle" size={13} color={N.accent} />
-                ) : (
-                  <Icon name={p.spec.icon} size={13} color={p.glyph} />
-                )}
-              </View>
-            )}
+            </Text>
+            <Text style={[styles.time, sub]} numberOfLines={1}>
+              {ev.kind === 'ai' ? `${times} · proposed` : times}
+            </Text>
           </>
         )}
       </View>
@@ -164,38 +147,6 @@ export function EventBlock({
 const cursor = (c: string) =>
   Platform.OS === 'web' ? ({ cursor: c } as unknown as ViewStyle) : null;
 
-function Row({ children }: { children: React.ReactNode }) {
-  return <View style={styles.row}>{children}</View>;
-}
-
-function Title({
-  children,
-  p,
-  lines,
-  small,
-}: {
-  children: React.ReactNode;
-  p: object;
-  lines: number;
-  small?: boolean;
-}) {
-  return (
-    <View style={styles.titleWrap}>
-      <Text style={[styles.title, small && styles.titleSmall, p]} numberOfLines={lines}>
-        {children}
-      </Text>
-    </View>
-  );
-}
-
-function Meta({ children, p }: { children: React.ReactNode; p: object }) {
-  return (
-    <Text style={[styles.meta, p]} numberOfLines={1}>
-      {children}
-    </Text>
-  );
-}
-
 const styles = StyleSheet.create({
   wrap: { position: 'absolute', paddingHorizontal: 2, paddingBottom: 2 },
   wrapDragging: { zIndex: 50 },
@@ -204,8 +155,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderRadius: R.md,
     paddingHorizontal: 8,
-    paddingVertical: 6,
-    gap: 3,
+    paddingVertical: 5,
+    gap: 1,
   },
   tileTiny: { paddingVertical: 0, justifyContent: 'center', borderRadius: R.sm },
   // A tile that carries on past the drawn edge loses that edge's rounding, so
@@ -214,8 +165,6 @@ const styles = StyleSheet.create({
   cutBottom: { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
   past: { opacity: PAST },
   lifted: { transform: [{ translateY: -1 }] },
-  selected: { outlineColor: N.ink, outlineWidth: 2, outlineStyle: 'solid', outlineOffset: 2 } as ViewStyle,
-  selectedOnDark: { outlineColor: N.ink, outlineWidth: 2, outlineStyle: 'solid', outlineOffset: 2 } as ViewStyle,
   clash: { outlineColor: N.accent, outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 1 } as ViewStyle,
   dragging: { opacity: 0.96 },
   ghost: {
@@ -224,13 +173,11 @@ const styles = StyleSheet.create({
     borderColor: N.faint,
     backgroundColor: N.ghostFill,
   },
-  catDot: { width: 6, height: 6, borderRadius: 3 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 5, minWidth: 0 },
-  titleWrap: { flex: 1, minWidth: 0 },
-  title: { fontFamily: SANS, ...T.tile },
-  titleSmall: { fontSize: 10, lineHeight: 13 },
-  meta: { flex: 1, fontFamily: MONO, ...T.meta, fontVariant: ['tabular-nums'] },
-  foot: { marginTop: 'auto' },
+  row: { flexDirection: 'row', alignItems: 'baseline', gap: 6, minWidth: 0 },
+  // In a one-row tile the title keeps its width; the time is what gives way.
+  title: { flexShrink: 0, maxWidth: '100%', fontFamily: SANS, ...T.tile },
+  titleSmall: { fontSize: 11, lineHeight: 14 },
+  time: { flexShrink: 1, minWidth: 0, fontFamily: SANS, ...T.time, fontVariant: ['tabular-nums'] },
   handle: { position: 'absolute', left: 6, right: 6, height: 7, zIndex: 2 },
   handleTop: { top: -1 },
   handleBottom: { bottom: 0 },

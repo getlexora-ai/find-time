@@ -14,9 +14,8 @@ import {
   type ViewStyle,
 } from 'react-native';
 
-import { useAccounts } from '../account-store';
 import { allEvents, SAVE_FAILED, updateEvent } from '../cal-store';
-import { fromMin, iso, isoWeek, nowMin, pad, sameDay, today, WD, wdIndex } from '../cal-date';
+import { fromMin, iso, nowMin, pad, sameDay, today, WD, wdIndex } from '../cal-date';
 import { useHours, workFor } from '../hours';
 import { paint } from '../kinds';
 import {
@@ -31,10 +30,8 @@ import type { CalActions, PointAnchor } from '../state';
 import {
   CLICK_DUR,
   DRAG_SLOP,
-  EDGE_ROW_H,
   GUTTER,
   GUTTER_PHONE,
-  HATCH,
   MAX_COLS,
   MIN_TILE_W,
   MIN_DUR,
@@ -44,10 +41,9 @@ import {
   SANS,
   SHADOW,
   SNAP,
-  T,
 } from '../tokens';
 import type { CalEvent, LaidBlock } from '../types';
-import { Label, Mono, Press, Txt } from '../ui';
+import { Press, Txt } from '../ui';
 import { useResponsive } from '../useResponsive';
 import { EventBlock } from './EventBlock';
 
@@ -56,8 +52,8 @@ import { EventBlock } from './EventBlock';
  *
  * It draws exactly your hours (e.g. 06–22) every week — the same height no
  * matter what is on it. Inside, working hours are white and everything else is
- * hatched. Events that fall off either edge become a chip pinned to that edge;
- * events that run past it are clipped and say so.
+ * a faint wash. Events wholly outside your hours are a "+n" in that day's
+ * header; events that run past an edge are clipped and say so.
  *
  * It owns every gesture on the calendar, so one place decides what a press, a
  * drag and a resize mean:
@@ -175,7 +171,6 @@ export function TimeGrid({
 }) {
   const hours = useHours();
   const { isPhone } = useResponsive();
-  const { accounts } = useAccounts();
   const ws = hours.start;
   const we = hours.end;
   const bh = bodyH(ws, we);
@@ -187,14 +182,6 @@ export function TimeGrid({
   const headScroller = useRef<ScrollView>(null);
   const colScroller = useRef<ScrollView>(null);
   const footScroller = useRef<ScrollView>(null);
-
-  /* ── calendar colours (the 6px square), only once there is more than one ── */
-  const calColor = useMemo(() => {
-    const cals = accounts.flatMap((a) => a.calendars);
-    const m = new Map<string, string>();
-    if (cals.length > 1) for (const c of cals) if (/^#[0-9a-f]{6}$/i.test(c.color)) m.set(c.id, c.color);
-    return m;
-  }, [accounts]);
 
   /* ── per-day plans ── */
   const isoDays = useMemo(() => days.map(iso), [days]);
@@ -546,35 +533,62 @@ export function TimeGrid({
   const colStyle = pan ? { width: colWidth } : styles.colFlex;
   const now = nowMin();
   const todayIso = iso(today());
-  const showNow = todayIdx >= 0 && now >= winMin && now < winMax;
 
   const heads = days.map((d, i) => {
     const isToday = i === todayIdx;
     const off = !workFor(hours, wdIndex(d));
-    const cellStyle = [colStyle, styles.dayHead, isToday && styles.dayHeadToday];
+    const cellStyle = [colStyle, styles.dayHead];
+    // Events wholly outside your hours: a quiet count in the day's own header,
+    // not a row of chips across the grid.
+    const outside = [...plans[i].before, ...plans[i].after];
     const content = (
       <>
-        <Txt style={[styles.dayHeadWd, isToday && styles.onInkMuted, off && !isToday && styles.offTxt]}>
+        <Txt style={[styles.dayHeadWd, isToday && styles.dayHeadWdToday, off && !isToday && styles.offTxt]}>
           {WD[wdIndex(d)]}
         </Txt>
-        <Txt style={[styles.dayHeadNum, isToday && styles.onInk, off && !isToday && styles.offTxt]}>
-          {d.getDate()}
-        </Txt>
-        {isToday && !isPhone && <Mono style={styles.todayTag}>TODAY</Mono>}
+        <View style={[styles.dayNum, isToday && styles.dayNumToday]}>
+          <Txt style={[styles.dayHeadNum, isToday && styles.onInk, off && !isToday && styles.offTxt]}>
+            {d.getDate()}
+          </Txt>
+        </View>
       </>
     );
+    const more =
+      outside.length > 0 ? (
+        <Press
+          onPress={(e) =>
+            outside.length === 1
+              ? actions.openEvent(outside[0].id, anchorOf(e))
+              : actions.openList(`Outside your hours · ${WD[wdIndex(d)]} ${d.getDate()}`, outside, anchorOf(e))
+          }
+          hoverBg={N.hover}
+          hitSlop={6}
+          accessibilityRole="button"
+          aria-label={`${outside.length} outside your hours`}
+          style={styles.outside}>
+          <Txt style={styles.outsideTxt}>+{outside.length}</Txt>
+        </Press>
+      ) : null;
     // Day view has nothing to open: a plain cell, not a disabled (greyed) button.
-    if (!onPickDay) return <View key={isoDays[i]} style={cellStyle}>{content}</View>;
+    if (!onPickDay)
+      return (
+        <View key={isoDays[i]} style={cellStyle}>
+          {content}
+          {more}
+        </View>
+      );
     return (
-      <Press
-        key={isoDays[i]}
-        onPress={() => onPickDay(d)}
-        hoverBg={isToday ? undefined : N.hover}
-        accessibilityRole="button"
-        aria-label={`Open ${WD[wdIndex(d)]} ${d.getDate()} in day view`}
-        style={cellStyle}>
-        {content}
-      </Press>
+      <View key={isoDays[i]} style={cellStyle}>
+        <Press
+          onPress={() => onPickDay(d)}
+          hoverBg={N.hover}
+          accessibilityRole="button"
+          aria-label={`Open ${WD[wdIndex(d)]} ${d.getDate()} in day view`}
+          style={styles.dayHeadBtn}>
+          {content}
+        </Press>
+        {more}
+      </View>
     );
   });
 
@@ -588,9 +602,6 @@ export function TimeGrid({
           accessibilityRole="button"
           aria-label={`${ev.title}, all day`}
           style={[styles.laneChip, ...paint(ev).box]}>
-          {calColor.get(ev.calendarId ?? '') && (
-            <View style={[styles.swatch, { backgroundColor: calColor.get(ev.calendarId ?? '') }]} />
-          )}
           <Txt numberOfLines={1} style={[styles.laneTxt, paint(ev).title]}>
             {ev.title}
           </Txt>
@@ -598,34 +609,6 @@ export function TimeGrid({
       ))}
     </View>
   ));
-
-  /*
-   * Events entirely outside your hours: one chip per column in a row pinned
-   * above (and below) the hours, outside the scroll. Drawn over the grid they
-   * covered the title of whatever started at the window's edge, and scrolled
-   * out of sight with the hours they were meant to point past.
-   */
-  const anyBefore = plans.some((p) => p.before.length > 0);
-  const anyAfter = plans.some((p) => p.after.length > 0);
-  const edgeCells = (edge: 'before' | 'after') =>
-    days.map((_, i) => {
-      const list = plans[i][edge];
-      const at = `${pad(edge === 'before' ? ws : we % 24)}:00`;
-      return (
-        <View key={isoDays[i]} style={[colStyle, styles.edgeCell, isPhone && styles.edgeCellTight]}>
-          {list.length > 0 && (
-            <EdgeChip
-              label={`${edge === 'before' ? '↑' : '↓'} ${list.length} ${edge} ${at}`}
-              onPress={(a) =>
-                list.length === 1
-                  ? actions.openEvent(list[0].id, a)
-                  : actions.openList(`${edge === 'before' ? 'Before' : 'After'} ${at}`, list, a)
-              }
-            />
-          )}
-        </View>
-      );
-    });
 
   const columns = days.map((d, i) => {
     const plan = plans[i];
@@ -654,7 +637,6 @@ export function TimeGrid({
               key={`${it.ev.id}-${dayIso}`}
               it={it}
               winStart={ws}
-              calColor={calColor.get(it.ev.calendarId ?? '')}
               state={{
                 ghost: !!dragging,
                 selected: selectedId === it.ev.id,
@@ -693,7 +675,7 @@ export function TimeGrid({
                 width: `${100 / o.cols}%` as const,
               },
             ]}>
-            <Mono style={styles.moreTxt}>+{o.items.length}</Mono>
+            <Txt style={styles.moreTxt}>+{o.items.length}</Txt>
           </Press>
         ))}
 
@@ -713,15 +695,8 @@ export function TimeGrid({
       {header && (
         <View style={styles.headBlock}>
           <View style={[styles.gutterCol, { width: gutterW }]}>
-            <View style={styles.gutterHead}>
-              <Mono style={styles.weekNo}>W{isoWeek(days[0])}</Mono>
-            </View>
-            {hasAllDay && (
-              <View style={styles.gutterLane}>
-                <Label style={styles.laneLabel}>ALL DAY</Label>
-              </View>
-            )}
-            {anyBefore && <View style={styles.gutterEdge} />}
+            <View style={styles.gutterHead} />
+            {hasAllDay && <View style={styles.gutterLane} />}
           </View>
           {pan ? (
             <ScrollView
@@ -733,14 +708,12 @@ export function TimeGrid({
               <View>
                 <View style={styles.row}>{heads}</View>
                 {hasAllDay && <View style={[styles.row, styles.laneRow]}>{lanes}</View>}
-                {anyBefore && <View style={[styles.row, styles.edgeRow]}>{edgeCells('before')}</View>}
               </View>
             </ScrollView>
           ) : (
             <View style={styles.flexW}>
               <View style={styles.row}>{heads}</View>
               {hasAllDay && <View style={[styles.row, styles.laneRow]}>{lanes}</View>}
-              {anyBefore && <View style={[styles.row, styles.edgeRow]}>{edgeCells('before')}</View>}
             </View>
           )}
         </View>
@@ -748,9 +721,7 @@ export function TimeGrid({
 
       {!header && hasAllDay && (
         <View style={styles.headBlock}>
-          <View style={[styles.gutterLane, { width: gutterW }]}>
-            <Label style={styles.laneLabel}>ALL DAY</Label>
-          </View>
+          <View style={[styles.gutterLane, { width: gutterW }]} />
           <View style={[styles.row, styles.flexW]}>{lanes}</View>
         </View>
       )}
@@ -766,17 +737,9 @@ export function TimeGrid({
           <View style={[styles.gutter, { width: gutterW, height: bh }]}>
             {gutterHours(ws, we).map((h, i) => (
               <View key={h} style={styles.gutterHour}>
-                {/* the now chip sits on the gutter; an hour label under it would peek out */}
-                {i > 0 && !(showNow && Math.abs(now - h * 60) < 15) && (
-                  <Mono style={styles.gutterTxt}>{pad(h)}:00</Mono>
-                )}
+                {i > 0 && <Txt style={styles.gutterTxt}>{pad(h)}:00</Txt>}
               </View>
             ))}
-            {showNow && (
-              <View pointerEvents="none" style={[styles.nowChip, { top: minToY(now, ws) - 8 }]}>
-                <Mono style={styles.nowChipTxt}>{fromMin(now)}</Mono>
-              </View>
-            )}
           </View>
           {pan ? (
             <ScrollView
@@ -797,23 +760,6 @@ export function TimeGrid({
         </View>
       </ScrollView>
 
-      {anyAfter && (
-        <View style={[styles.row, styles.edgeRowBottom]}>
-          <View style={{ width: gutterW, height: EDGE_ROW_H }} />
-          {pan ? (
-            <ScrollView
-              ref={footScroller}
-              style={styles.flexW}
-              horizontal
-              scrollEnabled={false}
-              showsHorizontalScrollIndicator={false}>
-              <View style={styles.row}>{edgeCells('after')}</View>
-            </ScrollView>
-          ) : (
-            <View style={[styles.row, styles.flexW]}>{edgeCells('after')}</View>
-          )}
-        </View>
-      )}
     </View>
   );
 }
@@ -825,21 +771,21 @@ function isSameInstance(g: Extract<Gesture, { ev: CalEvent }>, it: LaidBlock) {
 
 /* ───────────────────────── parts ───────────────────────── */
 
-/** Hatch over the parts of a day outside working hours (all of it on a day off). */
+/** A faint wash over the parts of a day outside working hours (all of it on a day off). */
 function OffHours({ work, ws, we }: { work: ReturnType<typeof workFor>; ws: number; we: number }) {
-  if (!work) return <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.off, HATCH.off]} />;
+  if (!work) return <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.off]} />;
   return (
     <>
       {work.start > ws && (
         <View
           pointerEvents="none"
-          style={[styles.offBand, styles.off, HATCH.off, { top: 0, height: (work.start - ws) * ROW }]}
+          style={[styles.offBand, styles.off, { top: 0, height: (work.start - ws) * ROW }]}
         />
       )}
       {work.end < we && (
         <View
           pointerEvents="none"
-          style={[styles.offBand, styles.off, HATCH.off, { top: (work.end - ws) * ROW, bottom: 0 }]}
+          style={[styles.offBand, styles.off, { top: (work.end - ws) * ROW, bottom: 0 }]}
         />
       )}
     </>
@@ -852,25 +798,9 @@ function HourLines({ start, end }: { start: number; end: number }) {
       {gutterHours(start, end).map((_, i) => (
         <View key={`h${i}`}>
           {i > 0 && <View style={[styles.hourLine, { top: i * ROW }]} />}
-          <View style={[styles.halfLine, { top: i * ROW + ROW / 2 }]} />
         </View>
       ))}
     </View>
-  );
-}
-
-function EdgeChip({ label, onPress }: { label: string; onPress: (a: PointAnchor) => void }) {
-  return (
-    <Press
-      onPress={(e) => onPress({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })}
-      hoverBg={N.sunken}
-      accessibilityRole="button"
-      aria-label={label.replace(/[↑↓]/g, '').trim()}
-      style={[styles.edge, SHADOW.sm]}>
-      <Mono numberOfLines={1} style={styles.edgeTxt}>
-        {label}
-      </Mono>
-    </Press>
   );
 }
 
@@ -881,9 +811,9 @@ function CreateGhost({ a, b, ws, day }: { a: number; b: number; ws: number; day:
   return (
     <View pointerEvents="none" style={[styles.ghostWrap, { top: minToY(s, ws), height: ((t - s) / 60) * ROW - 2 }]}>
       <View style={[styles.createGhost, SHADOW.md]}>
-        <Mono style={styles.dragLabelTxtInk}>
-          {WD[wdIndex(day)]} {fromMin(s)}–{fromMin(t)}
-        </Mono>
+        <Txt style={styles.dragLabelTxtInk}>
+          {WD[wdIndex(day)]} {fromMin(s)} – {fromMin(t)}
+        </Txt>
       </View>
     </View>
   );
@@ -918,9 +848,9 @@ function DragPreview({
       <EventBlock it={it} winStart={ws} state={{ dragging: true }} canResize={false} label="" />
       <View pointerEvents="none" style={[styles.dragLabel, { top: Math.max(0, top - 24) }]}>
         <View style={[styles.dragLabelPill, SHADOW.md]}>
-          <Mono style={styles.dragLabelTxt}>
-            {WD[wdIndex(day)]} {fromMin(p.s)}–{fromMin(p.t)}
-          </Mono>
+          <Txt style={styles.dragLabelTxt}>
+            {WD[wdIndex(day)]} {fromMin(p.s)} – {fromMin(p.t)}
+          </Txt>
         </View>
         {!!g.hint && (
           <View style={[styles.dragHint, SHADOW.sm]}>
@@ -939,34 +869,27 @@ const styles = StyleSheet.create({
 
   headBlock: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: N.line, backgroundColor: N.surface },
   gutterCol: {},
-  gutterHead: { height: 40, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 10 },
-  weekNo: { color: N.faint, fontSize: 10 },
-  gutterLane: {
-    minHeight: 34,
-    justifyContent: 'center',
-    alignItems: 'flex-end',
-    paddingRight: 10,
-    borderTopWidth: 1,
-    borderTopColor: N.line,
-  },
-  laneLabel: { fontSize: 9, textAlign: 'right' },
+  gutterHead: { height: 52 },
+  gutterLane: { minHeight: 34, borderTopWidth: 1, borderTopColor: N.line },
 
   dayHead: {
-    height: 40,
+    height: 52,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
+    paddingHorizontal: 6,
     borderLeftWidth: 1,
     borderLeftColor: N.line,
   },
-  dayHeadToday: { backgroundColor: N.ink, borderLeftColor: N.ink },
-  dayHeadWd: { fontFamily: SANS, ...T.body, fontWeight: '400', color: N.muted },
-  dayHeadNum: { fontFamily: SANS, ...T.body, color: N.ink },
+  dayHeadBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingHorizontal: 6, borderRadius: R.md },
+  dayHeadWd: { fontFamily: SANS, fontSize: 14, lineHeight: 20, fontWeight: '400', color: N.muted },
+  dayHeadWdToday: { color: N.ink, fontWeight: '600' },
+  dayNum: { minWidth: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  dayNumToday: { backgroundColor: N.ink },
+  dayHeadNum: { fontFamily: SANS, fontSize: 14, lineHeight: 20, fontWeight: '600', color: N.ink },
   onInk: { color: N.onInk },
-  onInkMuted: { color: N.onInkMuted },
   offTxt: { color: N.faint },
-  todayTag: { marginLeft: 'auto', color: N.onInkMuted, fontSize: 9, letterSpacing: 0.6 },
+  outside: { marginLeft: 'auto', height: 22, minWidth: 26, borderRadius: R.full, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: N.sunken },
+  outsideTxt: { fontFamily: SANS, fontSize: 11, lineHeight: 14, color: N.ink2, fontWeight: '500' },
 
   laneRow: { borderTopWidth: 1, borderTopColor: N.line },
   lane: { minHeight: 34, padding: 4, gap: 3, borderLeftWidth: 1, borderLeftColor: N.line },
@@ -974,34 +897,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    height: 22,
-    borderRadius: R.sm,
-    paddingHorizontal: 7,
+    height: 24,
+    borderRadius: R.md,
+    paddingHorizontal: 8,
   },
-  laneTxt: { flex: 1, fontFamily: SANS, fontSize: 11, lineHeight: 14, fontWeight: '500' },
-  swatch: { width: 6, height: 6, borderRadius: 1 },
+  laneTxt: { flex: 1, fontFamily: SANS, fontSize: 12, lineHeight: 16, fontWeight: '600' },
 
   gutter: { position: 'relative', backgroundColor: N.surface },
   gutterHour: { height: ROW },
-  gutterTxt: { position: 'absolute', right: 10, top: -6, color: N.faint, fontSize: 10 },
-  nowChip: {
-    position: 'absolute',
-    right: 4,
-    borderRadius: R.xs,
-    backgroundColor: N.ink,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    zIndex: 3,
-  },
-  nowChipTxt: { color: N.onInk, fontSize: 9, lineHeight: 14 },
-
+  gutterTxt: { position: 'absolute', right: 10, top: -8, color: N.faint, fontSize: 11, lineHeight: 16, fontVariant: ['tabular-nums'] },
   colFlex: { flex: 1, minWidth: 0 },
   col: { position: 'relative', backgroundColor: N.surface, borderLeftWidth: 1, borderLeftColor: N.line },
   colCursor: { cursor: 'cell' } as unknown as ViewStyle,
   off: { backgroundColor: N.offHours },
   offBand: { position: 'absolute', left: 0, right: 0 },
   hourLine: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: N.line },
-  halfLine: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: N.lineSoft },
 
   nowLine: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: N.accent, zIndex: 20 },
   nowDot: {
@@ -1024,23 +934,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 4,
   },
-  moreTxt: { color: N.ink, fontSize: 10 },
-
-  edgeRow: { borderTopWidth: 1, borderTopColor: N.line },
-  edgeRowBottom: { borderTopWidth: 1, borderTopColor: N.line, backgroundColor: N.surface },
-  gutterEdge: { height: EDGE_ROW_H, borderTopWidth: 1, borderTopColor: N.line },
-  edgeCell: { height: EDGE_ROW_H, paddingHorizontal: 4, justifyContent: 'center', borderLeftWidth: 1, borderLeftColor: N.line },
-  // phone columns are ~115px: "↑ 1 before 06:00" fits only without the side padding
-  edgeCellTight: { paddingHorizontal: 2 },
-  edge: {
-    height: 22,
-    borderRadius: R.sm,
-    backgroundColor: N.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
-  edgeTxt: { color: N.ink2, fontSize: 10 },
+  moreTxt: { fontFamily: SANS, color: N.ink, fontSize: 11, fontWeight: '500' },
 
   ghostWrap: { position: 'absolute', left: 2, right: 2, zIndex: 40 },
   createGhost: {
@@ -1055,8 +949,8 @@ const styles = StyleSheet.create({
 
   dragLabel: { position: 'absolute', left: 2, right: 2, alignItems: 'flex-start', gap: 4, zIndex: 60 },
   dragLabelPill: { borderRadius: R.sm, backgroundColor: N.ink, paddingHorizontal: 6, paddingVertical: 3 },
-  dragLabelTxt: { color: N.onInk, fontSize: 10, lineHeight: 13 },
-  dragLabelTxtInk: { color: N.ink, fontSize: 10, lineHeight: 13 },
+  dragLabelTxt: { color: N.onInk, fontSize: 11, lineHeight: 14, fontVariant: ['tabular-nums'] },
+  dragLabelTxtInk: { color: N.ink, fontSize: 11, lineHeight: 14, fontVariant: ['tabular-nums'] },
   dragHint: { borderRadius: R.sm, backgroundColor: N.surface, paddingHorizontal: 6, paddingVertical: 3, maxWidth: 220 },
   dragHintTxt: { fontFamily: SANS, fontSize: 11, lineHeight: 14, color: N.ink2 },
 });

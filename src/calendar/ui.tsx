@@ -33,12 +33,12 @@ export function Txt({ style, ...rest }: TextProps) {
   return <Text {...rest} style={[styles.txt, style]} />;
 }
 
-/** Times, dates, counts, CAPS labels: JetBrains Mono, tabular figures. */
+/** Times, dates, counts: sans with tabular figures (was JetBrains Mono). */
 export function Mono({ style, ...rest }: TextProps) {
   return <Text {...rest} style={[styles.mono, style]} />;
 }
 
-/** The CAPS mono label above a value ("PLANNED", "TASKS"). */
+/** The small label above a value ("Planned", "Kind"). */
 export function Label({ style, children, ...rest }: TextProps) {
   return (
     <Text {...rest} style={[styles.label, style]}>
@@ -163,8 +163,10 @@ export function CalSwatch({ color, size = 6 }: { color: string; size?: number })
 
 const styles = StyleSheet.create({
   txt: { fontFamily: SANS, color: N.ink, ...T.body, fontWeight: '400' },
-  mono: { fontFamily: MONO, color: N.muted, ...T.meta, fontVariant: ['tabular-nums'] },
-  label: { fontFamily: MONO, color: N.faint, ...T.label, textTransform: 'uppercase' },
+  // Quiet calendar: numbers and small labels are the sans face too (tabular
+  // figures keep times aligned). The name stays so call sites need not change.
+  mono: { fontFamily: SANS, color: N.muted, fontSize: 12, lineHeight: 16, fontVariant: ['tabular-nums'] },
+  label: { fontFamily: SANS, color: N.muted, fontSize: 12, lineHeight: 16, fontWeight: '500' },
   btn: {
     height: 34,
     flexDirection: 'row',

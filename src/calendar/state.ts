@@ -6,6 +6,9 @@ import type { CalEvent, EventKind } from './types';
  */
 export type ViewKind = 'week' | 'day';
 
+/** The two sections: the grid, and the numbers about it (quiet calendar). */
+export type Page = 'planner' | 'insights';
+
 /** Pointer location of the tap that opened something — anchors desktop popovers. */
 export type PointAnchor = { x: number; y: number };
 

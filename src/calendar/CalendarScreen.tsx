@@ -4,7 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { syncNow, useAccounts } from './account-store';
 import { useCalEvents } from './cal-store';
-import { addDays, fromIso, fromMin, iso, MO, startOfWeek, today, WD, wdIndex } from './cal-date';
+import { addDays, fromIso, fromMin, iso, MO, startOfWeek, today, WD_LONG, wdIndex } from './cal-date';
 import { AiPanel } from './components/AiPanel';
 import { CommandBar } from './components/CommandBar';
 import { ComposeSheet, firstFree } from './components/ComposeSheet';
@@ -12,20 +12,17 @@ import { DayView } from './components/DayView';
 import { EventDetail } from './components/EventDetail';
 import { EventList } from './components/EventList';
 import { FilterSheet } from './components/FilterSheet';
-import { Frame } from './components/Frame';
-import { KpiStrip } from './components/KpiStrip';
+import { Insights } from './components/Insights';
 import { MobileNav, NAV_H } from './components/MobileNav';
 import { PickerSheet } from './components/PickerSheet';
 import { QuickCreate } from './components/QuickCreate';
-import { Sidebar } from './components/Sidebar';
 import { useToast } from './components/Toast';
 import { WeekView } from './components/WeekView';
 import { getHours, useHours, workFor } from './hours';
 import { computeKpis, slicesIn } from './kpi';
-import type { CalActions, CalState, ComposePreset, PointAnchor, Slot, ViewKind } from './state';
+import type { CalActions, CalState, ComposePreset, Page, PointAnchor, Slot, ViewKind } from './state';
 import { N } from './tokens';
 import type { CalEvent, EventKind } from './types';
-import { Brackets } from './ui';
 import { useResponsive } from './useResponsive';
 
 /**
@@ -60,15 +57,22 @@ function clashesIn(events: CalEvent[], days: string[]) {
   return { pairs, ids };
 }
 
-/** "21 – 27 SEP 2026", "28 SEP – 4 OCT 2026", "THU 24 SEP 2026". */
-function rangeLabel(view: ViewKind, cursor: Date, selected: Date) {
-  const mo = (d: Date) => MO[d.getMonth()].slice(0, 3).toUpperCase();
-  if (view === 'day') return `${WD[wdIndex(selected)].toUpperCase()} ${selected.getDate()} ${mo(selected)} ${selected.getFullYear()}`;
+/** The heading over the grid: "October 2026", "Sep – Oct 2026", "Thursday 1 October". */
+function titleFor(view: ViewKind, cursor: Date, selected: Date) {
+  if (view === 'day') return `${WD_LONG[wdIndex(selected)]} ${selected.getDate()} ${MO[selected.getMonth()]}`;
   const a = startOfWeek(cursor);
   const b = addDays(a, 6);
-  if (a.getMonth() === b.getMonth()) return `${a.getDate()} – ${b.getDate()} ${mo(b)} ${b.getFullYear()}`;
-  if (a.getFullYear() === b.getFullYear()) return `${a.getDate()} ${mo(a)} – ${b.getDate()} ${mo(b)} ${b.getFullYear()}`;
-  return `${a.getDate()} ${mo(a)} ${a.getFullYear()} – ${b.getDate()} ${mo(b)} ${b.getFullYear()}`;
+  if (a.getMonth() === b.getMonth()) return `${MO[a.getMonth()]} ${a.getFullYear()}`;
+  const short = (d: Date) => MO[d.getMonth()].slice(0, 3);
+  if (a.getFullYear() === b.getFullYear()) return `${short(a)} – ${short(b)} ${b.getFullYear()}`;
+  return `${short(a)} ${a.getFullYear()} – ${short(b)} ${b.getFullYear()}`;
+}
+
+/** Insights is about a span, not a month: "Week of 28 Sep", "Thursday 1 October". */
+function insightsTitle(view: ViewKind, cursor: Date, selected: Date) {
+  if (view === 'day') return titleFor(view, cursor, selected);
+  const a = startOfWeek(cursor);
+  return `Week of ${a.getDate()} ${MO[a.getMonth()].slice(0, 3)}`;
 }
 
 /** Where "+ New" should start: the next free 30 min in working hours, today or after. */
@@ -205,7 +209,12 @@ export function CalendarScreen() {
     () => computeKpis(events, days, clashes.pairs.length, hours),
     [events, days, clashes.pairs.length, hours],
   );
-  const range = rangeLabel(state.view, state.cursor, state.selected);
+  const title = titleFor(state.view, state.cursor, state.selected);
+  const proposals = useMemo(
+    () => events.filter((e) => e.kind === 'ai' && days.includes(e.date)),
+    [events, days],
+  );
+  const [page, setPage] = useState<Page>('planner');
 
   /* ── web keyboard ── */
   const anyOpen = !!(compose || detail || quick || list || ai || picker || filters);
@@ -228,8 +237,15 @@ export function CalendarScreen() {
       if (t && /^(input|textarea|select)$/i.test(t.tagName)) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const k = e.key.toLowerCase();
-      if (k === 'w') actions.setView('week');
-      if (k === 'd') actions.setView('day');
+      if (k === 'w') {
+        setPage('planner');
+        actions.setView('week');
+      }
+      if (k === 'd') {
+        setPage('planner');
+        actions.setView('day');
+      }
+      if (k === 'i') setPage((p) => (p === 'insights' ? 'planner' : 'insights'));
       if (k === 't') actions.goToday();
       if (k === 'n') {
         e.preventDefault();
@@ -245,21 +261,16 @@ export function CalendarScreen() {
   const detailEvent = detail ? all.find((e) => e.id === detail.id) ?? null : null;
   const selectedId = detail?.id ?? null;
 
-  const resolve =
-    clashes.pairs.length > 0
-      ? () => {
-          // Move one that can move — not imported, not protected — from the
-          // first clash that has one. It used to take the first clash only and
-          // fall back to its second event, so a Google meeting over a focus
-          // block opened the edit sheet on a read-only Google event.
-          const all = clashes.pairs.flatMap(({ a, b }) => [b, a]);
-          const movable = all.find((e) => !e.imported && e.kind !== 'focus');
-          if (movable) return actions.openCompose(movable.id, undefined, undefined, true);
-          // Nothing the AI may move: show the clash so you can decide.
-          const own = all.find((e) => !e.imported) ?? all[0];
-          actions.openEvent(own.id);
-        }
-      : undefined;
+  /**
+   * Move one that can move — not imported, not protected — out of a clash.
+   * Nothing the AI may move: show the clash so you can decide.
+   */
+  const resolvePair = (pair: { a: CalEvent; b: CalEvent }) => {
+    const both = [pair.b, pair.a];
+    const movable = both.find((e) => !e.imported && e.kind !== 'focus');
+    if (movable) return actions.openCompose(movable.id, undefined, undefined, true);
+    actions.openEvent((both.find((e) => !e.imported) ?? both[0]).id);
+  };
 
   const grid =
     state.view === 'week' ? (
@@ -270,35 +281,41 @@ export function CalendarScreen() {
 
   return (
     <SafeAreaView style={styles.root} edges={['top']} nativeID="ft-calendar">
-      <Frame />
-      <View style={[styles.frame, isDesktop && styles.frameDesktop]}>
-        {isDesktop && <Brackets />}
-        <CommandBar state={state} actions={actions} range={range} />
-        <View style={styles.row}>
-          {isDesktop && (
-            <Sidebar
-              selected={state.selected}
-              weekOf={state.view === 'week' ? state.cursor : undefined}
-              events={shown}
-              hidden={hidden}
-              onToggleKind={toggleKind}
-              onPick={(d) => actions.pick(d)}
-            />
-          )}
-          <View style={[styles.main, !isDesktop && { paddingBottom: NAV_H + Math.max(10, insets.bottom) }]}>
-            <KpiStrip k={kpis} onResolve={resolve} />
-            <View style={styles.grid}>{grid}</View>
-          </View>
-        </View>
+      <CommandBar
+        state={state}
+        actions={actions}
+        page={page}
+        onPage={setPage}
+        title={page === 'insights' ? insightsTitle(state.view, state.cursor, state.selected) : title}
+        needsYou={clashes.pairs.length + proposals.length}
+        onShow={() => setFilters(true)}
+      />
+      <View style={[styles.main, !isDesktop && { paddingBottom: NAV_H + Math.max(10, insets.bottom) }]}>
+        {page === 'insights' ? (
+          <Insights
+            k={kpis}
+            clashes={clashes.pairs}
+            proposals={proposals}
+            scope={state.view === 'day' ? 'today' : 'this week'}
+            actions={actions}
+            onResolve={resolvePair}
+          />
+        ) : (
+          <View style={[styles.grid, isDesktop && styles.gridDesktop]}>{grid}</View>
+        )}
       </View>
 
       {!isDesktop && (
         <MobileNav
           view={state.view}
-          onSetView={actions.setView}
+          page={page}
+          onSetView={(v) => {
+            setPage('planner');
+            actions.setView(v);
+          }}
           onCompose={() => actions.openCompose(null)}
           onOpenAI={() => actions.openAI()}
-          onOpenFilters={() => setFilters(true)}
+          onInsights={() => setPage('insights')}
         />
       )}
 
@@ -386,11 +403,9 @@ export function CalendarScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: N.ground },
-  frame: { flex: 1, minHeight: 0, backgroundColor: N.frame },
-  // B artboard: the app sits in a column inset 24px, ruled left and right.
-  frameDesktop: { marginHorizontal: 24, borderLeftWidth: 1, borderRightWidth: 1, borderColor: N.line },
-  row: { flex: 1, minHeight: 0, flexDirection: 'row' },
+  root: { flex: 1, backgroundColor: N.surface },
   main: { flex: 1, minWidth: 0, minHeight: 0 },
   grid: { flex: 1, minHeight: 0 },
+  // The grid sits on the page as one card, ruled once — no frame, no brackets.
+  gridDesktop: { marginHorizontal: 20, marginBottom: 20, borderWidth: 1, borderColor: N.line, borderRadius: 12, overflow: 'hidden' },
 });

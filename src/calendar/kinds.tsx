@@ -1,7 +1,7 @@
 import type { TextStyle, ViewStyle } from 'react-native';
 
 import type { IconName } from './Icon';
-import { BREAK_COLOR, CATS, type CatKey, HATCH, N, SHADOW } from './tokens';
+import { BREAK_COLOR, CATS, type CatKey, N, tint, TINT } from './tokens';
 import type { CalEvent, EventKind } from './types';
 
 /**
@@ -90,12 +90,9 @@ export type Paint = {
   dark: boolean;
   /** the category colour */
   color: string;
-  /** drawn as the solid (focus, routine, break) */
+  /** drawn as a solid fill (none are, in the quiet calendar; kept for the selected tile) */
   solid: boolean;
 };
-
-/** The kinds drawn as a solid category colour (they used to be black / grey). */
-const SOLID = new Set<EventKind>(['focus', 'routine', 'break']);
 
 const DEFAULT_CAT: Record<EventKind, CatKey> = {
   focus: 'deep',
@@ -106,30 +103,22 @@ const DEFAULT_CAT: Record<EventKind, CatKey> = {
   ai: 'deep',
 };
 
+/**
+ * Quiet calendar (2026-10-01): one soft tint per category, ink text. Colour
+ * says what it is; the kind only changes the edge — a task is outlined, a
+ * proposal is dashed and white because it is not booked yet. The solid
+ * category colour is kept for the one tile you have selected.
+ */
 function boxOf(kind: EventKind, color: string): ViewStyle[] {
   switch (kind) {
-    case 'focus':
-      return [{ backgroundColor: color }];
-    case 'routine':
-      return [{ backgroundColor: color }, HATCH.onSolid];
-    case 'break':
-      return [{ backgroundColor: BREAK_COLOR }];
-    case 'event':
-      return [{ backgroundColor: N.surface }, SHADOW.sm];
     case 'task':
-      return [{ backgroundColor: N.surface, borderWidth: 1, borderColor: N.lineStrong }];
+      return [{ backgroundColor: N.surface, borderWidth: 1, borderColor: tint(color, 0.45) }];
     case 'ai':
       return [{ backgroundColor: N.surface, borderWidth: 1, borderStyle: 'dashed', borderColor: N.accent }];
+    default:
+      return [{ backgroundColor: tint(color, TINT) }];
   }
 }
-
-const WHITE_INK: Record<'event' | 'task' | 'ai', { title: string; meta: string; glyph: string }> = {
-  event: { title: N.ink, meta: N.muted, glyph: N.faint },
-  task: { title: N.ink2, meta: N.muted, glyph: N.ink2 },
-  ai: { title: N.ink, meta: N.accentInk, glyph: N.accent },
-};
-// Meta is full white: at 78% the 10px mono line was 3.7–4.1:1 on the solids.
-const SOLID_INK = { title: N.onInk, meta: N.onInk, glyph: N.onSolidSoft };
 
 /**
  * Resolve one event to its drawing. Grid tiles, the all-day lane, the legend
@@ -140,17 +129,15 @@ export function paint(ev: Pick<CalEvent, 'kind'> & { cat?: CatKey }): Paint {
   const spec = specOf(ev);
   const cat = ev.cat ?? DEFAULT_CAT[spec.key];
   const color = spec.key === 'break' ? BREAK_COLOR : CATS[cat].color;
-  const solid = SOLID.has(spec.key);
-  const ink = solid ? SOLID_INK : WHITE_INK[spec.key as 'event' | 'task' | 'ai'];
   return {
     spec,
     box: boxOf(spec.key, color),
-    title: { color: ink.title },
-    meta: { color: ink.meta },
-    glyph: ink.glyph,
-    dark: solid,
+    title: { color: N.ink },
+    meta: { color: spec.key === 'ai' ? N.accentInk : N.ink2 },
+    glyph: spec.key === 'ai' ? N.accent : N.ink2,
+    dark: false,
     color,
-    solid,
+    solid: false,
   };
 }
 

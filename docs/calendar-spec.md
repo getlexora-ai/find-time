@@ -400,3 +400,29 @@ How kinds use it:
 
 The KPI planned bar, the legend and the mini-month dots use the same solids.
 The Google calendar square stays the calendar's own colour.
+
+## 13. Quiet calendar (2026-10-01) — supersedes the conflicting parts of §2–§5, §11, §12
+
+The Nexus grid carried too much: KPI strip, legend with counts, hours steppers,
+mini month, week number, an ALL DAY label, edge-chip rows, mono meta lines,
+glyphs, swatches and hatching. Find Time's value is the planning layer, not a
+re-skinned Google Calendar, so the grid is now a quiet canvas. Reclaim's
+planner was the guide, not the template.
+
+- **Two sections:** Planner (the grid) and Insights (the numbers). A count
+  badge on Insights says how many clashes + proposals need you. Key `i` toggles.
+- **App bar:** mark · Planner | Insights ···· Plan with AI · account.
+  **Toolbar:** the month as a 20px heading (opens the date picker) ‹ › Today
+  ···· Week | Day · New · Show (legend, hours, calendars — the old rail, as a sheet).
+- **A tile is its title and its time.** 13px/600 title, 12px time. Below 46px
+  tall: one row, "Title 12:30", and the time gives way before the title does.
+- **Colour:** each category is a soft opaque tint (`tint(color, TINT)`), ink
+  text. Tasks are outlined, proposals dashed orange on white. The selected tile
+  fills with its solid category colour and white text. Past tiles at 70%.
+- **Gone from the grid:** KPI strip, left rail, W-number, ALL DAY label, edge
+  rows (events outside your hours are a "+n" in that day's header), half-hour
+  lines, hatching (off-hours is a flat wash), the now-time chip, mono type
+  (`Mono`/`Label` now render in the sans face with tabular figures).
+- **Insights:** four cards (planned, focus protected, open capacity, plan
+  health), "Needs you" (each clash → Resolve, each proposal → Review), and
+  "Where the time goes" (hours per category against its target). Same `kpi.ts`.
