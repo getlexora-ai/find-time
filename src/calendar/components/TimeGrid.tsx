@@ -4,7 +4,9 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   PanResponder,
+  type PanResponderCallbacks,
   type PanResponderGestureState,
+  type PanResponderInstance,
   Platform,
   ScrollView,
   StyleSheet,
@@ -29,6 +31,7 @@ import type { CalActions, PointAnchor } from '../state';
 import {
   CLICK_DUR,
   DRAG_SLOP,
+  EDGE_ROW_H,
   GUTTER,
   GUTTER_PHONE,
   HATCH,
@@ -112,6 +115,39 @@ class GestureBox {
 }
 const LONG_PRESS_MS = 320;
 
+/**
+ * PanResponders that survive re-renders. A PanResponder keeps its running
+ * `dx/dy` inside the instance, so creating a fresh one on every render (each
+ * snapped step re-renders) restarted the gesture at zero: a drag-to-draw never
+ * grew past 15 minutes and a moved tile never left its slot. One instance per
+ * key, its handlers forwarding to whatever config the latest render gave.
+ */
+class ResponderCache {
+  private cfg = new Map<string, PanResponderCallbacks>();
+  private made = new Map<string, PanResponderInstance>();
+  get(key: string, config: PanResponderCallbacks): PanResponderInstance {
+    this.cfg.set(key, config);
+    let r = this.made.get(key);
+    if (!r) {
+      const fwd =
+        <K extends keyof PanResponderCallbacks>(name: K) =>
+        (e: GestureResponderEvent, gs: PanResponderGestureState) =>
+          (this.cfg.get(key)?.[name] as any)?.(e, gs);
+      r = PanResponder.create({
+        onStartShouldSetPanResponder: fwd('onStartShouldSetPanResponder'),
+        onMoveShouldSetPanResponder: fwd('onMoveShouldSetPanResponder'),
+        onPanResponderTerminationRequest: fwd('onPanResponderTerminationRequest'),
+        onPanResponderGrant: fwd('onPanResponderGrant'),
+        onPanResponderMove: fwd('onPanResponderMove'),
+        onPanResponderRelease: fwd('onPanResponderRelease'),
+        onPanResponderTerminate: fwd('onPanResponderTerminate'),
+      });
+      this.made.set(key, r);
+    }
+    return r;
+  }
+}
+
 export function TimeGrid({
   days,
   events,
@@ -150,6 +186,7 @@ export function TimeGrid({
   const scroller = useRef<ScrollView>(null);
   const headScroller = useRef<ScrollView>(null);
   const colScroller = useRef<ScrollView>(null);
+  const footScroller = useRef<ScrollView>(null);
 
   /* ── calendar colours (the 6px square), only once there is more than one ── */
   const calColor = useMemo(() => {
@@ -197,8 +234,11 @@ export function TimeGrid({
     return () => clearTimeout(t);
   }, [pan, focusIndex, step]);
 
-  const syncHead = (e: NativeSyntheticEvent<NativeScrollEvent>) =>
-    headScroller.current?.scrollTo({ x: e.nativeEvent.contentOffset.x, animated: false });
+  const syncHead = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const x = e.nativeEvent.contentOffset.x;
+    headScroller.current?.scrollTo({ x, animated: false });
+    footScroller.current?.scrollTo({ x, animated: false });
+  };
 
   /* ── the clock: re-render each minute so the now-line and "past" stay true ── */
   const [, tick] = useState(0);
@@ -213,6 +253,7 @@ export function TimeGrid({
   // Live gesture bookkeeping, read by the responders' handlers between renders.
   // A plain mutable box (not state: changing it must not re-render).
   const [box] = useState(() => new GestureBox());
+  const [responders] = useState(() => new ResponderCache());
 
   const put = (v: Gesture | null) => {
     box.set({ g: v });
@@ -259,7 +300,7 @@ export function TimeGrid({
 
   /** Empty space in column `col`: click = quick-create, drag = draw. */
   const colResponder = (col: number) =>
-    PanResponder.create({
+    responders.get(`col-${col}`, {
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       // Before the long-press lands (native), a swipe belongs to the ScrollView.
@@ -291,10 +332,12 @@ export function TimeGrid({
           s = cur.a;
           t = s + CLICK_DUR;
         }
-        // Keep the new block inside your hours.
+        // Keep the new block inside your hours, at its length: a click at
+        // 21:45 makes 21:30–22:00, not a 15-minute stub.
         if (t > winMax) {
+          const len = t - s;
           t = winMax;
-          s = Math.max(winMin, t - Math.max(MIN_DUR, t - s));
+          s = Math.max(winMin, t - len);
         }
         actions.openQuick({ date: isoDays[cur.col], start: fromMin(s), end: fromMin(t), anchor: cur.anchor });
       },
@@ -314,7 +357,7 @@ export function TimeGrid({
 
   /** A tile: body = move, top/bottom edge = resize. Click (no travel) = detail. */
   const tileResponder = (it: LaidBlock, col: number, mode: 'move' | 'start' | 'end') =>
-    PanResponder.create({
+    responders.get(`${it.ev.id}-${isoDays[col]}-${mode}`, {
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderTerminationRequest: () => !box.armed,
@@ -491,19 +534,14 @@ export function TimeGrid({
   const colStyle = pan ? { width: colWidth } : styles.colFlex;
   const now = nowMin();
   const todayIso = iso(today());
+  const showNow = todayIdx >= 0 && now >= winMin && now < winMax;
 
   const heads = days.map((d, i) => {
     const isToday = i === todayIdx;
     const off = !workFor(hours, wdIndex(d));
-    return (
-      <Press
-        key={isoDays[i]}
-        onPress={() => onPickDay?.(d)}
-        disabled={!onPickDay}
-        hoverBg={isToday ? undefined : N.hover}
-        accessibilityRole="button"
-        aria-label={`Open ${WD[wdIndex(d)]} ${d.getDate()} in day view`}
-        style={[colStyle, styles.dayHead, isToday && styles.dayHeadToday, !onPickDay && { opacity: 1 }]}>
+    const cellStyle = [colStyle, styles.dayHead, isToday && styles.dayHeadToday];
+    const content = (
+      <>
         <Txt style={[styles.dayHeadWd, isToday && styles.onInkMuted, off && !isToday && styles.offTxt]}>
           {WD[wdIndex(d)]}
         </Txt>
@@ -511,6 +549,19 @@ export function TimeGrid({
           {d.getDate()}
         </Txt>
         {isToday && !isPhone && <Mono style={styles.todayTag}>TODAY</Mono>}
+      </>
+    );
+    // Day view has nothing to open: a plain cell, not a disabled (greyed) button.
+    if (!onPickDay) return <View key={isoDays[i]} style={cellStyle}>{content}</View>;
+    return (
+      <Press
+        key={isoDays[i]}
+        onPress={() => onPickDay(d)}
+        hoverBg={isToday ? undefined : N.hover}
+        accessibilityRole="button"
+        aria-label={`Open ${WD[wdIndex(d)]} ${d.getDate()} in day view`}
+        style={cellStyle}>
+        {content}
       </Press>
     );
   });
@@ -535,6 +586,34 @@ export function TimeGrid({
       ))}
     </View>
   ));
+
+  /*
+   * Events entirely outside your hours: one chip per column in a row pinned
+   * above (and below) the hours, outside the scroll. Drawn over the grid they
+   * covered the title of whatever started at the window's edge, and scrolled
+   * out of sight with the hours they were meant to point past.
+   */
+  const anyBefore = plans.some((p) => p.before.length > 0);
+  const anyAfter = plans.some((p) => p.after.length > 0);
+  const edgeCells = (edge: 'before' | 'after') =>
+    days.map((_, i) => {
+      const list = plans[i][edge];
+      const at = `${pad(edge === 'before' ? ws : we % 24)}:00`;
+      return (
+        <View key={isoDays[i]} style={[colStyle, styles.edgeCell, isPhone && styles.edgeCellTight]}>
+          {list.length > 0 && (
+            <EdgeChip
+              label={`${edge === 'before' ? '↑' : '↓'} ${list.length} ${edge} ${at}`}
+              onPress={(a) =>
+                list.length === 1
+                  ? actions.openEvent(list[0].id, a)
+                  : actions.openList(`${edge === 'before' ? 'Before' : 'After'} ${at}`, list, a)
+              }
+            />
+          )}
+        </View>
+      );
+    });
 
   const columns = days.map((d, i) => {
     const plan = plans[i];
@@ -606,29 +685,6 @@ export function TimeGrid({
           </Press>
         ))}
 
-        {plan.before.length > 0 && (
-          <EdgeChip
-            edge="top"
-            label={`↑ ${plan.before.length} before ${pad(ws)}:00`}
-            onPress={(a) =>
-              plan.before.length === 1
-                ? actions.openEvent(plan.before[0].id, a)
-                : actions.openList(`Before ${pad(ws)}:00`, plan.before, a)
-            }
-          />
-        )}
-        {plan.after.length > 0 && (
-          <EdgeChip
-            edge="bottom"
-            label={`↓ ${plan.after.length} after ${pad(we % 24)}:00`}
-            onPress={(a) =>
-              plan.after.length === 1
-                ? actions.openEvent(plan.after[0].id, a)
-                : actions.openList(`After ${pad(we % 24)}:00`, plan.after, a)
-            }
-          />
-        )}
-
         {create && <CreateGhost a={create.a} b={create.b} ws={ws} day={d} />}
 
         {isToday && now >= winMin && now < winMax && (
@@ -653,6 +709,7 @@ export function TimeGrid({
                 <Label style={styles.laneLabel}>ALL DAY</Label>
               </View>
             )}
+            {anyBefore && <View style={styles.gutterEdge} />}
           </View>
           {pan ? (
             <ScrollView
@@ -664,12 +721,14 @@ export function TimeGrid({
               <View>
                 <View style={styles.row}>{heads}</View>
                 {hasAllDay && <View style={[styles.row, styles.laneRow]}>{lanes}</View>}
+                {anyBefore && <View style={[styles.row, styles.edgeRow]}>{edgeCells('before')}</View>}
               </View>
             </ScrollView>
           ) : (
             <View style={styles.flexW}>
               <View style={styles.row}>{heads}</View>
               {hasAllDay && <View style={[styles.row, styles.laneRow]}>{lanes}</View>}
+              {anyBefore && <View style={[styles.row, styles.edgeRow]}>{edgeCells('before')}</View>}
             </View>
           )}
         </View>
@@ -695,10 +754,13 @@ export function TimeGrid({
           <View style={[styles.gutter, { width: gutterW, height: bh }]}>
             {gutterHours(ws, we).map((h, i) => (
               <View key={h} style={styles.gutterHour}>
-                {i > 0 && <Mono style={styles.gutterTxt}>{pad(h)}:00</Mono>}
+                {/* the now chip sits on the gutter; an hour label under it would peek out */}
+                {i > 0 && !(showNow && Math.abs(now - h * 60) < 15) && (
+                  <Mono style={styles.gutterTxt}>{pad(h)}:00</Mono>
+                )}
               </View>
             ))}
-            {todayIdx >= 0 && now >= winMin && now < winMax && (
+            {showNow && (
               <View pointerEvents="none" style={[styles.nowChip, { top: minToY(now, ws) - 8 }]}>
                 <Mono style={styles.nowChipTxt}>{fromMin(now)}</Mono>
               </View>
@@ -722,6 +784,24 @@ export function TimeGrid({
           )}
         </View>
       </ScrollView>
+
+      {anyAfter && (
+        <View style={[styles.row, styles.edgeRowBottom]}>
+          <View style={{ width: gutterW, height: EDGE_ROW_H }} />
+          {pan ? (
+            <ScrollView
+              ref={footScroller}
+              style={styles.flexW}
+              horizontal
+              scrollEnabled={false}
+              showsHorizontalScrollIndicator={false}>
+              <View style={styles.row}>{edgeCells('after')}</View>
+            </ScrollView>
+          ) : (
+            <View style={[styles.row, styles.flexW]}>{edgeCells('after')}</View>
+          )}
+        </View>
+      )}
     </View>
   );
 }
@@ -767,22 +847,14 @@ function HourLines({ start, end }: { start: number; end: number }) {
   );
 }
 
-function EdgeChip({
-  edge,
-  label,
-  onPress,
-}: {
-  edge: 'top' | 'bottom';
-  label: string;
-  onPress: (a: PointAnchor) => void;
-}) {
+function EdgeChip({ label, onPress }: { label: string; onPress: (a: PointAnchor) => void }) {
   return (
     <Press
       onPress={(e) => onPress({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })}
       hoverBg={N.sunken}
       accessibilityRole="button"
       aria-label={label.replace(/[↑↓]/g, '').trim()}
-      style={[styles.edge, SHADOW.sm, edge === 'top' ? { top: 4 } : { bottom: 4 }]}>
+      style={[styles.edge, SHADOW.sm]}>
       <Mono numberOfLines={1} style={styles.edgeTxt}>
         {label}
       </Mono>
@@ -865,7 +937,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: N.line,
   },
-  laneLabel: { fontSize: 9 },
+  laneLabel: { fontSize: 9, textAlign: 'right' },
 
   dayHead: {
     height: 40,
@@ -914,7 +986,7 @@ const styles = StyleSheet.create({
   colFlex: { flex: 1, minWidth: 0 },
   col: { position: 'relative', backgroundColor: N.surface, borderLeftWidth: 1, borderLeftColor: N.line },
   colCursor: { cursor: 'cell' } as unknown as ViewStyle,
-  off: { backgroundColor: '#FBFBFB' },
+  off: { backgroundColor: N.offHours },
   offBand: { position: 'absolute', left: 0, right: 0 },
   hourLine: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: N.line },
   halfLine: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: N.lineSoft },
@@ -942,17 +1014,19 @@ const styles = StyleSheet.create({
   },
   moreTxt: { color: N.ink, fontSize: 10 },
 
+  edgeRow: { borderTopWidth: 1, borderTopColor: N.line },
+  edgeRowBottom: { borderTopWidth: 1, borderTopColor: N.line, backgroundColor: N.surface },
+  gutterEdge: { height: EDGE_ROW_H, borderTopWidth: 1, borderTopColor: N.line },
+  edgeCell: { height: EDGE_ROW_H, paddingHorizontal: 4, justifyContent: 'center', borderLeftWidth: 1, borderLeftColor: N.line },
+  // phone columns are ~115px: "↑ 1 before 06:00" fits only without the side padding
+  edgeCellTight: { paddingHorizontal: 2 },
   edge: {
-    position: 'absolute',
-    left: 4,
-    right: 4,
     height: 22,
     borderRadius: R.sm,
     backgroundColor: N.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 6,
-    zIndex: 6,
+    paddingHorizontal: 4,
   },
   edgeTxt: { color: N.ink2, fontSize: 10 },
 
@@ -962,7 +1036,7 @@ const styles = StyleSheet.create({
     borderRadius: R.md,
     borderWidth: 1,
     borderColor: N.ink,
-    backgroundColor: 'rgba(255,255,255,0.92)',
+    backgroundColor: N.glass,
     paddingHorizontal: 8,
     paddingVertical: 5,
   },

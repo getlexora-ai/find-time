@@ -1,10 +1,11 @@
+import { useState } from 'react';
 import { Platform, StyleSheet, Text, View, type GestureResponderHandlers, type ViewStyle } from 'react-native';
 
 import { fromMin } from '../cal-date';
 import { Icon } from '../Icon';
 import { metaLine, paint } from '../kinds';
 import { blockGeometry } from '../layout';
-import { CATS, MONO, N, R, SANS, SHADOW, T, TRANSITION } from '../tokens';
+import { CATS, MONO, N, PAST, R, SANS, SHADOW, T, TRANSITION } from '../tokens';
 import type { LaidBlock } from '../types';
 import { CalSwatch } from '../ui';
 
@@ -70,20 +71,12 @@ export function EventBlock({
     `${it.cutTop ? (it.trueStart == null ? '…' : `↑${fromMin(it.trueStart)}`) : fromMin(it.s)}` +
     `–${it.cutBottom ? (it.trueEnd == null ? '…' : `${fromMin(it.trueEnd)}↓`) : fromMin(it.t)}`;
 
-  const webProps = Platform.OS === 'web' ? ({ tabIndex: 0, onKeyDown } as object) : {};
-
-  if (state.ghost) {
-    return (
-      <View
-        pointerEvents="none"
-        style={[
-          styles.wrap,
-          { top: y, height, left: `${leftPct}%` as const, width: `${widthPct}%` as const },
-        ]}>
-        <View style={[styles.tile, styles.ghost]} />
-      </View>
-    );
-  }
+  const [hover, setHover] = useState(false);
+  const webProps =
+    Platform.OS === 'web'
+      ? ({ tabIndex: 0, onKeyDown, onMouseEnter: () => setHover(true), onMouseLeave: () => setHover(false) } as object)
+      : {};
+  const lifted = hover && !state.ghost && !state.dragging;
 
   return (
     <View
@@ -92,6 +85,9 @@ export function EventBlock({
         { top: y, height, left: `${leftPct}%` as const, width: `${widthPct}%` as const },
         state.dragging && styles.wrapDragging,
       ]}>
+      {/* While dragged, the tile at its origin becomes the dashed ghost. It is
+          the same element with the same handlers: unmounting it would drop the
+          pointer mid-drag (the responder belongs to this node). */}
       <View
         {...body}
         {...webProps}
@@ -100,17 +96,18 @@ export function EventBlock({
         style={[
           TRANSITION,
           styles.tile,
-          ...p.box,
+          ...(state.ghost ? [styles.ghost] : p.box),
           it.cutTop && styles.cutTop,
           it.cutBottom && styles.cutBottom,
           tiny && styles.tileTiny,
-          state.past && !state.dragging && styles.past,
-          state.selected && (p.dark ? styles.selectedOnDark : styles.selected),
-          state.clash && styles.clash,
+          state.past && !state.dragging && (p.dark ? styles.pastOnInk : styles.past),
+          lifted && [styles.lifted, SHADOW.md],
+          !state.ghost && state.selected && (p.dark ? styles.selectedOnDark : styles.selected),
+          !state.ghost && state.clash && styles.clash,
           state.dragging && [SHADOW.lg, styles.dragging],
           cursor(locked ? 'not-allowed' : 'grab'),
         ]}>
-        {tiny ? (
+        {state.ghost ? null : tiny ? (
           <Row>
             {!!calColor && <CalSwatch color={calColor} size={5} />}
             <Title p={p.title} lines={1} small>
@@ -119,6 +116,7 @@ export function EventBlock({
           </Row>
         ) : short ? (
           <Row>
+            {!p.solid && <View style={[styles.catDot, { backgroundColor: p.color }]} />}
             {!!calColor && <CalSwatch color={calColor} />}
             <Title p={p.title} lines={1}>
               {ev.title}
@@ -135,6 +133,8 @@ export function EventBlock({
               {ev.title}
             </Title>
             <Row>
+              {/* White tiles carry their category as a round dot (the square is the calendar). */}
+              {!p.solid && <View style={[styles.catDot, { backgroundColor: p.color }]} />}
               {!!calColor && <CalSwatch color={calColor} />}
               <Meta p={p.meta}>{metaLine(ev, CATS[ev.cat].label, times)}</Meta>
             </Row>
@@ -212,8 +212,10 @@ const styles = StyleSheet.create({
   // it reads as cut, not as ending there.
   cutTop: { borderTopLeftRadius: 0, borderTopRightRadius: 0 },
   cutBottom: { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
-  past: { opacity: 0.55 },
-  selected: { outlineColor: N.ink, outlineWidth: 2, outlineStyle: 'solid', outlineOffset: 1 } as ViewStyle,
+  past: { opacity: PAST.light },
+  pastOnInk: { opacity: PAST.onInk },
+  lifted: { transform: [{ translateY: -1 }] },
+  selected: { outlineColor: N.ink, outlineWidth: 2, outlineStyle: 'solid', outlineOffset: 2 } as ViewStyle,
   selectedOnDark: { outlineColor: N.ink, outlineWidth: 2, outlineStyle: 'solid', outlineOffset: 2 } as ViewStyle,
   clash: { outlineColor: N.accent, outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 1 } as ViewStyle,
   dragging: { opacity: 0.96 },
@@ -221,8 +223,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderStyle: 'dashed',
     borderColor: N.faint,
-    backgroundColor: 'rgba(250,250,250,0.6)',
+    backgroundColor: N.ghostFill,
   },
+  catDot: { width: 6, height: 6, borderRadius: 3 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 5, minWidth: 0 },
   titleWrap: { flex: 1, minWidth: 0 },
   title: { fontFamily: SANS, ...T.tile },

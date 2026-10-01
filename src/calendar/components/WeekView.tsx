@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { type LayoutChangeEvent, StyleSheet, View } from 'react-native';
 
-import { addDays, iso, sameDay, startOfWeek } from '../cal-date';
+import { addDays, fromIso, iso, sameDay, startOfWeek } from '../cal-date';
 import type { CalActions, CalState } from '../state';
 import { GUTTER, GUTTER_PHONE, MIN_COL } from '../tokens';
 import type { CalEvent } from '../types';
@@ -29,8 +29,13 @@ export function WeekView({
   clashIds?: Set<number>;
 }) {
   const { isDesktop, isPhone, width } = useResponsive();
-  const start = startOfWeek(state.cursor);
-  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(start, i)), [start]);
+  // Keyed on the date, not the Date object: a fresh `start` every render made
+  // every column re-plan its tiles on every render.
+  const startIso = iso(startOfWeek(state.cursor));
+  const days = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => addDays(fromIso(startIso), i)),
+    [startIso],
+  );
 
   // Measured once laid out; until then a first guess so the first frame paints
   // the right number of columns instead of reflowing into it.
