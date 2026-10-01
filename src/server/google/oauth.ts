@@ -20,6 +20,10 @@ export const SCOPES = [
   'email',
   'profile',
   'https://www.googleapis.com/auth/calendar.readonly',
+  // Write-back of protected focus blocks (push.ts), used only once the user
+  // switches it on. Accounts connected before this was added lack it until
+  // they reconnect; /api/calendar/settings reports `canWriteGoogle`.
+  'https://www.googleapis.com/auth/calendar.events',
 ];
 
 const REFRESH_SKEW_MS = 60_000; // refresh a minute before expiry

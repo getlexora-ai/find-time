@@ -30,6 +30,11 @@ export type GEvent = {
   etag?: string;
   sequence?: number;
   updated?: string;
+  /** 'transparent' = "show as free" in Google */
+  transparency?: 'opaque' | 'transparent';
+  attendees?: { email?: string; self?: boolean; responseStatus?: string; resource?: boolean }[];
+  hangoutLink?: string;
+  conferenceData?: { entryPoints?: { entryPointType?: string; uri?: string }[] };
 };
 
 /** Thrown on HTTP 410 — a stored syncToken has expired; caller must full-resync. */
@@ -73,13 +78,20 @@ export async function listCalendars(accessToken: string): Promise<GCalListEntry[
 export async function collectEvents(
   accessToken: string,
   calendarId: string,
-  opts: { syncToken?: string; timeMin?: string },
+  opts: { syncToken?: string; timeMin?: string; singleEvents?: boolean },
 ): Promise<{ events: GEvent[]; nextSyncToken?: string }> {
   const events: GEvent[] = [];
   let pageToken: string | undefined;
   let nextSyncToken: string | undefined;
 
-  const base: Record<string, string> = { maxResults: '2500', showDeleted: 'true', singleEvents: 'false' };
+  // singleEvents=true: Google expands a series into its occurrences, each with
+  // its own id and recurringEventId — so an occurrence moved or cancelled in
+  // Google arrives as exactly that, instead of hiding inside the master's rule.
+  const base: Record<string, string> = {
+    maxResults: '2500',
+    showDeleted: 'true',
+    singleEvents: opts.singleEvents ? 'true' : 'false',
+  };
   if (opts.syncToken) base.syncToken = opts.syncToken;
   else if (opts.timeMin) base.timeMin = opts.timeMin;
 

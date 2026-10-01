@@ -78,4 +78,54 @@ assert.equal(
   '(no title)',
 );
 
+
+// v2: times land in the USER's zone, not the organiser's.
+const ny = toRow(
+  {
+    id: 'ev_ny',
+    summary: 'NY standup',
+    start: { dateTime: '2026-10-05T09:00:00-04:00', timeZone: 'America/New_York' },
+    end: { dateTime: '2026-10-05T09:30:00-04:00', timeZone: 'America/New_York' },
+  },
+  { ...ctx, userZone: 'Europe/Berlin' },
+);
+assert.equal(ny.row.start_at, '2026-10-05T15:00:00.000Z');
+assert.equal(ny.row.end_at, '2026-10-05T15:30:00.000Z');
+
+// DST: the same 09:00 New York meeting after Europe's switch but before the US's.
+const dst = toRow(
+  {
+    id: 'ev_dst',
+    summary: 'gap week',
+    start: { dateTime: '2026-10-26T09:00:00-04:00', timeZone: 'America/New_York' },
+    end: { dateTime: '2026-10-26T10:00:00-04:00', timeZone: 'America/New_York' },
+  },
+  { ...ctx, userZone: 'Europe/Berlin' },
+);
+assert.equal(dst.row.start_at, '2026-10-26T14:00:00.000Z');
+
+// v2: free/busy, your RSVP, the video link, attendees.
+const invite = toRow(
+  {
+    id: 'ev_inv',
+    summary: 'Offsite planning',
+    start: { dateTime: '2026-10-05T10:00:00+02:00' },
+    end: { dateTime: '2026-10-05T11:00:00+02:00' },
+    transparency: 'transparent',
+    hangoutLink: 'https://meet.google.com/abc-defg-hij',
+    attendees: [
+      { email: 'a@x.com', responseStatus: 'accepted' },
+      { email: 'me@x.com', self: true, responseStatus: 'declined' },
+      { email: 'room@x.com', resource: true, responseStatus: 'accepted' },
+    ],
+  },
+  ctx,
+);
+assert.equal(invite.row.transparency, 'transparent');
+assert.equal(invite.row.response_status, 'declined');
+assert.equal(invite.row.conference_url, 'https://meet.google.com/abc-defg-hij');
+assert.equal(invite.row.attendee_count, 2);
+assert.equal(timed.row.transparency, 'opaque');
+assert.equal(timed.row.response_status, null);
+
 console.log('map.check: ok');

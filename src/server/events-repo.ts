@@ -21,11 +21,20 @@ type Row = {
   description: string | null;
   calendar_id: string | null;
   all_day: boolean;
+  location: string | null;
+  transparency: string;
+  response_status: string | null;
+  conference_url: string | null;
+  attendee_count: number | null;
+  done_at: Date | null;
+  exdates: Date[] | null;
+  recurrence_parent_id: string | null;
 };
 
 const COLS = `id, title, start_at, end_at, category, item_type, flexibility,
               origin, is_draft, rrule, project_label, description,
-              calendar_id, all_day`;
+              calendar_id, all_day, location, transparency, response_status,
+              conference_url, attendee_count, done_at, exdates, recurrence_parent_id`;
 
 function toApi(r: Row): ApiEvent {
   return {
@@ -43,6 +52,15 @@ function toApi(r: Row): ApiEvent {
     notes: r.description,
     calendarId: r.calendar_id,
     allDay: r.all_day,
+    location: r.location,
+    free: r.transparency === 'transparent',
+    rsvp: (r.response_status as ApiEvent['rsvp']) ?? null,
+    videoUrl: r.conference_url,
+    guests: r.attendee_count,
+    done: r.done_at != null,
+    // Wall-clock dates (see api-adapter.ts): the date part of each instant.
+    exdates: (r.exdates ?? []).map((d) => d.toISOString().slice(0, 10)),
+    seriesId: r.recurrence_parent_id,
   };
 }
 
@@ -72,8 +90,11 @@ export async function createEvent(userId: string, input: EventInput): Promise<Ap
   const row = await queryOne<Row>(
     `insert into calendar_events
        (id, user_id, title, start_at, end_at, time_zone, category, item_type,
-        flexibility, origin, is_draft, rrule, project_label, description)
-     values ($1,$2,$3,$4,$5,'Europe/Berlin',$6,$7,$8,$9,$10,$11,$12,$13)
+        flexibility, origin, is_draft, rrule, project_label, description,
+        all_day, recurrence_parent_id, exdates)
+     values ($1,$2,$3,$4,$5,
+             coalesce((select timezone from scheduler_profiles where user_id = $2), 'Europe/Berlin'),
+             $6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::timestamptz[])
      returning ${COLS}`,
     [
       `evt_${randomUUID()}`,
@@ -89,10 +110,16 @@ export async function createEvent(userId: string, input: EventInput): Promise<Ap
       input.rrule ?? null,
       input.projectLabel ?? null,
       input.notes ?? null,
+      input.allDay ?? false,
+      input.seriesId ?? null,
+      (input.exdates ?? []).map(dateToInstant),
     ],
   );
   return toApi(row!);
 }
+
+/** 'YYYY-MM-DD' → the wall-clock midnight instant exdates are keyed by. */
+const dateToInstant = (d: string) => `${d.slice(0, 10)}T00:00:00.000Z`;
 
 const PATCHABLE: Record<string, string> = {
   title: 'title',
@@ -106,6 +133,7 @@ const PATCHABLE: Record<string, string> = {
   rrule: 'rrule',
   projectLabel: 'project_label',
   notes: 'description',
+  allDay: 'all_day',
 };
 
 /** An event's origin, or null when it does not exist for this user. */
@@ -129,6 +157,12 @@ export async function updateEvent(
       params.push((patch as Record<string, unknown>)[key]);
       sets.push(`${col} = $${params.length}`);
     }
+  }
+  // Not plain columns: `done` is a timestamp, `exdates` an instant array.
+  if ('done' in patch) sets.push(patch.done ? 'done_at = coalesce(done_at, now())' : 'done_at = null');
+  if ('exdates' in patch) {
+    params.push((patch.exdates ?? []).map(dateToInstant));
+    sets.push(`exdates = $${params.length}::timestamptz[]`);
   }
   if (sets.length === 0) {
     return queryOne<Row>(

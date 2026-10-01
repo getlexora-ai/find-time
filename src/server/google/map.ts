@@ -4,12 +4,16 @@ import type { GEvent } from './calendar';
  * Google `events` resource -> a `calendar_events` row (db/003). Pure; see
  * map.check.mjs.
  *
- * Deliberately lossy for v1 (pull-only, read-only in Find Time):
- *  - category is always 'other' (Google has no field that maps cleanly)
- *  - flexibility is 'fixed' (imported meetings are not the scheduler's to move)
- *  - recurring events are stored as the series master with `recurrence_unsupported`
- *    = true; occurrences are NOT expanded (schema has the flag, recurrence.ts
- *    honours it). `singleEvents=false` on the API call keeps this one row per series.
+ * - category is always 'other' (Google has no field that maps cleanly)
+ * - flexibility is 'fixed' (imported meetings are not the scheduler's to move)
+ * - times are converted to the USER's zone (ctx.userZone), not the event's:
+ *   a 09:00 New York meeting is 15:00 on a Berlin calendar. Everything
+ *   downstream reads ISO strings as wall-clock in that zone.
+ * - sync asks for single occurrences (singleEvents=true), so a row is one
+ *   occurrence; a series master (with `recurrence`) only arrives from an old
+ *   series-mode sync and is still flagged `recurrence_unsupported`.
+ * - free/busy, your own RSVP, the video link and the attendee count are kept,
+ *   so a declined or "show as free" meeting does not block time.
  */
 
 export type CalendarEventRow = {
@@ -31,6 +35,10 @@ export type CalendarEventRow = {
   provider_etag: string | null;
   provider_sequence: number | null;
   remote_updated_at: string | null;
+  transparency: 'opaque' | 'transparent';
+  response_status: string | null;
+  conference_url: string | null;
+  attendee_count: number | null;
 };
 
 export type MapResult =
@@ -88,7 +96,7 @@ function wallClockIso(dateTime: string, zone: string | undefined): string {
 
 export function toRow(
   g: GEvent,
-  ctx: { userId: string; calendarId: string; connectedAccountId: string },
+  ctx: { userId: string; calendarId: string; connectedAccountId: string; userZone?: string },
 ): MapResult {
   if (g.status === 'cancelled') return { providerEventId: g.id, deleted: true };
 
@@ -106,11 +114,14 @@ export function toRow(
     endAt = `${e}T00:00:00.000Z`;
     timeZone = g.start!.timeZone ?? 'UTC';
   } else {
-    const zone = g.start?.timeZone ?? g.end?.timeZone;
+    const eventZone = g.start?.timeZone ?? g.end?.timeZone;
+    // Your clock, not the organiser's. Without a known user zone, fall back to
+    // the event's own (the old behaviour).
+    const zone = ctx.userZone ?? eventZone;
     const rawStart = g.start?.dateTime ?? new Date().toISOString();
     const rawEnd = g.end?.dateTime ?? new Date(Date.parse(rawStart) + 3600_000).toISOString();
     startAt = wallClockIso(rawStart, zone);
-    endAt = wallClockIso(rawEnd, g.end?.timeZone ?? zone);
+    endAt = wallClockIso(rawEnd, ctx.userZone ?? g.end?.timeZone ?? zone);
     timeZone = zone ?? 'UTC';
   }
 
@@ -136,6 +147,25 @@ export function toRow(
       provider_etag: g.etag ?? null,
       provider_sequence: g.sequence ?? null,
       remote_updated_at: g.updated ?? null,
+      transparency: g.transparency === 'transparent' ? 'transparent' : 'opaque',
+      response_status: responseOf(g),
+      conference_url: conferenceOf(g),
+      attendee_count: g.attendees ? g.attendees.filter((a) => !a.resource).length : null,
     },
   };
+}
+
+const RSVP = new Set(['needsAction', 'declined', 'tentative', 'accepted']);
+
+/** Your own answer to the invite; null when you are not on the guest list. */
+function responseOf(g: GEvent): string | null {
+  const me = g.attendees?.find((a) => a.self);
+  return me?.responseStatus && RSVP.has(me.responseStatus) ? me.responseStatus : null;
+}
+
+/** The video link: Meet's hangoutLink, else the first video entry point. */
+function conferenceOf(g: GEvent): string | null {
+  if (g.hangoutLink) return g.hangoutLink;
+  const v = g.conferenceData?.entryPoints?.find((e) => e.entryPointType === 'video' && e.uri);
+  return v?.uri ?? null;
 }

@@ -23,12 +23,30 @@ export type ApiEvent = {
   calendarId?: string | null;
   /** Google all-day event: start/end are midnights, end exclusive. */
   allDay?: boolean;
+  location?: string | null;
+  /** Google "show as free" — does not block time or clash. */
+  free?: boolean;
+  /** Your answer to the invite; null when you are not a guest. */
+  rsvp?: 'needsAction' | 'declined' | 'tentative' | 'accepted' | null;
+  videoUrl?: string | null;
+  /** number of guests, rooms excluded */
+  guests?: number | null;
+  /** a task you ticked off */
+  done?: boolean;
+  /** yyyy-mm-dd occurrences removed from this series */
+  exdates?: string[];
+  /** set on a one-off that replaced an occurrence of a Find Time series */
+  seriesId?: string | null;
 };
 
 export type EventInput = {
   title: string;
   start: string;
   end: string;
+  allDay?: boolean;
+  done?: boolean;
+  exdates?: string[];
+  seriesId?: string | null;
   category?: string;
   itemType?: string;
   flexibility?: string;
@@ -223,4 +241,24 @@ export type PreferencesResponse = {
   /** Working hours per weekday ('mon'..'sun'), hours as numbers; null = day off.
    *  The calendar hatches everything outside these. */
   workHours?: Record<string, { start: number; end: number } | null>;
+};
+
+/** GET/PATCH /api/calendar/settings — scheduler_profiles (db/019). */
+export type CalendarSettings = {
+  /** IANA zone every time is shown in */
+  timezone: string;
+  /** "your hours": the span the grid draws, hours 0–24 */
+  window: { start: number; end: number };
+  /** 'mon'..'sun'; null = a day off */
+  workHours: Record<string, { start: number; end: number } | null>;
+  /** 1 = Monday, 0 = Sunday */
+  weekStart: 0 | 1;
+  clock24: boolean;
+  /** null = the app's default */
+  weekTargetH: number | null;
+  focusGoalH: number | null;
+  /** write focus blocks to Google as busy */
+  pushFocus: boolean;
+  /** a connected account granted the write scope */
+  canWriteGoogle: boolean;
 };

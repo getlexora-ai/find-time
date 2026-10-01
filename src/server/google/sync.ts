@@ -9,9 +9,9 @@ import { toRow, type CalendarEventRow } from './map';
  * Pull-only Google Calendar sync. Called after connect and on the calendar
  * screen's mount (throttled by the /api/calendar/sync route).
  *
- * ponytail: on-demand pull only. The upgrade path is a `sync_state='pending_push'`
- * worklist pushed back with `If-Match: <etag>`, `events.watch` channels
- * (calendar_sync_state.channel_*), and a scheduled worker. None of that here.
+ * Pull is on demand. The one thing pushed back is opt-in: focus blocks written
+ * to Google as busy (push.ts). `events.watch` channels and a scheduled worker
+ * are still the upgrade path.
  */
 
 const FULL_SYNC_LOOKBACK_DAYS = 60;
@@ -23,12 +23,13 @@ export async function syncAccount(userId: string, accountId: string): Promise<Sy
   try {
     const token = await getValidAccessToken(accountId);
     const calendars = await upsertCalendars(userId, accountId, token);
+    const userZone = await zoneOf(userId);
 
     let imported = 0;
     let deleted = 0;
     for (const cal of calendars) {
       if (!cal.readEnabled) continue;
-      const r = await syncCalendar(userId, accountId, cal, token);
+      const r = await syncCalendar(userId, accountId, cal, token, userZone);
       imported += r.imported;
       deleted += r.deleted;
     }
@@ -81,35 +82,56 @@ async function upsertCalendars(
   return rows;
 }
 
+/** The user's IANA zone — every Google time is converted into it. */
+async function zoneOf(userId: string): Promise<string> {
+  const row = await queryOne<{ timezone: string | null }>(
+    `select timezone from scheduler_profiles where user_id = $1`,
+    [userId],
+  ).catch(() => null);
+  return row?.timezone || 'Europe/Berlin';
+}
+
 async function syncCalendar(
   userId: string,
   accountId: string,
   cal: CalRow,
   token: string,
+  userZone: string,
 ): Promise<{ imported: number; deleted: number }> {
-  const state = await queryOne<{ sync_token: string | null }>(
-    `select sync_token from calendar_sync_state where calendar_id = $1`,
+  const state = await queryOne<{ sync_token: string | null; sync_mode: string | null }>(
+    `select sync_token, sync_mode from calendar_sync_state where calendar_id = $1`,
     [cal.id],
   );
 
+  // A calendar last synced in the old 'series' mode holds one unexpanded master
+  // row per repeating event. Re-sync it once in full as single occurrences,
+  // then drop those masters (below) — otherwise each series would show twice.
+  const migrating = state != null && state.sync_mode !== 'instances';
+  const syncToken = migrating ? undefined : state?.sync_token ?? undefined;
+
   const timeMin = new Date(Date.now() - FULL_SYNC_LOOKBACK_DAYS * 86_400_000).toISOString();
-  let full = !state?.sync_token;
+  let full = !syncToken;
   let page: Awaited<ReturnType<typeof collectEvents>>;
   try {
-    page = await collectEvents(token, cal.providerCalendarId, {
-      syncToken: state?.sync_token ?? undefined,
-      timeMin,
-    });
+    page = await collectEvents(token, cal.providerCalendarId, { syncToken, timeMin, singleEvents: true });
   } catch (err) {
     if (!(err instanceof SyncTokenExpired)) throw err;
     full = true;
-    page = await collectEvents(token, cal.providerCalendarId, { timeMin });
+    page = await collectEvents(token, cal.providerCalendarId, { timeMin, singleEvents: true });
   }
 
   let imported = 0;
   let deleted = 0;
+  if (migrating) {
+    await queryOne(
+      `update calendar_events set deleted_at = now(), sync_state = 'synced'
+        where calendar_id = $1 and recurrence_unsupported = true and deleted_at is null
+        returning id`,
+      [cal.id],
+    );
+  }
   for (const g of page.events) {
-    const mapped = toRow(g, { userId, calendarId: cal.id, connectedAccountId: accountId });
+    const mapped = toRow(g, { userId, calendarId: cal.id, connectedAccountId: accountId, userZone });
     if (mapped.deleted) {
       const res = await queryOne<{ id: string }>(
         `update calendar_events set deleted_at = now(), sync_state = 'synced'
@@ -126,9 +148,10 @@ async function syncCalendar(
 
   await queryOne(
     `insert into calendar_sync_state
-       (calendar_id, sync_token, sync_token_at, last_full_sync_at, last_incremental_at, last_error, consecutive_errors)
-     values ($1, $2, now(), $3, now(), null, 0)
+       (calendar_id, sync_token, sync_token_at, last_full_sync_at, last_incremental_at, last_error, consecutive_errors, sync_mode)
+     values ($1, $2, now(), $3, now(), null, 0, 'instances')
      on conflict (calendar_id) do update set
+       sync_mode = 'instances',
        sync_token = excluded.sync_token,
        sync_token_at = now(),
        last_full_sync_at = coalesce(excluded.last_full_sync_at, calendar_sync_state.last_full_sync_at),
@@ -157,6 +180,10 @@ const EVENT_COLS = [
   'provider_etag',
   'provider_sequence',
   'remote_updated_at',
+  'transparency',
+  'response_status',
+  'conference_url',
+  'attendee_count',
 ] as const;
 
 async function upsertEvent(row: CalendarEventRow): Promise<void> {

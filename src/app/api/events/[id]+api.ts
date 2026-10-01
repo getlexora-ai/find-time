@@ -2,6 +2,7 @@ import { IMPORTED_LOCKED_MESSAGE, isImported, lockedFields } from '@/lib/synced-
 import { requireUserId, unauthorized } from '@/server/auth/clerk';
 import { isConfigured } from '@/server/db';
 import { deleteEvent, getEventOrigin, updateEvent, type EventInput } from '@/server/events-repo';
+import { pushFocus } from '@/server/google/push';
 
 /*
  * Imported events are pull-only (src/server/google/sync.ts). Google owns their
@@ -35,6 +36,7 @@ export async function PATCH(request: Request, { id }: Record<string, string>): P
     }
     const event = await updateEvent(userId, id, patch);
     if (!event) return Response.json({ error: 'Not found.' }, { status: 404 });
+    await pushFocus(userId, id); // no-op unless write-back is on; never throws
     return Response.json({ event });
   } catch (err) {
     console.error('PATCH /api/events/[id]', err);
@@ -55,6 +57,7 @@ export async function DELETE(request: Request, { id }: Record<string, string>): 
     }
     const ok = await deleteEvent(userId, id);
     if (!ok) return Response.json({ error: 'Not found.' }, { status: 404 });
+    await pushFocus(userId, id); // takes a pushed copy down; never throws
     return Response.json({ ok: true });
   } catch (err) {
     console.error('DELETE /api/events/[id]', err);

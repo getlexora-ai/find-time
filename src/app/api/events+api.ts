@@ -1,6 +1,7 @@
 import { requireUserId, unauthorized } from '@/server/auth/clerk';
 import { isConfigured } from '@/server/db';
 import { createEvent, listEvents, type EventInput } from '@/server/events-repo';
+import { pushFocus } from '@/server/google/push';
 
 function guard(): Response | null {
   if (!isConfigured()) {
@@ -37,6 +38,7 @@ export async function POST(request: Request): Promise<Response> {
       return Response.json({ error: 'title, start and end are required.' }, { status: 400 });
     }
     const event = await createEvent(userId, body as EventInput);
+    await pushFocus(userId, event.id); // no-op unless write-back is on; never throws
     return Response.json({ event }, { status: 201 });
   } catch (err) {
     console.error('POST /api/events', err);
