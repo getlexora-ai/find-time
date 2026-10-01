@@ -21,6 +21,13 @@ export { MONO, SANS };
  * dark ground. Nothing here imports it.)
  */
 
+/**
+ * Spread on the root of anything that renders in a portal (Modal): it marks
+ * the subtree as calendar UI, so global.css gives it the ink focus ring rather
+ * than the landing's lime one. `dataSet` becomes `data-nexus` on web.
+ */
+export const NEXUS_SURFACE = { dataSet: { nexus: '' } } as object;
+
 /** Readable text: Google Sans Flex, ink, 13px. */
 export function Txt({ style, ...rest }: TextProps) {
   return <Text {...rest} style={[styles.txt, style]} />;
@@ -109,7 +116,7 @@ export function Button({
 }
 
 const BTN = {
-  primary: { box: [{ backgroundColor: N.ink }, SHADOW.md], hover: '#262626', ink: N.onInk },
+  primary: { box: [{ backgroundColor: N.ink }, SHADOW.md], hover: N.inkHover, ink: N.onInk },
   secondary: { box: [{ backgroundColor: N.surface }, SHADOW.sm], hover: N.sunken, ink: N.ink },
   ghost: { box: [{ backgroundColor: 'transparent' }], hover: N.hover, ink: N.ink2 },
 } as const;

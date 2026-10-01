@@ -21,11 +21,17 @@ textarea:focus-visible {
   border-radius: 6px;
 }
 
-/* The calendar is light (Nexus): its focus ring is ink, not lime. */
+/* The calendar is light (Nexus): its focus ring is ink, not lime. Its sheets
+   and popovers render in a portal outside #ft-calendar, so they carry
+   data-nexus to get the same ring. */
 #ft-calendar [role='button']:focus-visible,
 #ft-calendar [tabindex]:focus-visible,
 #ft-calendar input:focus-visible,
-#ft-calendar textarea:focus-visible {
+#ft-calendar textarea:focus-visible,
+[data-nexus] [role='button']:focus-visible,
+[data-nexus] [tabindex]:focus-visible,
+[data-nexus] input:focus-visible,
+[data-nexus] textarea:focus-visible {
   outline-color: #171717;
 }
 

@@ -44,7 +44,7 @@ export function Sidebar({
 }
 
 const styles = StyleSheet.create({
-  aside: { width: 248, borderRightWidth: 1, borderRightColor: N.line, backgroundColor: 'rgba(255,255,255,0.5)' },
+  aside: { width: 248, borderRightWidth: 1, borderRightColor: N.line, backgroundColor: N.glassSoft },
   content: { paddingHorizontal: 16, paddingBottom: 16, flexGrow: 1 },
   user: { marginTop: 'auto', paddingTop: 16, borderTopWidth: 1, borderTopColor: N.line },
 });

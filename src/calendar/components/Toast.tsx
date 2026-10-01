@@ -68,7 +68,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           {action && (
             <Press
               accessibilityRole="button"
-              hoverBg="rgba(255,255,255,0.1)"
+              hoverBg={N.hoverOnInk}
               onPress={() => {
                 if (timer.current) clearTimeout(timer.current);
                 action.run();

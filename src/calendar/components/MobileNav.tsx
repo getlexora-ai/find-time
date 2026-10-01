@@ -69,7 +69,7 @@ const styles = StyleSheet.create({
     zIndex: 50,
     borderTopWidth: 1,
     borderTopColor: N.line,
-    backgroundColor: 'rgba(255,255,255,0.92)',
+    backgroundColor: N.glass,
     paddingHorizontal: 8,
     paddingTop: 6,
   },

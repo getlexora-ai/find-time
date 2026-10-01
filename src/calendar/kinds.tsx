@@ -1,7 +1,7 @@
 import type { TextStyle, ViewStyle } from 'react-native';
 
 import type { IconName } from './Icon';
-import { HATCH, N, SHADOW } from './tokens';
+import { CATS, type CatKey, HATCH, N, SHADOW } from './tokens';
 import type { CalEvent, EventKind } from './types';
 
 /**
@@ -88,41 +88,68 @@ export type Paint = {
   glyph: string;
   /** dark tile: the selection ring and the drag label flip to suit */
   dark: boolean;
+  /** the category colour */
+  color: string;
+  /** drawn as the solid (focus, routine, break) */
+  solid: boolean;
 };
 
-const BOX: Record<EventKind, ViewStyle[]> = {
-  focus: [{ backgroundColor: N.ink }],
-  event: [{ backgroundColor: N.surface }, SHADOW.sm],
-  task: [{ backgroundColor: N.surface, borderWidth: 1, borderColor: N.lineStrong }],
-  routine: [{ backgroundColor: N.sunken, borderWidth: 1, borderColor: 'rgba(0,0,0,0.08)' }, HATCH.tile],
-  break: [{ backgroundColor: N.sunken }, HATCH.tile],
-  ai: [{ backgroundColor: N.surface, borderWidth: 1, borderStyle: 'dashed', borderColor: N.accent }],
+/** The kinds drawn as a solid category colour (they used to be black / grey). */
+const SOLID = new Set<EventKind>(['focus', 'routine', 'break']);
+
+const DEFAULT_CAT: Record<EventKind, CatKey> = {
+  focus: 'deep',
+  event: 'sync',
+  task: 'admin',
+  routine: 'admin',
+  break: 'admin',
+  ai: 'deep',
 };
 
-const INK: Record<EventKind, { title: string; meta: string; glyph: string }> = {
-  focus: { title: N.onInk, meta: N.onInkMuted, glyph: N.onInkMuted },
+function boxOf(kind: EventKind, color: string): ViewStyle[] {
+  switch (kind) {
+    case 'focus':
+      return [{ backgroundColor: color }];
+    case 'routine':
+      return [{ backgroundColor: color }, HATCH.onSolid];
+    case 'break':
+      return [{ backgroundColor: color, opacity: 0.75 }, HATCH.onSolid];
+    case 'event':
+      return [{ backgroundColor: N.surface }, SHADOW.sm];
+    case 'task':
+      return [{ backgroundColor: N.surface, borderWidth: 1, borderColor: N.lineStrong }];
+    case 'ai':
+      return [{ backgroundColor: N.surface, borderWidth: 1, borderStyle: 'dashed', borderColor: N.accent }];
+  }
+}
+
+const WHITE_INK: Record<'event' | 'task' | 'ai', { title: string; meta: string; glyph: string }> = {
   event: { title: N.ink, meta: N.muted, glyph: N.faint },
   task: { title: N.ink2, meta: N.muted, glyph: N.ink2 },
-  routine: { title: N.ink2, meta: N.muted, glyph: N.faint },
-  break: { title: N.muted, meta: N.faint, glyph: N.faint },
   ai: { title: N.ink, meta: N.accentInk, glyph: N.accent },
 };
+const SOLID_INK = { title: N.onInk, meta: 'rgba(255,255,255,0.78)', glyph: 'rgba(255,255,255,0.78)' };
 
 /**
  * Resolve one event to its drawing. Grid tiles, the all-day lane, the legend
  * swatches and the detail popover all go through here, so a kind can never
  * look like one thing in one place and another elsewhere.
  */
-export function paint(ev: Pick<CalEvent, 'kind'>): Paint {
+export function paint(ev: Pick<CalEvent, 'kind'> & { cat?: CatKey }): Paint {
   const spec = specOf(ev);
-  const ink = INK[spec.key];
+  const cat = ev.cat ?? DEFAULT_CAT[spec.key];
+  const color = CATS[cat].color;
+  const solid = SOLID.has(spec.key);
+  const ink = solid ? SOLID_INK : WHITE_INK[spec.key as 'event' | 'task' | 'ai'];
   return {
     spec,
-    box: BOX[spec.key],
+    box: boxOf(spec.key, color),
     title: { color: ink.title },
     meta: { color: ink.meta },
     glyph: ink.glyph,
-    dark: spec.key === 'focus',
+    dark: solid,
+    color,
+    solid,
   };
 }
 

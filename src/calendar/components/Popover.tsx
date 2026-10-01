@@ -2,6 +2,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import type { PointAnchor } from '../state';
 import { N, R, SHADOW } from '../tokens';
+import { NEXUS_SURFACE } from '../ui';
 import { useResponsive } from '../useResponsive';
 
 /**
@@ -28,6 +29,8 @@ export function Popover({
   const { isDesktop, width: vw, height: vh } = useResponsive();
 
   let pos: object = styles.sheetPos;
+  // The estimate can be short (a long title, notes); never let the card run off the bottom.
+  let fit: object | null = null;
   if (isDesktop) {
     let left = (vw - width) / 2;
     let top = Math.max(16, (vh - estHeight) / 2);
@@ -38,6 +41,7 @@ export function Popover({
       if (top + estHeight > vh - 16) top = Math.max(16, vh - estHeight - 16);
     }
     pos = [styles.popPos, { left, top, width }];
+    fit = { maxHeight: Math.min(560, vh - top - 16) };
   }
 
   return (
@@ -47,10 +51,11 @@ export function Popover({
         accessibilityLabel="Close"
         style={[styles.backdrop, !isDesktop && styles.backdropSheet]}>
         <Pressable
+          {...NEXUS_SURFACE}
           onPress={(e) => e.stopPropagation()}
           aria-label={label}
           role="dialog"
-          style={[pos, styles.card, SHADOW.lg, !isDesktop && styles.cardSheet]}>
+          style={[pos, styles.card, SHADOW.lg, !isDesktop && styles.cardSheet, fit]}>
           {!isDesktop && <View style={styles.grab} />}
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.pad}>
             {children}

@@ -23,6 +23,13 @@ export const N = {
   surface: '#FFFFFF',
   /** recessed fills: routine/break tiles, inputs, the all-day lane */
   sunken: '#F5F5F5',
+  /** under the off-hours hatch: a breath off white, so "off" reads before the hatch does */
+  offHours: '#FBFBFB',
+  /** translucent white: the phone bar and the rail over the hatched ground, the block being drawn */
+  glass: 'rgba(255,255,255,0.92)',
+  glassSoft: 'rgba(255,255,255,0.5)',
+  /** the dashed ghost a dragged tile leaves at its origin */
+  ghostFill: 'rgba(250,250,250,0.6)',
 
   /** text, primary buttons, focus tiles, today's header cell */
   ink: '#171717',
@@ -41,6 +48,8 @@ export const N = {
   lineSoft: 'rgba(229,229,229,0.45)',
   /** a line that has to read on white at a glance (inputs, outlines) */
   lineStrong: '#D4D4D4',
+  /** the inset edge of a routine tile, on its grey hatch */
+  lineInset: 'rgba(0,0,0,0.08)',
 
   /**
    * The one accent. Strokes and text only — never an area (user, 2026-10-01).
@@ -56,6 +65,10 @@ export const N = {
 
   /** wash under a hovered row/button */
   hover: 'rgba(23,23,23,0.04)',
+  /** a hovered primary (ink) button */
+  inkHover: '#262626',
+  /** wash under a hovered control on an ink surface (the toast) */
+  hoverOnInk: 'rgba(255,255,255,0.1)',
   pressed: 'rgba(23,23,23,0.07)',
   /** behind sheets and modals */
   scrim: 'rgba(10,10,10,0.28)',
@@ -137,11 +150,28 @@ const hatch = (a: number, gap: number): ViewStyle =>
     default: {},
   }) as ViewStyle;
 
+const hatchLight = (a: number, gap: number): ViewStyle =>
+  Platform.select({
+    web: {
+      backgroundImage: `repeating-linear-gradient(-45deg, rgba(255,255,255,${a}) 0px, rgba(255,255,255,${a}) 1px, transparent 1px, transparent ${gap}px)`,
+    } as unknown as ViewStyle,
+    default: {},
+  }) as ViewStyle;
+
 export const HATCH = {
+  /** white hatch over a solid tile: routine / break (§12) */
+  onSolid: hatchLight(0.22, 6),
   ground: hatch(0.02, 8),
   off: hatch(0.035, 6),
   tile: hatch(0.05, 5),
 } as const;
+
+/**
+ * A tile that ended before now (spec §3.3: 55%). An ink tile keeps more: at
+ * 55% its white title sits on mid-grey at 4:1 and the focus block stops reading
+ * as the heaviest thing on the grid; at 70% it is 6.6:1 and still unmistakably ink.
+ */
+export const PAST = { light: 0.55, onInk: 0.7 } as const;
 
 /* ───────────────────────── motion ───────────────────────── */
 
@@ -165,18 +195,18 @@ export const TRANSITION = Platform.select({
 /* ───────────────────────── categories ───────────────────────── */
 
 /**
- * Category is printed on the tile's meta line, not painted. Colour is
- * deliberately absent for now (user, 2026-10-01: "in the future we can add
- * colors"). When it comes back it is one `color` per row here; KPI bars and the
- * legend already read it, so no component has to change.
+ * Category colours — solids (docs/calendar-spec.md §12). They replace the black
+ * and grey tiles: focus, routine and break are drawn as the solid with white
+ * text. Every solid carries white text at ≥ 4.5:1. The white tiles (event,
+ * task, proposal) keep their B shapes and show the colour as a small square.
  */
 export type CatKey = 'deep' | 'design' | 'research' | 'sync' | 'admin';
 export const CATS: Record<CatKey, { label: string; color: string }> = {
-  deep: { label: 'Deep work', color: N.ink },
-  design: { label: 'Design', color: '#525252' },
-  research: { label: 'Research', color: '#737373' },
-  sync: { label: 'Meetings', color: '#A3A3A3' },
-  admin: { label: 'Admin', color: '#D4D4D4' },
+  deep: { label: 'Deep work', color: '#2563EB' },
+  sync: { label: 'Meetings', color: '#7C3AED' },
+  design: { label: 'Design', color: '#BE185D' },
+  research: { label: 'Research', color: '#0F766E' },
+  admin: { label: 'Admin', color: '#A16207' },
 };
 export const CAT_KEYS = Object.keys(CATS) as CatKey[];
 
@@ -199,6 +229,9 @@ export const MIN_TILE_W = 64;
 
 /** Your hours, until the user sets them (spec §5). */
 export const DEFAULT_WINDOW = { start: 6, end: 22 } as const;
+
+/** the row pinned above / below the hours that holds "↑ 1 before 06:00" chips */
+export const EDGE_ROW_H = 30;
 
 export const GUTTER = 56;
 export const GUTTER_PHONE = 42;
