@@ -101,6 +101,7 @@ export function EventBlock({
           it.cutBottom && styles.cutBottom,
           tiny && styles.tileTiny,
           state.past && !state.dragging && styles.past,
+          ev.faded && styles.faded,
           lifted && [styles.lifted, SHADOW.md],
           !state.ghost && state.selected && (p.dark ? styles.selectedOnDark : styles.selected),
           !state.ghost && state.clash && styles.clash,
@@ -217,6 +218,8 @@ const styles = StyleSheet.create({
   selected: { outlineColor: N.ink, outlineWidth: 2, outlineStyle: 'solid', outlineOffset: 2 } as ViewStyle,
   selectedOnDark: { outlineColor: N.ink, outlineWidth: 2, outlineStyle: 'solid', outlineOffset: 2 } as ViewStyle,
   clash: { outlineColor: N.accent, outlineWidth: 1, outlineStyle: 'solid', outlineOffset: 1 } as ViewStyle,
+  // a block Plan with AI is proposing to move: its old place, fading out
+  faded: { opacity: 0.3 },
   dragging: { opacity: 0.96 },
   ghost: {
     borderWidth: 1,

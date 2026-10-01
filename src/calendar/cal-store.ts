@@ -41,6 +41,7 @@ let loadedFromServer = false;
  * report success, so every gesture can be exercised without an account.
  */
 let preview = false;
+export const isPreview = () => preview;
 export function startPreview(list: CalEvent[]) {
   preview = true;
   loadedFromServer = true;

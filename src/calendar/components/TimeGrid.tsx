@@ -159,6 +159,7 @@ export function TimeGrid({
   onPickDay,
   selectedId,
   clashIds,
+  reveal,
 }: {
   days: Date[];
   events: CalEvent[];
@@ -172,6 +173,8 @@ export function TimeGrid({
   /** the event whose detail is open */
   selectedId?: number | null;
   clashIds?: Set<number>;
+  /** scroll so this minute of this day is in view (once per new value) */
+  reveal?: { date: string; min: number } | null;
 }) {
   const hours = useHours();
   const { isPhone } = useResponsive();
@@ -223,6 +226,16 @@ export function TimeGrid({
     // Only on a new period or a new window — not on every event change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isoDays.join(), ws, we]);
+
+  // Bring a minute into view when asked (Plan with AI drafts appearing off-screen).
+  const revealKey = reveal ? `${reveal.date}@${reveal.min}` : '';
+  useEffect(() => {
+    if (!reveal || !isoDays.includes(reveal.date)) return;
+    const y = Math.max(0, (reveal.min / 60 - 0.5 - ws) * ROW);
+    const t = setTimeout(() => scroller.current?.scrollTo({ y, animated: true }), 80);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revealKey, isoDays.join(), ws]);
 
   // Phone week: land on the selected day, not always Monday.
   useEffect(() => {
@@ -361,6 +374,8 @@ export function TimeGrid({
 
   /** Why a tile cannot be dragged, or null if it can. */
   const lockOf = (it: LaidBlock): string | null => {
+    if (it.ev.draft) return 'A draft from Plan with AI — approve or change it in the chat';
+    if (it.ev.faded) return 'Plan with AI is moving this — approve or change it in the chat';
     if (it.ev.imported) return 'From Google Calendar — change it there';
     if (it.cutTop || it.cutBottom) return 'Runs past your hours — edit it to move it';
     if (it.ev.endDate) return 'Spans midnight — edit it to move it';

@@ -149,7 +149,12 @@ export function laidOut(
   const flush = () => {
     if (!cluster.length) return;
     const ends: number[] = [];
-    for (const it of cluster) {
+    // Plan with AI drafts take the first columns, so they are never the ones
+    // folded into "+n" — they are what the person is deciding on right now.
+    const order = cluster.some((it) => it.ev.draft)
+      ? [...cluster.filter((it) => it.ev.draft), ...cluster.filter((it) => !it.ev.draft)]
+      : cluster;
+    for (const it of order) {
       let c = ends.findIndex((e) => e <= it.s);
       if (c === -1) {
         c = ends.length;

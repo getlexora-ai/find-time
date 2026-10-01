@@ -13,12 +13,14 @@ export function DayView({
   events,
   selectedId,
   clashIds,
+  reveal,
 }: {
   state: CalState;
   actions: CalActions;
   events: CalEvent[];
   selectedId?: number | null;
   clashIds?: Set<number>;
+  reveal?: { date: string; min: number } | null;
 }) {
   const dayIso = iso(state.selected);
   const days = useMemo(() => [fromIso(dayIso)], [dayIso]);
@@ -32,6 +34,7 @@ export function DayView({
         fill
         selectedId={selectedId}
         clashIds={clashIds}
+        reveal={reveal}
       />
     </View>
   );

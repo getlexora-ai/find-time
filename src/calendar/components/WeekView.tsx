@@ -21,12 +21,14 @@ export function WeekView({
   events,
   selectedId,
   clashIds,
+  reveal,
 }: {
   state: CalState;
   actions: CalActions;
   events: CalEvent[];
   selectedId?: number | null;
   clashIds?: Set<number>;
+  reveal?: { date: string; min: number } | null;
 }) {
   const { isDesktop, isPhone, width } = useResponsive();
   // Keyed on the date, not the Date object: a fresh `start` every render made
@@ -55,6 +57,7 @@ export function WeekView({
         colWidth={colWidth}
         selectedId={selectedId}
         clashIds={clashIds}
+        reveal={reveal}
         focusIndex={Math.max(0, days.findIndex((d) => sameDay(d, state.selected)))}
         onPickDay={(d) => {
           actions.pick(iso(d));

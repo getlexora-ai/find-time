@@ -85,6 +85,28 @@ export const rgba = (hex: string, a: number) => {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 };
 
+/**
+ * The Ask panel — the dark "terminal" card from the B artboard (Plan with AI v2).
+ * The one dark surface in the calendar, so the conversation reads as a separate
+ * instrument beside the grid.
+ */
+export const TERM = {
+  bg: '#111111',
+  head: '#1A1A1A',
+  line: 'rgba(255,255,255,0.08)',
+  card: '#181818',
+  cardLine: '#333333',
+  bubble: '#262626',
+  text: '#FFFFFF',
+  soft: '#D4D4D4',
+  muted: '#A3A3A3',
+  faint: '#737373',
+  /** B's prompt chevron and done ticks */
+  ok: '#4ADE80',
+  /** B's "waiting for your OK" label — accent as text, never a fill */
+  wait: '#FDBA74',
+} as const;
+
 /* ───────────────────────── type ───────────────────────── */
 
 export const SANS = Platform.select({

@@ -46,6 +46,10 @@ export type CalEvent = {
    * the calendar shows those read-only (src/lib/synced-fields.ts).
    */
   imported?: boolean;
+  /** UI only: a Plan with AI draft waiting for Approve (never saved) */
+  draft?: boolean;
+  /** UI only: this block has a pending move — drawn faded at its old time */
+  faded?: boolean;
   /** Source calendar (calendars.id). Absent = Find Time's own block. */
   calendarId?: string;
   /** Google all-day event — drawn in the all-day lane, never on the hours. */

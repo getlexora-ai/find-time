@@ -5,7 +5,9 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { syncNow, useAccounts } from './account-store';
 import { useCalEvents } from './cal-store';
 import { addDays, fromIso, fromMin, iso, MO, startOfWeek, today, WD, wdIndex } from './cal-date';
-import { AiPanel } from './components/AiPanel';
+import { AgentPanel } from './agent/AgentPanel';
+import { draftsOf, useAgent } from './agent/store';
+import { hashId } from './api-adapter';
 import { CommandBar } from './components/CommandBar';
 import { ComposeSheet, firstFree } from './components/ComposeSheet';
 import { DayView } from './components/DayView';
@@ -122,9 +124,57 @@ export function CalendarScreen() {
     () => all.filter((e) => !(e.calendarId && offCals.has(e.calendarId))),
     [all, offCals],
   );
+  /*
+   * Plan with AI drafts: while changes wait for Approve, their blocks are drawn
+   * on the grid as proposals, and a block being moved is drawn faded at its
+   * old time. Nothing here is saved — it is the card in the panel, in place.
+   */
+  const agent = useAgent();
+  const drafts = useMemo(() => draftsOf(agent), [agent]);
+  const withDrafts = useMemo(() => {
+    if (!drafts.length) return shown;
+    const moving = new Set(drafts.flatMap((d) => (d.replaces ? [hashId(d.replaces)] : [])));
+    const ghosts: CalEvent[] = drafts.map((d, i) => ({
+      id: -1_000_000 - i,
+      date: d.date,
+      start: d.start,
+      end: d.end,
+      title: d.title,
+      cat: d.category,
+      kind: 'ai',
+      project: '',
+      notes: '',
+      draft: true,
+    }));
+    return [...shown.map((e) => (moving.has(e.id) ? { ...e, faded: true } : e)), ...ghosts];
+  }, [shown, drafts]);
+  // When a plan appears, go to it: its week, and its first hour in view.
+  const firstDraft = useMemo(
+    () => [...drafts].sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start))[0] ?? null,
+    [drafts],
+  );
+  const reveal = useMemo(
+    () => (firstDraft ? { date: firstDraft.date, min: Number(firstDraft.start.slice(0, 2)) * 60 + Number(firstDraft.start.slice(3)) } : null),
+    [firstDraft],
+  );
+  // A new plan moves the grid to its week (state adjusted during render, the
+  // React pattern for "reset when an input changes" — no effect, no flicker).
+  const draftKey = drafts.map((d) => d.date + d.start).join();
+  const [seenDraftKey, setSeenDraftKey] = useState('');
+  if (draftKey !== seenDraftKey) {
+    setSeenDraftKey(draftKey);
+    if (firstDraft) {
+      const d = fromIso(firstDraft.date);
+      const inView =
+        state.view === 'week'
+          ? iso(startOfWeek(state.cursor)) === iso(startOfWeek(d))
+          : iso(state.selected) === firstDraft.date;
+      if (!inView) setState((st) => ({ ...st, cursor: d, selected: new Date(d) }));
+    }
+  }
   const events = useMemo(
-    () => (hidden.size ? shown.filter((e) => !hidden.has(e.kind)) : shown),
-    [shown, hidden],
+    () => (hidden.size ? withDrafts.filter((e) => e.draft || !hidden.has(e.kind)) : withDrafts),
+    [withDrafts, hidden],
   );
   const toggleKind = useCallback(
     (k: EventKind) =>
@@ -263,9 +313,9 @@ export function CalendarScreen() {
 
   const grid =
     state.view === 'week' ? (
-      <WeekView state={state} actions={actions} events={events} selectedId={selectedId} clashIds={clashes.ids} />
+      <WeekView state={state} actions={actions} events={events} selectedId={selectedId} clashIds={clashes.ids} reveal={reveal} />
     ) : (
-      <DayView state={state} actions={actions} events={events} selectedId={selectedId} clashIds={clashes.ids} />
+      <DayView state={state} actions={actions} events={events} selectedId={selectedId} clashIds={clashes.ids} reveal={reveal} />
     );
 
   return (
@@ -289,6 +339,9 @@ export function CalendarScreen() {
             <KpiStrip k={kpis} onResolve={resolve} />
             <View style={styles.grid}>{grid}</View>
           </View>
+          {/* Desktop: the conversation docks beside the grid, so the drafts it
+              makes are visible on the week while you talk. */}
+          {ai && isDesktop && <AgentPanel docked onClose={() => setAi(null)} />}
         </View>
       </View>
 
@@ -344,24 +397,7 @@ export function CalendarScreen() {
           onOpen={(id) => actions.openEvent(id, list.anchor ?? undefined)}
         />
       )}
-      {ai && (
-        <AiPanel
-          key={ai.prefill ?? 'blank'}
-          prefill={ai.prefill}
-          onClose={() => setAi(null)}
-          onApplied={(firstISO, count, asked) => {
-            if (firstISO && count) {
-              const d = new Date(firstISO);
-              const day = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-              setState((s) => ({ ...s, view: 'week', cursor: day, selected: new Date(day) }));
-            }
-            if (!count) toast(asked ? 'Could not save those blocks — check your connection.' : 'Nothing to add');
-            else if (asked && count < asked) toast(`Only ${count} of ${asked} blocks saved — check your connection.`);
-            else toast(`${count} block${count > 1 ? 's' : ''} added to your calendar`);
-          }}
-          toast={toast}
-        />
-      )}
+      {ai && !isDesktop && <AgentPanel docked={false} onClose={() => setAi(null)} />}
       {filters && (
         <FilterSheet events={shown} hidden={hidden} onToggleKind={toggleKind} onClose={() => setFilters(false)} />
       )}
