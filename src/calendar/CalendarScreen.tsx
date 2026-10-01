@@ -5,7 +5,9 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { syncNow, useAccounts } from './account-store';
 import { useCalEvents } from './cal-store';
 import { addDays, fromIso, fromMin, iso, MO, startOfWeek, today, WD, wdIndex } from './cal-date';
-import { AgentPanel } from './agent/AgentPanel';
+import { ChatA } from './agent/ChatA';
+import { ChatB } from './agent/ChatB';
+import { ChatC } from './agent/ChatC';
 import { draftsOf, useAgent } from './agent/store';
 import { hashId } from './api-adapter';
 import { CommandBar } from './components/CommandBar';
@@ -199,6 +201,15 @@ export function CalendarScreen() {
   const [quick, setQuick] = useState<Slot | null>(null);
   const [list, setList] = useState<{ title: string; events: CalEvent[]; anchor: PointAnchor | null } | null>(null);
   const [ai, setAi] = useState<{ prefill?: string } | null>(null);
+  /**
+   * Which Plan with AI design is on screen while the user chooses between three
+   * (a: part of the calendar, b: the calendar is the chat, c: messaging app).
+   * `?chat=` on the web; b by default. Goes away once one is picked.
+   */
+  const [chat] = useState<'a' | 'b' | 'c'>(() => {
+    const q = Platform.OS === 'web' && typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('chat') : null;
+    return q === 'a' || q === 'c' ? q : 'b';
+  });
   const [picker, setPicker] = useState(false);
   const [filters, setFilters] = useState(false);
 
@@ -337,11 +348,24 @@ export function CalendarScreen() {
           )}
           <View style={[styles.main, !isDesktop && { paddingBottom: NAV_H + Math.max(10, insets.bottom) }]}>
             <KpiStrip k={kpis} onResolve={resolve} />
-            <View style={styles.grid}>{grid}</View>
+            <View style={styles.grid}>
+              {grid}
+              {/* Direction B: the prompt bar floats over the week itself. */}
+              {chat === 'b' && (
+                <ChatB
+                  expanded={!!ai}
+                  onExpand={() => setAi({})}
+                  onCollapse={() => setAi(null)}
+                  phone={!isDesktop}
+                  side={!firstDraft || state.view === 'day' ? 'center' : wdIndex(fromIso(firstDraft.date)) >= 3 ? 'left' : 'right'}
+                />
+              )}
+            </View>
           </View>
           {/* Desktop: the conversation docks beside the grid, so the drafts it
               makes are visible on the week while you talk. */}
-          {ai && isDesktop && <AgentPanel docked onClose={() => setAi(null)} />}
+          {ai && isDesktop && chat === 'a' && <ChatA docked onClose={() => setAi(null)} />}
+          {ai && isDesktop && chat === 'c' && <ChatC docked onClose={() => setAi(null)} />}
         </View>
       </View>
 
@@ -397,7 +421,8 @@ export function CalendarScreen() {
           onOpen={(id) => actions.openEvent(id, list.anchor ?? undefined)}
         />
       )}
-      {ai && !isDesktop && <AgentPanel docked={false} onClose={() => setAi(null)} />}
+      {ai && !isDesktop && chat === 'a' && <ChatA docked={false} onClose={() => setAi(null)} />}
+      {ai && !isDesktop && chat === 'c' && <ChatC docked={false} onClose={() => setAi(null)} />}
       {filters && (
         <FilterSheet events={shown} hidden={hidden} onToggleKind={toggleKind} onClose={() => setFilters(false)} />
       )}

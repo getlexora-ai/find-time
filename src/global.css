@@ -35,6 +35,12 @@ textarea:focus-visible {
   outline-color: #171717;
 }
 
+/* Chat composers draw their own box; a second focus outline inside it doubles the border. */
+#ft-calendar textarea[aria-label='Message']:focus-visible,
+#ft-calendar input[aria-label='Ask Find Time']:focus-visible {
+  outline: none;
+}
+
 /* Reference collapses every animation under reduced-motion (spec §5). */
 @media (prefers-reduced-motion: reduce) {
   *,
