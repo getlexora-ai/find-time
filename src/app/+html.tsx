@@ -35,7 +35,7 @@ export default function Root({ children }: PropsWithChildren) {
 
         <title>{META.title}</title>
         <meta name="description" content={META.description} />
-        <meta name="theme-color" content="#2047e6" />
+        <meta name="theme-color" content="#FAFAFA" />
         <link rel="canonical" href={`${SITE}/`} />
         <link rel="manifest" href="/site.webmanifest" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -61,14 +61,28 @@ export default function Root({ children }: PropsWithChildren) {
         {/* Disables body scrolling on web so a root <ScrollView> behaves natively. */}
         <ScrollViewStyleReset />
         <style dangerouslySetInnerHTML={{ __html: SHELL_CSS }} />
+        <script dangerouslySetInnerHTML={{ __html: MOTION_GUARD }} />
       </head>
       <body>{children}</body>
     </html>
   );
 }
 
-/** The blue ground, painted before the bundle evaluates (landing.html `body`). */
+/** The Nexus ground (src/calendar/tokens.ts `N.ground`), painted before the bundle evaluates. */
 const SHELL_CSS = `
-html, body, #root { background-color: #2047e6; }
+html, body, #root { background-color: #FAFAFA; }
 body { overflow-x: hidden; }
 `;
+
+/**
+ * Landing pre-paint guard (src/landing/dom/motion.ts). Adds `lp-motion` before
+ * first paint so the hero can start hidden and animate in without a flash of
+ * the finished page. If the motion module hasn't taken over within 4 s (JS
+ * failed, slow network), the class comes off and everything simply shows.
+ * Only `.lp` selectors use the class, so other routes are unaffected.
+ */
+const MOTION_GUARD = `(function(){try{
+if(location.pathname!=='/'||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+var d=document.documentElement;d.classList.add('lp-motion');
+setTimeout(function(){if(!window.__lpMotion)d.classList.remove('lp-motion')},4000);
+}catch(e){}})();`;

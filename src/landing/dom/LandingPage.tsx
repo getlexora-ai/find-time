@@ -1,358 +1,497 @@
 /**
  * Find Time — landing page (web).
  *
- * Plain React DOM — no React Native primitives — because this page is only ever
- * rendered on the web route (`src/app/index.web.tsx`); native takes a bare
- * redirect to `/app` (`src/app/index.tsx`) and never imports this file.
+ * Plain React DOM — no React Native primitives — because this page only ever
+ * renders on the web route (`src/app/index.web.tsx`); native redirects to
+ * `/app` and never imports this file.
  *
- * One animation only: the 3D week board in the hero (./engine), which mounts
- * into the `data-ft="…"` hooks below and narrates itself through the ask /
- * steps / result panel. Every other section is static markup. All copy comes
- * from `../copy.ts` (LANDING).
+ * Look: Nexus light monochrome, the calendar's own system (src/calendar/
+ * tokens.ts) — ink on a hatched paper ground, framed column, one orange stroke.
+ * The only colour is in the example week, exactly as the product draws it.
+ *
+ * Motion lives in ./motion (GSAP + ScrollTrigger + Lenis), loaded after mount.
+ * Everything here renders complete on the server and with JS off; split text
+ * keeps an unsplit copy for assistive tech. All copy comes from ../copy.
  */
-import { useEffect, useRef, useState } from 'react';
-import type { FormEvent, RefObject } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
+import type { FormEvent } from 'react';
+
 import './landing.css';
-import { mountLanding } from './engine';
 import { LANDING } from '../copy';
+import type { Motion } from './motion';
+import { readWeek } from './week-data';
+import { WeekCanvas } from './WeekCanvas';
 
 type Props = {
   /** Called with a validated email. Resolve on success, throw on failure. */
   onJoinWaitlist?: (email: string) => Promise<void>;
 };
 
-const FONT_HREF =
-  'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap';
+const { hero, manifesto, story, keeps, trust, insights, faq, final, footer } = LANDING;
 
-const { hero, demo, how, connectors, privacy, waitlist } = LANDING;
+/** Manifesto words, with `*…*` runs flagged as emphasis. */
+const MANIFESTO = (() => {
+  let on = false;
+  return manifesto.text.split(' ').map((raw) => {
+    const opens = raw.startsWith('*');
+    const closes = raw.endsWith('*');
+    if (opens) on = true;
+    const word = { text: raw.replace(/\*/g, ''), em: on };
+    if (closes) on = false;
+    return word;
+  });
+})();
+const MANIFESTO_PLAIN = manifesto.text.replace(/\*/g, '');
+
+/** Masked words for the rise-in. Screen readers get the sentence once. */
+function Words({ text }: { text: string }) {
+  const words = text.split(' ');
+  return (
+    <>
+      <span className="sr">{text}</span>
+      <span aria-hidden="true">
+        {words.map((w, i) => (
+          <Fragment key={i}>
+            <span className="w">
+              <span className="wi">{w}</span>
+            </span>
+            {i < words.length - 1 ? ' ' : ''}
+          </Fragment>
+        ))}
+      </span>
+    </>
+  );
+}
+
+/** Insights for the example week once it is planned and replanned (story step 5). */
+const WEEK = readWeek(4);
+const KPI_VALUE = {
+  focus: WEEK.focus / 60,
+  meet: WEEK.meet / 60,
+  ready: WEEK.ready / 60,
+  b2b: WEEK.b2b,
+} as const;
+const fmt = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1));
+const BAR_MAX = Math.max(...WEEK.days.map((d) => d.focus + d.meet + d.free));
 
 export default function LandingPage({ onJoinWaitlist }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const motionRef = useRef<Motion | null>(null);
   const emailRef = useRef<HTMLInputElement>(null);
+  const [stage, setStage] = useState(3);
+  const [form, setForm] = useState<'idle' | 'sending' | 'done' | 'invalid' | 'failed'>('idle');
 
-  // Web font (the 3D labels are painted with it too).
-  useEffect(() => {
-    if (document.getElementById('ft-landing-font')) return;
-    const link = document.createElement('link');
-    link.id = 'ft-landing-font';
-    link.rel = 'stylesheet';
-    link.href = FONT_HREF;
-    document.head.appendChild(link);
-  }, []);
-
-  // 3D engine: mount once, clean up on unmount (safe under React StrictMode).
+  // Motion loads after mount so nothing of it runs on the server.
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
-    return mountLanding(root);
+    let alive = true;
+    import('./motion').then(({ initMotion }) => {
+      if (!alive) return;
+      motionRef.current = initMotion(root, { onStage: setStage });
+    });
+    return () => {
+      alive = false;
+      motionRef.current?.destroy();
+      motionRef.current = null;
+    };
   }, []);
 
-  const scrollToSection = (name: string) => {
-    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    rootRef.current
-      ?.querySelector(`[data-section="${name}"]`)
-      ?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  const go = (section: string) => {
+    const el = rootRef.current?.querySelector(`[data-section="${section}"]`);
+    if (!el) return;
+    if (motionRef.current) motionRef.current.scrollTo(el);
+    else el.scrollIntoView({ block: 'start' });
   };
-  const goToWaitlist = () => {
-    scrollToSection('waitlist');
-    window.setTimeout(() => emailRef.current?.focus({ preventScroll: true }), 600);
+  const toWaitlist = () => {
+    go('join');
+    window.setTimeout(() => emailRef.current?.focus({ preventScroll: true }), 1300);
   };
 
+  const submit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const email = emailRef.current?.value.trim() ?? '';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setForm('invalid');
+      emailRef.current?.focus();
+      return;
+    }
+    setForm('sending');
+    try {
+      await onJoinWaitlist?.(email);
+      setForm('done');
+    } catch (err) {
+      setForm((err as Error)?.message === 'invalid_email' ? 'invalid' : 'failed');
+    }
+  };
+
+  const formMsg =
+    form === 'done' ? final.done : form === 'invalid' ? final.invalid : form === 'failed' ? final.failed : '';
+
   return (
-    <div className="ft-landing" ref={rootRef}>
-      <div className="wrap">
-        <header className="top">
-          <div className="logo">
-            <i />
-            FIND TIME
-          </div>
-          <nav className="links" aria-label="Sections">
+    <div className="lp" ref={rootRef}>
+      <a className="skip" href="#main">
+        Skip to content
+      </a>
+
+      {/* ── header ───────────────────────────────────────────── */}
+      <header className="hdr" data-header>
+        <div className="hdr-in">
+          <a className="brand" href="/" aria-label={`${LANDING.brand} — home`}>
+            <i className="brand-mark" aria-hidden="true" />
+            {LANDING.brand}
+          </a>
+          <nav className="hdr-nav" aria-label="Sections">
             {LANDING.nav.map((n) => (
-              <button key={n.section} type="button" onClick={() => scrollToSection(n.section)}>
+              <button key={n.section} type="button" onClick={() => go(n.section)}>
                 {n.label}
               </button>
             ))}
-            {/* A button, not an <a>, so it inherits the nav's existing styling. */}
-            <button type="button" onClick={() => window.location.assign('/login')}>
-              {LANDING.signIn}
-            </button>
           </nav>
-          <button className="btn-lime" type="button" onClick={goToWaitlist}>
-            {LANDING.headerCta}
-          </button>
-        </header>
-
-        {/* ================= HERO: what it is + the one animated example ================= */}
-        <section className="hero" data-section="top">
-          <div className="hero-copy">
-            <p className="eyebrow">{hero.eyebrow}</p>
-            <h1>{hero.title}</h1>
-            <p className="lede">{hero.body}</p>
-            <div className="cta-row">
-              <button className="btn-lime btn-cta" type="button" onClick={goToWaitlist}>
-                {hero.cta} <span aria-hidden="true">→</span>
-              </button>
-              <span className="cta-note">{hero.note}</span>
-            </div>
+          <div className="hdr-act">
+            <a className="link" href="/login">
+              {LANDING.signIn}
+            </a>
+            <button className="btn btn-ink btn-sm" type="button" onClick={toWaitlist}>
+              {LANDING.headerCta}
+            </button>
           </div>
+        </div>
+      </header>
 
-          <div className="demo">
-            <p className="demo-label">
-              <b>{demo.label}</b>
-              {demo.hint}
+      <main id="main">
+        {/* ── hero ───────────────────────────────────────────── */}
+        <section className="hero frame" data-hero data-section="top" aria-labelledby="hero-title">
+          <p className="kicker mono" data-hero-in>
+            <span className="dot" aria-hidden="true" />
+            {hero.kicker}
+          </p>
+          <h1 id="hero-title" className="display" data-split>
+            {hero.title.map((line, i) => (
+              <span key={i} className="line">
+                <Words text={line} />
+              </span>
+            ))}
+          </h1>
+          <div className="hero-foot">
+            <p className="lede" data-hero-in>
+              {hero.body}
             </p>
-            {/* example tabs are created by the engine */}
-            <div className="modes" role="tablist" aria-label="Example requests" data-ft="modes" />
-            <div className="stage stage-plan" data-ft="stage-plan">
-              {/* the engine inserts its <canvas> here */}
-              <div className="tags" data-ft="tags-plan" />
-              <div className="hud">
-                <span className="pill">{demo.week}</span>
-                <span className="pill live" data-ft="status">PLANNED</span>
-              </div>
-              <button className="replay" type="button" data-ft="replay">{demo.replay}</button>
-            </div>
-            <ul className="legend" aria-label="Legend">
-              {demo.legend.map((l) => (
-                <li key={l.kind}>
-                  <i data-k={l.kind} aria-hidden="true" />
-                  {l.label}
-                </li>
-              ))}
-            </ul>
-            <div className="narr">
-              <div className="ask">
-                <div className="k">
-                  <span>{demo.askLabel}</span>
-                  <span className="uses" data-ft="uses" />
-                </div>
-                <p data-ft="ask-text" aria-live="polite" />
-              </div>
-              <div className="result" data-ft="result">
-                <span className="ic">✓</span>
-                <span>
-                  <b>{demo.resultLabel}</b>
-                  <span data-ft="result-text" />
+            <div className="hero-cta" data-hero-in>
+              <button className="btn btn-ink btn-lg" type="button" onClick={toWaitlist} data-magnetic>
+                {hero.cta}
+                <span className="arr" aria-hidden="true">
+                  →
                 </span>
-              </div>
+              </button>
+              <button className="link link-quiet" type="button" onClick={() => go('story')}>
+                {hero.secondary}
+              </button>
             </div>
+            <p className="note mono" data-hero-in>
+              {hero.note}
+            </p>
+          </div>
+          <div className="hero-stage">
+            <WeekCanvas
+              stage={0}
+              label={hero.canvasLabel}
+              notes={hero.notes}
+              alt={hero.canvasAlt}
+              className="wk-hero"
+            />
           </div>
         </section>
 
-        {/* ================= HOW IT WORKS ================= */}
-        <section className="sec" data-section="how">
-          <p className="eyebrow">{how.eyebrow}</p>
-          <h2>{how.title}</h2>
-          <ol className="how">
-            {how.steps.map((s, i) => (
-              <li key={s.title}>
-                <span className="num">{String(i + 1).padStart(2, '0')}</span>
-                <h3>{s.title}</h3>
-                <p>{s.body}</p>
+        {/* ── manifesto ──────────────────────────────────────── */}
+        <section className="manifesto frame" aria-label={manifesto.label}>
+          <p className="label mono">{manifesto.label}</p>
+          <p className="mf" data-manifesto>
+            <span className="sr">{MANIFESTO_PLAIN}</span>
+            <span aria-hidden="true">
+              {MANIFESTO.map((w, i) => (
+                <Fragment key={i}>
+                  <span className={w.em ? 'mw em' : 'mw'}>{w.text}</span>
+                  {i < MANIFESTO.length - 1 ? ' ' : ''}
+                </Fragment>
+              ))}
+            </span>
+          </p>
+        </section>
+
+        {/* ── story ──────────────────────────────────────────── */}
+        <section className="story frame" data-section="story" aria-labelledby="story-title">
+          <div className="sec-head">
+            <p className="label mono">{story.label}</p>
+            <h2 id="story-title" className="h2" data-split>
+              <Words text={story.title} />
+            </h2>
+          </div>
+
+          <div className="story-grid">
+            <div className="story-stick">
+              <WeekCanvas stage={stage} label={`${story.canvasLabel} · step ${stage + 1} of 5`} />
+              <ul className="legend" aria-label="Legend">
+                {story.legend.map((l) => (
+                  <li key={l.kind}>
+                    <i className={`lg lg-${l.kind}`} aria-hidden="true" />
+                    {l.label}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <ol className="chapters">
+              {story.chapters.map((c, i) => (
+                <li
+                  key={c.n}
+                  className={`chapter${i === stage ? ' is-active' : ''}`}
+                  data-chapter={i}>
+                  <span className="ch-n mono">{c.n}</span>
+                  <h3 className="h3">{c.title}</h3>
+                  <p className="body">{c.body}</p>
+                  {'quote' in c && <blockquote className="say">{c.quote}</blockquote>}
+                  {'ask' in c && (
+                    <div className="ask" aria-label="Example question from Find Time">
+                      <span>{c.ask.q}</span>
+                      <span className="ask-opts">
+                        {c.ask.options.map((o) => (
+                          <span key={o} className="chip">
+                            {o}
+                          </span>
+                        ))}
+                      </span>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ol>
+          </div>
+        </section>
+
+        {/* ── what it keeps in mind ──────────────────────────── */}
+        <section className="keeps frame" aria-labelledby="keeps-title">
+          <div className="sec-head">
+            <p className="label mono">{keeps.label}</p>
+            <h2 id="keeps-title" className="h2" data-split>
+              <Words text={keeps.title} />
+            </h2>
+          </div>
+          <ul className="rows">
+            {keeps.rows.map((r) => (
+              <li key={r.n} className="row" data-row>
+                <i className="row-rule" aria-hidden="true" />
+                <span className="row-n mono row-in">{r.n}</span>
+                <h3 className="row-name row-in">{r.name}</h3>
+                <p className="row-body row-in">{r.body}</p>
+                <span className="row-spec mono row-in">{r.spec}</span>
               </li>
             ))}
-          </ol>
+          </ul>
         </section>
 
-        {/* ================= CONNECTORS ================= */}
-        <section className="sec" data-section="connectors">
-          <p className="eyebrow">{connectors.eyebrow}</p>
-          <h2>{connectors.title}</h2>
-          <p className="lede">{connectors.body}</p>
-          <div className="panel">
-            <ul className="conns">
-              {connectors.items.map((c) => (
-                <li className={'conn' + (c.required ? ' req' : '')} key={c.name}>
-                  <div className="conn-top">
-                    <h3>{c.name}</h3>
-                    <span className="badge">{c.required ? connectors.required : connectors.optional}</span>
-                  </div>
-                  <p className="apps">{c.apps}</p>
-                  <p className="does">{c.does}</p>
-                </li>
-              ))}
-            </ul>
+        {/* ── trust ──────────────────────────────────────────── */}
+        <section className="trust frame" data-section="trust" aria-labelledby="trust-title">
+          <div className="sec-head">
+            <p className="label mono">{trust.label}</p>
+            <h2 id="trust-title" className="h2" data-split>
+              <Words text={trust.title} />
+            </h2>
           </div>
-        </section>
-
-        {/* ================= PRIVACY ================= */}
-        <section className="sec" data-section="privacy">
-          <div className="vault">
-            <p className="eyebrow">{privacy.eyebrow}</p>
-            <h2>{privacy.title}</h2>
-            <p className="lede">{privacy.body}</p>
-
-            <figure className="eco" role="img" aria-label={privacy.diagramLabel}>
-              <div className="eco-in">
-                <span className="eco-tag">{privacy.inside}</span>
-                <div className="eco-flow">
-                  <div className="node">
-                    <b>{privacy.tools.name}</b>
-                    <span>{privacy.tools.sub}</span>
-                  </div>
-                  <div className="link">
-                    <span className="fwd">{privacy.toCore}</span>
-                    <span className="back">{privacy.toTools}</span>
-                  </div>
-                  <div className="node core">
-                    <b>{privacy.core.name}</b>
-                    <span>{privacy.core.sub}</span>
-                  </div>
-                  <div className="link">
-                    <span className="fwd">{privacy.toYou}</span>
-                    <span className="back">{privacy.fromYou}</span>
-                  </div>
-                  <div className="node">
-                    <b>{privacy.you.name}</b>
-                    <span>{privacy.you.sub}</span>
-                  </div>
+          <div className="trust-grid" data-rv-group>
+            {trust.items.map((t) => (
+              <article key={t.title} className="pledge" data-rv>
+                <div className="pledge-ui" aria-hidden="true">
+                  {t.ui === 'proposal' && (
+                    <div className="ui-proposal">
+                      <div className="ui-tile">
+                        <strong>{trust.uiText.proposalTitle.split(' · ')[0]}</strong>
+                        <span>{trust.uiText.proposalTitle.split(' · ')[1]}</span>
+                      </div>
+                      <div className="ui-actions">
+                        <span className="ui-btn ink">{trust.uiText.accept}</span>
+                        <span className="ui-btn">{trust.uiText.undo}</span>
+                      </div>
+                    </div>
+                  )}
+                  {t.ui === 'toggle' && (
+                    <div className="ui-toggle">
+                      <span>{trust.uiText.toggle}</span>
+                      <span className="sw">
+                        <i />
+                        <em className="mono">{trust.uiText.toggleState}</em>
+                      </span>
+                    </div>
+                  )}
+                  {t.ui === 'locked' && (
+                    <div className="ui-locked">
+                      <div className="ui-tile meet">
+                        <strong>{trust.uiText.lockedTitle.split(' · ')[0]}</strong>
+                        <span>{trust.uiText.lockedTitle.split(' · ')[1]}</span>
+                      </div>
+                      <span className="mono ui-note">
+                        <svg viewBox="0 0 16 16" width="12" height="12">
+                          <rect x="3" y="7" width="10" height="7" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+                          <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+                        </svg>
+                        {trust.uiText.lockedNote}
+                      </span>
+                    </div>
+                  )}
                 </div>
-              </div>
-              <div className="eco-wall">
-                <b>⊘</b>
-                <span>{privacy.wall}</span>
-              </div>
-              <div className="eco-out">
-                <span className="eco-tag bad">{privacy.outside.tag}</span>
-                <b>{privacy.outside.name}</b>
-                <span>{privacy.outside.sub}</span>
-              </div>
-            </figure>
+                <h3 className="h3">{t.title}</h3>
+                <p className="body">{t.body}</p>
+              </article>
+            ))}
+          </div>
+        </section>
 
-            <div className="pledges">
-              {privacy.pledges.map((p) => (
-                <div className="pledge" key={p.title}>
-                  <PledgeIcon kind={p.icon} />
-                  <h3>{p.title}</h3>
-                  <p>{p.body}</p>
+        {/* ── insights ───────────────────────────────────────── */}
+        <section className="insights frame" aria-labelledby="ins-title" data-insights>
+          <div className="ins-copy">
+            <p className="label mono">{insights.label}</p>
+            <h2 id="ins-title" className="h2" data-split>
+              <Words text={insights.title} />
+            </h2>
+            <p className="lede">{insights.body}</p>
+          </div>
+          <figure className="dash">
+            <figcaption className="dash-cap mono">
+              <span>{insights.sample}</span>
+              <span>Sep 14 – 18</span>
+            </figcaption>
+            <dl className="kpis">
+              {insights.kpis.map((k) => (
+                <div key={k.label} className="kpi">
+                  <dt>{k.label}</dt>
+                  <dd>
+                    <span data-count={fmt(KPI_VALUE[k.key])}>{fmt(KPI_VALUE[k.key])}</span>
+                    {k.unit && <small>{k.unit}</small>}
+                  </dd>
                 </div>
               ))}
+            </dl>
+            <div className="chart" role="img" aria-label={insights.chartAlt}>
+              <div className="chart-head">
+                <span className="mono">{insights.chartLabel}</span>
+                <ul className="chart-key" aria-hidden="true">
+                  {insights.series.map((s) => (
+                    <li key={s.key}>
+                      <i className={`seg-${s.key}`} />
+                      {s.label}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="bars" aria-hidden="true">
+                {WEEK.days.map((b) => (
+                  <div key={b.label} className="bar">
+                    <div className="bar-track">
+                      {b.away ? (
+                        <span className="bar-away mono">Away</span>
+                      ) : (
+                        <>
+                          <i className="bar-seg seg-free" style={{ height: `${(b.free / BAR_MAX) * 100}%` }} />
+                          <i className="bar-seg seg-meet" style={{ height: `${(b.meet / BAR_MAX) * 100}%` }} />
+                          <i className="bar-seg seg-focus" style={{ height: `${(b.focus / BAR_MAX) * 100}%` }} />
+                        </>
+                      )}
+                    </div>
+                    <span className="mono">{b.label}</span>
+                  </div>
+                ))}
+              </div>
             </div>
+          </figure>
+        </section>
+
+        {/* ── faq ────────────────────────────────────────────── */}
+        <section className="faq frame" data-section="faq" aria-labelledby="faq-title">
+          <div className="sec-head">
+            <p className="label mono">{faq.label}</p>
+            <h2 id="faq-title" className="h2" data-split>
+              <Words text={faq.title} />
+            </h2>
+          </div>
+          <div className="qa" data-rv-group>
+            {faq.items.map((f) => (
+              <details key={f.q} data-rv>
+                <summary>
+                  {f.q}
+                  <i aria-hidden="true" />
+                </summary>
+                <p>{f.a}</p>
+              </details>
+            ))}
           </div>
         </section>
 
-        {/* ================= WAITLIST ================= */}
-        <section className="sec" data-section="waitlist">
-          <div className="early">
-            <div>
-              <p className="eyebrow">{waitlist.eyebrow}</p>
-              <h2>{waitlist.title}</h2>
-              <p className="lede">{waitlist.body}</p>
-            </div>
-            <WaitlistForm onJoinWaitlist={onJoinWaitlist} inputRef={emailRef} />
+        {/* ── final cta ──────────────────────────────────────── */}
+        <section className="final frame" data-section="join" aria-labelledby="final-title">
+          <h2 id="final-title" className="display display-sm" data-split>
+            {final.title.map((line, i) => (
+              <span key={i} className="line">
+                <Words text={line} />
+              </span>
+            ))}
+          </h2>
+          <div className="final-foot" data-rv-group>
+            <p className="lede" data-rv>
+              {final.body}
+            </p>
+            {form === 'done' ? (
+              <p className="form-done" role="status" data-rv>
+                <span className="tick" aria-hidden="true" />
+                {final.done}
+              </p>
+            ) : (
+              <form className="join" onSubmit={submit} noValidate data-rv>
+                <label htmlFor="lp-email" className="sr">
+                  {final.emailLabel}
+                </label>
+                <input
+                  id="lp-email"
+                  ref={emailRef}
+                  type="email"
+                  name="email"
+                  autoComplete="email"
+                  inputMode="email"
+                  placeholder={final.placeholder}
+                  aria-invalid={form === 'invalid' || undefined}
+                  aria-describedby="lp-email-msg"
+                  onInput={() => (form === 'invalid' || form === 'failed') && setForm('idle')}
+                  required
+                />
+                <button className="btn btn-ink" type="submit" disabled={form === 'sending'} data-magnetic>
+                  {form === 'sending' ? final.sending : final.button}
+                </button>
+              </form>
+            )}
+            <p id="lp-email-msg" className="form-msg" role="alert">
+              {form === 'invalid' || form === 'failed' ? formMsg : ''}
+            </p>
           </div>
         </section>
+      </main>
 
-        <footer>
-          <span>FIND TIME</span>
-          <span>{LANDING.footer.tagline}</span>
-          <nav className="legal" aria-label="Legal">
-            <a href="/privacy">PRIVACY</a>
-            <a href="/terms">TERMS</a>
+      {/* ── footer ─────────────────────────────────────────────── */}
+      <footer className="ftr">
+        <div className="ftr-row frame">
+          <span className="mono">{footer.copyright}</span>
+          <nav aria-label="Footer">
+            {footer.links.map((l) => (
+              <a key={l.href} className="link" href={l.href}>
+                {l.label}
+              </a>
+            ))}
           </nav>
-          <span>© 2026 FIND TIME</span>
-        </footer>
-      </div>
+        </div>
+        <div className="wordmark-wrap" aria-hidden="true">
+          <span className="wordmark" data-wordmark>
+            {LANDING.brand}
+          </span>
+        </div>
+      </footer>
     </div>
-  );
-}
-
-function PledgeIcon({ kind }: { kind: 'line' | 'cross' | 'slash' }) {
-  if (kind === 'line') {
-    return (
-      <svg width="28" height="14" viewBox="0 0 28 14" aria-hidden="true">
-        <line x1="1" y1="7" x2="27" y2="7" stroke="#CCFF00" strokeWidth="2" strokeLinecap="round" />
-      </svg>
-    );
-  }
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-      <circle cx="9" cy="9" r="7.5" fill="none" stroke="#FF4400" strokeWidth="1.6" />
-      <path
-        d={kind === 'cross' ? 'M6 6l6 6M12 6l-6 6' : 'M4 14L14 4'}
-        stroke="#FF4400"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-/* Its own component so typing never re-renders the page (the engine owns parts of the page's DOM). */
-type Status = 'idle' | 'invalid' | 'sending' | 'done' | 'error' | 'unwired';
-
-/** 'idle' is the consent line, rendered with real links in WaitlistForm. */
-const MESSAGES: Record<Exclude<Status, 'idle'>, string> = {
-  invalid: 'Enter an email address like you@example.com.',
-  sending: 'Adding you to the list…',
-  done: 'You’re on the list. We’ll email you when a spot opens.',
-  error: 'Couldn’t add you just now. Try again in a moment.',
-  unwired: 'Waitlist isn’t connected yet — pass onJoinWaitlist to <LandingPage />.',
-};
-
-function WaitlistForm({
-  onJoinWaitlist,
-  inputRef,
-}: {
-  onJoinWaitlist?: (email: string) => Promise<void>;
-  inputRef: RefObject<HTMLInputElement | null>;
-}) {
-  const [email, setEmail] = useState('');
-  const [status, setStatus] = useState<Status>('idle');
-
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    const value = email.trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-      setStatus('invalid');
-      inputRef.current?.focus();
-      return;
-    }
-    if (!onJoinWaitlist) {
-      setStatus('unwired');
-      return;
-    }
-    setStatus('sending');
-    try {
-      await onJoinWaitlist(value);
-      setStatus('done');
-      setEmail('');
-    } catch {
-      setStatus('error');
-    }
-  }
-
-  const tone = status === 'done' ? ' good' : ['invalid', 'error', 'unwired'].includes(status) ? ' bad' : '';
-
-  return (
-    <form className="wl-form" onSubmit={submit} noValidate>
-      <label className="sr" htmlFor="ft-wl-email">Email address</label>
-      <div className="wl-row">
-        <input
-          ref={inputRef}
-          id="ft-wl-email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          placeholder="you@example.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          aria-invalid={status === 'invalid'}
-          aria-describedby="ft-wl-status"
-        />
-        <button className="btn-lime" type="submit" disabled={status === 'sending'}>
-          {status === 'sending' ? 'ADDING…' : 'REQUEST ACCESS ↗'}
-        </button>
-      </div>
-      <p className={'wl-fine' + tone} id="ft-wl-status" aria-live="polite">
-        {status === 'idle' ? (
-          <>
-            By joining you accept our <a href="/privacy">Privacy Policy</a> and <a href="/terms">Terms</a>.
-          </>
-        ) : (
-          MESSAGES[status]
-        )}
-      </p>
-    </form>
   );
 }

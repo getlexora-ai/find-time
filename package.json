@@ -21,6 +21,8 @@
     "expo-status-bar": "~57.0.1",
     "expo-system-ui": "~57.0.3",
     "expo-web-browser": "~57.0.2",
+    "gsap": "^3.15.0",
+    "lenis": "^1.3.26",
     "pg": "^8.23.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
