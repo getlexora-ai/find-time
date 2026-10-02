@@ -28,7 +28,7 @@ export type RateRoute =
 const LIMITS: Record<RateRoute, Pair> = {
   // unauthenticated — spammable to junk; keep tight
   waitlist: { hour: 5, day: 20 },
-  // authed, burns Gemini tokens per hit
+  // authed, burns model tokens per hit
   'ai-find-time': { hour: 15, day: 40 },
   // authed, also burns tokens — but a *conversation* legitimately takes several
   // turns to land on the right slot, so the per-request cap has to be looser

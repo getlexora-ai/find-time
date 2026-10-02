@@ -24,7 +24,7 @@
  * decision in our code, user corrections have somewhere to land.
  */
 
-import type { ToolDef } from './gemini.ts';
+import type { ToolDef } from './llm.ts';
 import { CATEGORIES } from './preferences.ts';
 
 /**

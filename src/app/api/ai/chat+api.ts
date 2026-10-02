@@ -85,7 +85,7 @@ import { IMPORTED_ORIGIN } from '@/lib/synced-fields';
  * `rankFreeSlots` picks the actual times against the real calendar. What it
  * has understood so far rides on each assistant message as `parsed.draft`, so
  * "make it 90 minutes" or the answer to its own question continues the plan.
- * The model path (src/server/ai/gemini.ts, chat.ts tool definitions) is left
+ * The model path (src/server/ai/llm.ts, chat.ts tool definitions) is left
  * in place, unused, for when it comes back.
  */
 

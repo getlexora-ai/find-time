@@ -1,6 +1,6 @@
 import type { FindTimeProposal, FindTimeResponse } from '@/lib/api-types';
 import { requireUserId, unauthorized } from '@/server/auth/clerk';
-import { aiConfigured, extractWithTool } from '@/server/ai/gemini';
+import { aiConfigured, extractWithTool } from '@/server/ai/llm';
 import { blocksTime, findFreeSlots } from '@/server/ai/find-time';
 import { isConfigured } from '@/server/db';
 import { enforceRateLimit } from '@/server/rate-limit';
@@ -11,7 +11,7 @@ import { DEFAULT_ZONE, wallClockNow } from '@/server/wall-clock';
 /**
  * POST /api/ai/find-time — { prompt: string }.
  *
- * Gemini parses the sentence into bounds + preferences (never specific slots);
+ * The model parses the sentence into bounds + preferences (never specific slots);
  * `findFreeSlots` does the placement against the user's real calendar, so the
  * model cannot propose a double-book. Returns `FindTimeResponse`; the client
  * (AiPanel) shows the proposals and creates them via POST /api/events on Apply.
@@ -101,7 +101,7 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: 'Database not configured (DATABASE_URL missing).' }, { status: 503 });
   }
   if (!aiConfigured()) {
-    return Response.json({ error: 'AI is not configured (GEMINI_API_KEY missing).' }, { status: 503 });
+    return Response.json({ error: 'AI is not configured (OPENROUTER_API_KEY missing).' }, { status: 503 });
   }
 
   const userId = await requireUserId(request);
