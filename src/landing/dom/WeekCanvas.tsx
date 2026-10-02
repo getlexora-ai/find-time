@@ -1,10 +1,10 @@
 /**
- * The example week, drawn as a quiet calendar (src/calendar look: title + time
- * on soft tints, ink text, one orange stroke for proposals and clashes).
+ * The example week as flat DOM — the fallback for the 3D board (no WebGL,
+ * reduced motion, lost context) and the version crawlers and no-JS readers get.
  *
- * Stage-driven and pure: the story passes the stage its chapters are on and
- * CSS transitions carry the change, so the canvas reads the same with motion
- * off. `notes` draws the hero's pain labels on the week as it arrives.
+ * Quiet calendar look (src/calendar): title + time on soft tints, ink text, one
+ * orange stroke for proposals and clashes. Stage-driven and pure; CSS
+ * transitions carry the changes.
  */
 import type { CSSProperties } from 'react';
 
@@ -22,13 +22,16 @@ import {
   tileState,
 } from './week-data';
 
+export type ExtraTile = { id: string; day: number; s: number; e: number; title: string; state: 'proposal' | 'solid' };
+
 type Props = {
+  /** story stage 0–4 */
   stage: number;
   label: string;
-  /** hero only: point at the problems in the week */
-  notes?: { crumbs: string; b2b: string; homeless: string };
-  /** text alternative for the whole picture */
-  alt?: string;
+  /** the visitor's own blocks from the hero demo */
+  extra?: ExtraTile[];
+  /** hero: outline the gaps too short to use */
+  crumbs?: boolean;
   className?: string;
 };
 
@@ -39,16 +42,11 @@ const box = (s: number, e: number): CSSProperties => ({
   height: `${pct(e) - pct(s)}%`,
 });
 
-export function WeekCanvas({ stage, label, notes, alt, className }: Props) {
+export function WeekCanvas({ stage, label, extra = [], crumbs, className }: Props) {
   return (
-    <figure
-      className={`wk ${className ?? ''}`}
-      data-stage={stage}
-      role={alt ? 'img' : undefined}
-      aria-label={alt}>
+    <figure className={`wk ${className ?? ''}`} data-stage={stage}>
       <figcaption className="wk-cap">
         <span className="mono">{label}</span>
-        <span className="mono wk-range">Sep 14 – 18</span>
       </figcaption>
 
       <div className="wk-head" aria-hidden="true">
@@ -82,7 +80,7 @@ export function WeekCanvas({ stage, label, notes, alt, className }: Props) {
                 </span>
               ))}
 
-              {notes &&
+              {crumbs &&
                 CRUMBS.filter((c) => c.day === day).map((c) => (
                   <span key={`c${c.s}`} className="wk-crumb" style={box(c.s, c.e)} />
                 ))}
@@ -104,21 +102,24 @@ export function WeekCanvas({ stage, label, notes, alt, className }: Props) {
                   </div>
                 );
               })}
+
+              {extra
+                .filter((t) => t.day === day)
+                .map((t) => (
+                  <div
+                    key={t.id}
+                    className="wk-tile k-thesis"
+                    data-state={t.state}
+                    data-short={t.e - t.s <= 45 || undefined}
+                    style={box(t.s, t.e)}>
+                    <strong>{t.title}</strong>
+                    <span>
+                      {clock(t.s)}–{clock(t.e)}
+                    </span>
+                  </div>
+                ))}
             </div>
           ))}
-
-          {notes && (
-            <>
-              {/* under Monday's 10:30 / 16:00 crumbs and Tuesday's last call */}
-              <span className="wk-note n-crumbs" style={{ top: `${pct(11 * 60 + 45)}%` }}>
-                ↑ {notes.crumbs}
-              </span>
-              <span className="wk-note n-b2b" style={{ top: `${pct(19 * 60)}%` }}>
-                ↑ {notes.b2b}
-              </span>
-              <span className="wk-note n-homeless">{notes.homeless}</span>
-            </>
-          )}
         </div>
       </div>
     </figure>

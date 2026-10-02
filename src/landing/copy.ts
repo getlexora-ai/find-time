@@ -1,12 +1,14 @@
 /**
  * Landing strings — the one place to review and edit what the page says.
  *
- * LANDING is rendered by `dom/LandingPage.tsx`; the example week the hero and
- * the story draw lives in `dom/week-data.ts`. META is the `<Head>` on `/` and
- * the `+html.tsx` fallback; COOKIES is the notice mounted over the landing.
+ * LANDING is rendered by `dom/LandingPage.tsx`; the example week the board
+ * draws lives in `dom/week-data.ts`, and the hero demo runs the product's own
+ * parser and slot ranking in `dom/demo.ts`. META is the `<Head>` on `/` and the
+ * `+html.tsx` fallback; COOKIES is the notice mounted over the landing.
  *
  * Copy rules:
- * - Say plainly what the visitor is looking at; label every example as one.
+ * - Short. A headline and at most one line under it; let the board show it.
+ * - Label every example as one.
  * - Only claim what the product does today (Google Calendar, read first,
  *   opt-in write-back of focus blocks, proposals you accept, undo).
  * - No customers, metrics or quotes we don't have.
@@ -29,145 +31,117 @@ export const LANDING = {
   headerCta: 'Join the beta',
 
   hero: {
-    kicker: 'An AI planner for your calendar · Private beta',
+    kicker: 'AI week planner · Private beta',
     title: ['Plan the week', 'you meant to have.'],
-    body:
-      'Find Time reads your Google Calendar and puts your tasks, habits and focus time into the hours that are really free. Say what the week needs in one sentence. Nothing lands until you say yes.',
+    body: 'Say what your week needs. It finds the time.',
     cta: 'Join the private beta',
-    secondary: 'See how it works',
     note: 'Works with Google Calendar',
-    canvasLabel: 'Example · a week as it usually arrives',
-    canvasAlt:
-      'An example work week, Monday to Friday. Meetings are scattered across each day, leaving only short gaps. Labels point out 15- and 20-minute gaps between meetings that are too short to use, a run of back-to-back calls on Tuesday, and a ten-hour thesis draft with no time set aside for it.',
-    notes: {
-      crumbs: 'Gaps too short to use',
-      b2b: 'Back to back until 19:00',
-      homeless: 'Thesis draft, 10 h — no time for it yet',
-    },
+    boardLabel: 'Example week · Sep 14 – 18',
+    boardAlt:
+      'A 3D example work week, Monday to Friday, with meetings set into the board. Proposed blocks float above it until accepted, then drop into place.',
+  },
+
+  /** the hero's "type your week" box — runs the real parser on the example week */
+  demo: {
+    label: 'Try it on the example week',
+    placeholder: 'Gym 3 times, 1 hour, evenings',
+    inputLabel: 'What does your week need?',
+    submit: 'Plan it',
+    examples: [
+      'Gym 3 times, 1 hour, evenings',
+      'Launch brief by Friday, 6 hours',
+      'Spanish 3x a week, 45 min',
+      'Write the report',
+    ],
+    accept: 'Accept',
+    clear: 'Clear',
+    undo: 'Undo',
+    placed: (n: number, title: string) => `${n} × ${title}, proposed`,
+    partial: (n: number, of: number) => `${n} of ${of} fit around this week`,
+    none: 'Nothing fits around this week — try a shorter length.',
+    accepted: 'On the calendar.',
+    other: 'Try a task or a habit — like the examples.',
+    why: 'Why there:',
+    privacy: 'Runs in your browser. Nothing you type is sent anywhere.',
   },
 
   manifesto: {
     label: 'Why it exists',
     /** *starred* words settle in ink; the rest settle a step quieter */
-    text:
-      'Your calendar remembers everything you agreed to. It forgets everything you *meant to do.* Find Time gives those things *a time,* before the week fills up.',
+    text: 'Your calendar remembers what you agreed to. Find Time remembers *what you meant to do.*',
   },
 
   story: {
     label: 'How it works',
     title: 'One sentence in. A planned week out.',
-    canvasLabel: 'Example week',
-    legend: [
-      { kind: 'meet', label: 'Already on your calendar' },
-      { kind: 'free', label: 'Free time it found' },
-      { kind: 'proposal', label: 'Proposed, not yet booked' },
-      { kind: 'placed', label: 'Accepted' },
-    ],
     chapters: [
       {
         n: '01',
-        title: 'You say what the week needs.',
-        body: 'No forms and no dragging blocks around — just tell it, the way you would tell an assistant.',
-        quote:
-          '“Thesis draft by Thursday, about ten hours. Gym three times. I’m in Copenhagen from Thursday evening.”',
+        title: 'You say it.',
+        quote: '“Thesis by Thursday, about ten hours. Gym three times.”',
       },
       {
         n: '02',
-        title: 'It reads the week you already have.',
-        body: 'Meetings stay exactly where they are. It finds the stretches long enough for real work, and blocks out the trip before planning anything around it.',
+        title: 'It reads your week.',
+        body: 'Meetings and trips stay put. It finds the real gaps.',
       },
       {
         n: '03',
-        title: 'It proposes, and tells you what didn’t fit.',
-        body: 'Writing goes in the mornings and gym in the evenings — ten hours done before you leave. The third gym session doesn’t fit, because Tuesday’s calls run late, so it asks instead of squeezing it in.',
-        ask: { q: 'Third gym session?', options: ['Tue 07:00', 'Skip this week'] },
+        title: 'It proposes.',
+        body: 'Mornings for writing, evenings for gym.',
+        ask: { q: 'Third gym session?', options: ['Tue 07:00', 'Skip it'] },
       },
       {
         n: '04',
-        title: 'You say yes. It’s on your calendar.',
-        body: 'Accept the whole week or only part of it. One tap undoes it.',
+        title: 'You say yes.',
+        body: 'Proposals drop into place. One tap undoes it.',
       },
       {
         n: '05',
-        title: 'When the week changes, it replans.',
-        body: 'A 10:00 call lands on Wednesday’s writing session. Find Time offers Thursday 11:00 instead — still done before the flight.',
-        ask: { q: 'Move the hour you lost?', options: ['Thu 11:00', 'Leave it'] },
+        title: 'It replans.',
+        body: 'A call lands on Wednesday. The lost hour moves to Thursday.',
       },
     ],
   },
 
   keeps: {
     label: 'What it keeps in mind',
-    title: 'It plans the way you would, if you had the time.',
+    title: 'It plans the way you would.',
     rows: [
-      {
-        n: '01',
-        name: 'Deadlines',
-        body: 'Work lands before it’s due, not the night before.',
-        spec: 'Thesis · 10 h · due Thu',
-      },
-      {
-        n: '02',
-        name: 'Habits',
-        body: 'Three gym sessions a week stays three, even when Tuesday fills up.',
-        spec: 'Gym · 3× a week · evenings',
-      },
-      {
-        n: '03',
-        name: 'Your energy',
-        body: 'Hard work goes into your best hours, with a daily limit so no day is all deep work.',
-        spec: 'Deep work · mornings · 4 h a day max',
-      },
-      {
-        n: '04',
-        name: 'Time away',
-        body: 'Trips, holidays and travel time are blocked before anything is planned around them.',
-        spec: 'Copenhagen · Thu 18:00 → Tue',
-      },
-      {
-        n: '05',
-        name: 'What you moved',
-        body: 'Move a block yourself and it stays put the next time the week is replanned.',
-        spec: 'Pinned · Wed 14:00',
-      },
+      { n: '01', name: 'Deadlines', spec: 'Thesis · 10 h · due Thu' },
+      { n: '02', name: 'Habits', spec: 'Gym · 3× a week · evenings' },
+      { n: '03', name: 'Your energy', spec: 'Deep work · mornings · 4 h a day max' },
+      { n: '04', name: 'Time away', spec: 'Copenhagen · Thu 18:00 → Tue' },
+      { n: '05', name: 'What you moved', spec: 'Pinned · Wed 14:00' },
     ],
   },
 
   trust: {
     label: 'Your calendar stays yours',
-    title: 'You stay in charge of every hour.',
+    title: 'You stay in charge.',
+    hint: 'Try them',
     items: [
-      {
-        title: 'Nothing lands without a yes.',
-        body: 'Every plan arrives as a proposal, drawn dashed. Accept all of it, some of it or none — and undo with one tap.',
-        ui: 'proposal',
-      },
-      {
-        title: 'It reads first. It writes only if you ask.',
-        body: 'Find Time reads your Google Calendar. Writing back is a switch you turn on, and it adds only your focus blocks, as private busy events.',
-        ui: 'toggle',
-      },
-      {
-        title: 'Other people’s meetings never move.',
-        body: 'It plans around the time other people booked with you. It never moves their meetings to make room.',
-        ui: 'locked',
-      },
+      { title: 'Nothing lands without a yes.', body: 'Every plan is a proposal first.', ui: 'proposal' },
+      { title: 'Reads first. Writes only if you ask.', body: 'Only your focus blocks, as private busy events.', ui: 'toggle' },
+      { title: 'Other people’s meetings never move.', body: 'It plans around them.', ui: 'locked' },
     ],
     uiText: {
-      proposalTitle: 'Thesis · Mon 07:30–10:00',
+      proposalTitle: 'Thesis',
+      proposalTime: 'Mon 07:30–10:00',
       accept: 'Accept',
       undo: 'Undo',
       toggle: 'Add focus blocks to Google Calendar',
-      toggleState: 'Off',
-      lockedTitle: 'Client call · Tue 11:00',
-      lockedNote: 'Booked by someone else',
+      on: 'On',
+      off: 'Off',
+      lockedTitle: 'Client call',
+      lockedTime: 'Tue 11:00',
+      lockedNote: 'Booked by someone else — it stays',
     },
   },
 
   insights: {
     label: 'Insights',
-    title: 'See where the week actually went.',
-    body: 'A plain read of your week, built from the same calendar it plans on: how much was meetings, how much real focus time you got, and how much free time was too short to use.',
+    title: 'See where the week went.',
     sample: 'Sample week',
     /** values are read from the example week (dom/week-data.ts readWeek) */
     kpis: [
@@ -192,34 +166,30 @@ export const LANDING = {
     items: [
       {
         q: 'Which calendars does it work with?',
-        a: 'Google Calendar. Connect your account and Find Time reads the calendars you choose. Other calendar providers aren’t supported yet.',
+        a: 'Google Calendar. Other calendar providers aren’t supported yet.',
       },
       {
         q: 'Will it move my meetings?',
-        a: 'No. Meetings other people booked with you stay where they are. Find Time plans around them and only rearranges the blocks it proposed itself.',
+        a: 'No. Meetings other people booked with you stay where they are. Find Time only rearranges blocks it proposed itself.',
       },
       {
         q: 'Does it write to my Google Calendar?',
-        a: 'Only if you turn it on. When you do, it adds your focus blocks as private, busy events so colleagues see the time is taken. Nothing else is written.',
-      },
-      {
-        q: 'Do I need to type out my schedule first?',
-        a: 'No. It already sees your calendar. You tell it what the week needs — a deadline, a habit, a trip — in a sentence.',
+        a: 'Only if you turn it on — and then only your focus blocks, as private busy events.',
       },
       {
         q: 'What if everything doesn’t fit?',
-        a: 'It tells you what didn’t fit and why, and offers a choice — another time, a shorter session or skipping it — instead of squeezing it in.',
+        a: 'It tells you what didn’t fit and offers a choice, instead of squeezing it in.',
       },
       {
         q: 'Can I use it today?',
-        a: 'Find Time is in private beta. Leave your email and we’ll write once, when a place opens.',
+        a: 'It’s in private beta. Leave your email and we’ll write once, when a place opens.',
       },
     ],
   },
 
   final: {
     title: ['Give your week', 'a plan.'],
-    body: 'Find Time is in private beta. Leave your email and we’ll write once, when there’s a place for you.',
+    body: 'Private beta. One email when there’s a place for you.',
     placeholder: 'you@work.com',
     emailLabel: 'Email address',
     button: 'Join the beta',

@@ -60,20 +60,29 @@ export function initMotion(root: HTMLElement, { onStage }: Opts): Motion {
   cleanups.push(() => window.removeEventListener('scroll', onScroll));
 
   const ctx = gsap.context(() => {
-    /* ── story: chapter in view drives the canvas (always on) ── */
-    root.querySelectorAll<HTMLElement>('[data-chapter]').forEach((el) => {
+    /* ── the board follows the reader (always on: state, not decoration) ──
+       hero in view → the visitor's week; a chapter in view → that stage */
+    const hero = root.querySelector<HTMLElement>('[data-hero]');
+    const chapters = root.querySelectorAll<HTMLElement>('[data-chapter]');
+    const activate = (el: Element | null, stage: number) => {
+      onStage(stage);
+      chapters.forEach((c) => c.classList.toggle('is-active', c === el));
+    };
+    if (hero) {
+      ScrollTrigger.create({
+        trigger: hero,
+        start: 'top top',
+        end: 'bottom 45%',
+        onToggle: (self) => self.isActive && activate(null, -1),
+      });
+    }
+    chapters.forEach((el) => {
       const stage = Number(el.dataset.chapter);
       ScrollTrigger.create({
         trigger: el,
         start: 'top 62%',
         end: 'bottom 62%',
-        onToggle: (self) => {
-          if (!self.isActive) return;
-          onStage(stage);
-          root
-            .querySelectorAll('[data-chapter]')
-            .forEach((c) => c.classList.toggle('is-active', c === el));
-        },
+        onToggle: (self) => self.isActive && activate(el, stage),
       });
     });
 
@@ -85,15 +94,15 @@ export function initMotion(root: HTMLElement, { onStage }: Opts): Motion {
 
     gsap.defaults({ ease: 'power4.out', duration: 1 });
 
-    /* ── hero intro ───────────────────────────────────────────── */
-    const hero = root.querySelector('[data-hero]');
+    /* ── hero intro: words rise, then the copy, then the board ─── */
     if (hero) {
-      const tl = gsap.timeline({ delay: 0.15 });
-      tl.fromTo(
-        hero.querySelectorAll('h1 .wi'),
-        { y: 0, yPercent: 108 },
-        { y: 0, yPercent: 0, duration: 1.15, stagger: 0.06 },
-      )
+      gsap
+        .timeline({ delay: 0.15 })
+        .fromTo(
+          hero.querySelectorAll('h1 .wi'),
+          { y: 0, yPercent: 108 },
+          { y: 0, yPercent: 0, duration: 1.15, stagger: 0.06 },
+        )
         .fromTo(
           hero.querySelectorAll('[data-hero-in]'),
           { y: 22, autoAlpha: 0 },
@@ -101,31 +110,11 @@ export function initMotion(root: HTMLElement, { onStage }: Opts): Motion {
           '-=0.75',
         )
         .fromTo(
-          hero.querySelector('.wk'),
-          { clipPath: 'inset(8% 6% 92% 6% round 14px)', autoAlpha: 0 },
-          { clipPath: 'inset(0% 0% 0% 0% round 14px)', autoAlpha: 1, duration: 1.3, ease: 'expo.out' },
-          '-=0.6',
-        )
-        .fromTo(
-          hero.querySelectorAll('.wk-tile[data-state="solid"]'),
-          { y: 10, autoAlpha: 0 },
-          { y: 0, autoAlpha: 1, duration: 0.7, stagger: { each: 0.025, from: 'start' } },
-          '-=0.8',
-        )
-        .fromTo(
-          hero.querySelectorAll('.wk-crumb, .wk-note'),
-          { autoAlpha: 0 },
-          { autoAlpha: 1, duration: 0.6, stagger: 0.12, ease: 'power2.out' },
-          '-=0.2',
+          root.querySelector('[data-stage-wrap]'),
+          { autoAlpha: 0, y: 40 },
+          { autoAlpha: 1, y: 0, duration: 1.4, ease: 'expo.out' },
+          '-=1.1',
         );
-
-      // the week sinks back a touch as the page moves on
-      gsap.to(hero.querySelector('.hero-stage'), {
-        yPercent: -6,
-        scale: 0.97,
-        ease: 'none',
-        scrollTrigger: { trigger: hero, start: 'top top', end: 'bottom top', scrub: 1 },
-      });
     }
 
     /* ── headings: masked word rise ───────────────────────────── */

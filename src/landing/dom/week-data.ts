@@ -8,7 +8,7 @@
  *
  * Stages (story chapters):
  *   0  you say it        — the week as it is
- *   1  it reads          — free stretches found, the trip blocked
+ *   1  it reads          — free stretches found around meetings and the trip
  *   2  it proposes       — dashed proposals
  *   3  you accept        — proposals become blocks
  *   4  it replans        — a new call, the lost hour moved to Thursday
@@ -64,9 +64,9 @@ export const TILES: Tile[] = [
   { id: 'h1', day: 3, s: h(10), e: h(10, 30), title: 'Standup', kind: 'meet' },
   { id: 'h2', day: 3, s: h(14), e: h(15), title: 'Retro', kind: 'meet' },
 
-  // Stage 1 — the trip is blocked before anything is planned
-  { id: 'a1', day: 3, s: h(18), e: DAY_END, title: 'Copenhagen', kind: 'away', from: 1 },
-  { id: 'a2', day: 4, s: DAY_START, e: DAY_END, title: 'Copenhagen', kind: 'away', from: 1 },
+  // the trip, already on the calendar
+  { id: 'a1', day: 3, s: h(18), e: DAY_END, title: 'Copenhagen', kind: 'away' },
+  { id: 'a2', day: 4, s: DAY_START, e: DAY_END, title: 'Copenhagen', kind: 'away' },
 
   // Stage 2 — proposals: 4 × 2.5 h of writing, done before Thursday evening
   { id: 'p1', day: 0, s: h(7, 30), e: h(10), title: 'Thesis', kind: 'thesis', from: 2 },

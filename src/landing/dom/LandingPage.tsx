@@ -5,21 +5,25 @@
  * renders on the web route (`src/app/index.web.tsx`); native redirects to
  * `/app` and never imports this file.
  *
- * Look: Nexus light monochrome, the calendar's own system (src/calendar/
- * tokens.ts) — ink on a hatched paper ground, framed column, one orange stroke.
- * The only colour is in the example week, exactly as the product draws it.
+ * Look: Nexus light monochrome (src/calendar/tokens.ts). The top of the page is
+ * one world: a sticky 3D week board (./board) with the hero and the story
+ * scrolling past it. The hero lets the visitor type their own week and runs
+ * the product's parser and slot ranking on it (./demo); the story plans the
+ * example week chapter by chapter.
  *
- * Motion lives in ./motion (GSAP + ScrollTrigger + Lenis), loaded after mount.
- * Everything here renders complete on the server and with JS off; split text
- * keeps an unsplit copy for assistive tech. All copy comes from ../copy.
+ * Server render, no-JS, reduced motion and no-WebGL all get the flat DOM week
+ * (./WeekCanvas) instead of the board, with the same data. Motion lives in
+ * ./motion (GSAP + ScrollTrigger + Lenis). All copy comes from ../copy.
  */
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 
 import './landing.css';
 import { LANDING } from '../copy';
+import type { Board, BoardMark, BoardTile } from './board';
+import { type DemoBlock, type DemoResult, planSentence } from './demo';
 import type { Motion } from './motion';
-import { readWeek } from './week-data';
+import { CRUMBS, FREE, TILES, readWeek, tileEnd, tileState } from './week-data';
 import { WeekCanvas } from './WeekCanvas';
 
 type Props = {
@@ -27,21 +31,7 @@ type Props = {
   onJoinWaitlist?: (email: string) => Promise<void>;
 };
 
-const { hero, manifesto, story, keeps, trust, insights, faq, final, footer } = LANDING;
-
-/** Manifesto words, with `*…*` runs flagged as emphasis. */
-const MANIFESTO = (() => {
-  let on = false;
-  return manifesto.text.split(' ').map((raw) => {
-    const opens = raw.startsWith('*');
-    const closes = raw.endsWith('*');
-    if (opens) on = true;
-    const word = { text: raw.replace(/\*/g, ''), em: on };
-    if (closes) on = false;
-    return word;
-  });
-})();
-const MANIFESTO_PLAIN = manifesto.text.replace(/\*/g, '');
+const { hero, demo, manifesto, story, keeps, trust, insights, faq, final, footer } = LANDING;
 
 /** Masked words for the rise-in. Screen readers get the sentence once. */
 function Words({ text }: { text: string }) {
@@ -63,22 +53,66 @@ function Words({ text }: { text: string }) {
   );
 }
 
+/** Manifesto words, with `*…*` runs flagged as emphasis. */
+const MANIFESTO = (() => {
+  let on = false;
+  return manifesto.text.split(' ').map((raw) => {
+    if (raw.startsWith('*')) on = true;
+    const word = { text: raw.replace(/\*/g, ''), em: on };
+    if (raw.endsWith('*')) on = false;
+    return word;
+  });
+})();
+const MANIFESTO_PLAIN = manifesto.text.replace(/\*/g, '');
+
 /** Insights for the example week once it is planned and replanned (story step 5). */
 const WEEK = readWeek(4);
-const KPI_VALUE = {
-  focus: WEEK.focus / 60,
-  meet: WEEK.meet / 60,
-  ready: WEEK.ready / 60,
-  b2b: WEEK.b2b,
-} as const;
+const KPI_VALUE = { focus: WEEK.focus / 60, meet: WEEK.meet / 60, ready: WEEK.ready / 60, b2b: WEEK.b2b } as const;
 const fmt = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1));
 const BAR_MAX = Math.max(...WEEK.days.map((d) => d.focus + d.meet + d.free));
 
+/** scene: -1 = hero (the visitor's week), 0–4 = story stage */
+function boardTiles(scene: number, pending: DemoBlock[], accepted: DemoBlock[]): BoardTile[] {
+  const stage = Math.max(0, scene);
+  const out: BoardTile[] = [];
+  for (const t of TILES) {
+    const st = tileState(t, stage);
+    if (st === 'hidden') continue;
+    out.push({ id: t.id, day: t.day, s: t.s, e: tileEnd(t, stage), title: t.title, kind: t.kind, state: st });
+  }
+  if (scene < 0) {
+    for (const b of accepted) out.push({ ...b, kind: 'user', state: 'solid' });
+    for (const b of pending) out.push({ ...b, kind: 'user', state: 'proposal' });
+  }
+  return out;
+}
+function boardMarks(scene: number): BoardMark[] {
+  if (scene < 0) return CRUMBS.map((c) => ({ id: `c${c.day}-${c.s}`, ...c, kind: 'crumb' as const }));
+  if (scene === 1) return FREE.map((f) => ({ id: `f${f.day}-${f.s}`, ...f, kind: 'free' as const }));
+  return [];
+}
+
+type DemoState =
+  | { k: 'idle' }
+  | { k: 'plan'; text: string; title: string; asked: number; reason: string }
+  | { k: 'ask'; text: string; question: string; options: string[] }
+  | { k: 'accepted'; count: number }
+  | { k: 'other' };
+
 export default function LandingPage({ onJoinWaitlist }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const hostRef = useRef<HTMLDivElement>(null);
+  const boardRef = useRef<Board | null>(null);
   const motionRef = useRef<Motion | null>(null);
   const emailRef = useRef<HTMLInputElement>(null);
-  const [stage, setStage] = useState(3);
+  const askRef = useRef<HTMLInputElement>(null);
+
+  const [scene, setScene] = useState(-1);
+  const [gl, setGl] = useState(false);
+  const [pending, setPending] = useState<DemoBlock[]>([]);
+  const [accepted, setAccepted] = useState<DemoBlock[]>([]);
+  const [lastBatch, setLastBatch] = useState<string[]>([]);
+  const [demoState, setDemoState] = useState<DemoState>({ k: 'idle' });
   const [form, setForm] = useState<'idle' | 'sending' | 'done' | 'invalid' | 'failed'>('idle');
 
   // Motion loads after mount so nothing of it runs on the server.
@@ -88,7 +122,7 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
     let alive = true;
     import('./motion').then(({ initMotion }) => {
       if (!alive) return;
-      motionRef.current = initMotion(root, { onStage: setStage });
+      motionRef.current = initMotion(root, { onStage: setScene });
     });
     return () => {
       alive = false;
@@ -97,6 +131,97 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
     };
   }, []);
 
+  // The 3D board: only with WebGL and motion allowed; the DOM week otherwise.
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const probe = document.createElement('canvas');
+    if (!probe.getContext('webgl2') && !probe.getContext('webgl')) return;
+    let alive = true;
+    import('./board')
+      .then(({ mountBoard }) =>
+        mountBoard(host, {
+          offsetX: () => (window.innerWidth >= 900 ? 0.2 : 0),
+          onFail: () => {
+            boardRef.current?.dispose();
+            boardRef.current = null;
+            setGl(false);
+          },
+        }),
+      )
+      .then((b) => {
+        if (!alive) return b.dispose();
+        boardRef.current = b;
+        setGl(true);
+      })
+      .catch(() => setGl(false));
+    return () => {
+      alive = false;
+      boardRef.current?.dispose();
+      boardRef.current = null;
+    };
+  }, []);
+
+  // React owns what is on the board; the board animates the difference.
+  useEffect(() => {
+    const b = boardRef.current;
+    if (!b) return;
+    b.setTiles(boardTiles(scene, pending, accepted));
+    b.setMarks(boardMarks(scene));
+    b.setView(scene < 0 ? 'hero' : 'story');
+  }, [gl, scene, pending, accepted]);
+
+  /* ── hero demo ─────────────────────────────────────────────── */
+  const run = useCallback(
+    (text: string) => {
+      const t = text.trim();
+      if (!t) return;
+      const r: DemoResult = planSentence(t, accepted);
+      if (r.type === 'ask') {
+        setPending([]);
+        setDemoState({ k: 'ask', text: t, question: r.question, options: r.options });
+      } else if (r.type === 'plan') {
+        setPending(r.blocks);
+        setDemoState({ k: 'plan', text: t, title: r.title, asked: r.asked, reason: r.reason });
+      } else {
+        setPending([]);
+        setDemoState({ k: 'other' });
+      }
+    },
+    [accepted],
+  );
+  const onAsk = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    run(askRef.current?.value ?? '');
+  };
+  const tryExample = (text: string) => {
+    if (askRef.current) askRef.current.value = text;
+    run(text);
+  };
+  const answer = (option: string) => {
+    if (demoState.k !== 'ask') return;
+    const text = `${demoState.text}, ${option}`;
+    if (askRef.current) askRef.current.value = text;
+    run(text);
+  };
+  const acceptPlan = () => {
+    setAccepted((a) => [...a, ...pending]);
+    setLastBatch(pending.map((p) => p.id));
+    setDemoState({ k: 'accepted', count: pending.length });
+    setPending([]);
+  };
+  const undo = () => {
+    setAccepted((a) => a.filter((b) => !lastBatch.includes(b.id)));
+    setLastBatch([]);
+    setDemoState({ k: 'idle' });
+  };
+  const clear = () => {
+    setPending([]);
+    setDemoState({ k: 'idle' });
+  };
+
+  /* ── navigation + waitlist ─────────────────────────────────── */
   const go = (section: string) => {
     const el = rootRef.current?.querySelector(`[data-section="${section}"]`);
     if (!el) return;
@@ -107,7 +232,6 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
     go('join');
     window.setTimeout(() => emailRef.current?.focus({ preventScroll: true }), 1300);
   };
-
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const email = emailRef.current?.value.trim() ?? '';
@@ -124,9 +248,15 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
       setForm((err as Error)?.message === 'invalid_email' ? 'invalid' : 'failed');
     }
   };
+  const formMsg = form === 'invalid' ? final.invalid : form === 'failed' ? final.failed : '';
 
-  const formMsg =
-    form === 'done' ? final.done : form === 'invalid' ? final.invalid : form === 'failed' ? final.failed : '';
+  const stage = Math.max(0, scene);
+  const extra = scene < 0
+    ? [
+        ...accepted.map((b) => ({ ...b, state: 'solid' as const })),
+        ...pending.map((b) => ({ ...b, state: 'proposal' as const })),
+      ]
+    : [];
 
   return (
     <div className="lp" ref={rootRef}>
@@ -160,48 +290,169 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
       </header>
 
       <main id="main">
-        {/* ── hero ───────────────────────────────────────────── */}
-        <section className="hero frame" data-hero data-section="top" aria-labelledby="hero-title">
-          <p className="kicker mono" data-hero-in>
-            <span className="dot" aria-hidden="true" />
-            {hero.kicker}
-          </p>
-          <h1 id="hero-title" className="display" data-split>
-            {hero.title.map((line, i) => (
-              <span key={i} className="line">
-                <Words text={line} />
-              </span>
-            ))}
-          </h1>
-          <div className="hero-foot">
-            <p className="lede" data-hero-in>
-              {hero.body}
-            </p>
-            <div className="hero-cta" data-hero-in>
-              <button className="btn btn-ink btn-lg" type="button" onClick={toWaitlist} data-magnetic>
-                {hero.cta}
-                <span className="arr" aria-hidden="true">
-                  →
-                </span>
-              </button>
-              <button className="link link-quiet" type="button" onClick={() => go('story')}>
-                {hero.secondary}
-              </button>
+        {/* ── the world: sticky board + hero + story ────────────── */}
+        <div className="world" data-gl={gl || undefined}>
+          <div className="world-track">
+            <div className="world-stage" data-stage-wrap>
+              <div className="board-host" ref={hostRef} role="img" aria-label={hero.boardAlt} />
+              <div className="board-flat">
+                <WeekCanvas
+                  stage={stage}
+                  label={scene < 0 ? hero.boardLabel : `${hero.boardLabel} · step ${scene + 1} of 5`}
+                  extra={extra}
+                  crumbs={scene < 0}
+                />
+              </div>
+              <p className="board-tag mono" aria-hidden="true">
+                {scene < 0 ? hero.boardLabel : `Step ${scene + 1} of 5`}
+              </p>
             </div>
-            <p className="note mono" data-hero-in>
-              {hero.note}
-            </p>
           </div>
-          <div className="hero-stage">
-            <WeekCanvas
-              stage={0}
-              label={hero.canvasLabel}
-              notes={hero.notes}
-              alt={hero.canvasAlt}
-              className="wk-hero"
-            />
+
+          <div className="world-flow frame">
+            <section className="hero" data-hero data-section="top" aria-labelledby="hero-title">
+              <p className="kicker mono" data-hero-in>
+                <span className="dot" aria-hidden="true" />
+                {hero.kicker}
+              </p>
+              <h1 id="hero-title" className="display" data-split>
+                {hero.title.map((line, i) => (
+                  <span key={i} className="line">
+                    <Words text={line} />
+                  </span>
+                ))}
+              </h1>
+              <p className="lede" data-hero-in>
+                {hero.body}
+              </p>
+
+              <div className="demo" data-hero-in>
+                <p className="demo-label mono">{demo.label}</p>
+                <form className="ask-box" onSubmit={onAsk}>
+                  <label htmlFor="lp-ask" className="sr">
+                    {demo.inputLabel}
+                  </label>
+                  <input
+                    id="lp-ask"
+                    ref={askRef}
+                    type="text"
+                    autoComplete="off"
+                    placeholder={demo.placeholder}
+                    enterKeyHint="go"
+                  />
+                  <button className="btn btn-ink" type="submit" data-magnetic>
+                    {demo.submit}
+                  </button>
+                </form>
+                <div className="examples">
+                  {demo.examples.map((x) => (
+                    <button key={x} type="button" className="chip chip-btn" onClick={() => tryExample(x)}>
+                      {x}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="demo-out" aria-live="polite">
+                  {demoState.k === 'plan' && (
+                    <div className="out-row">
+                      <div className="out-text">
+                        <strong>
+                          {pending.length === 0
+                            ? demo.none
+                            : pending.length < demoState.asked
+                              ? demo.partial(pending.length, demoState.asked)
+                              : demo.placed(pending.length, demoState.title)}
+                        </strong>
+                        {pending.length > 0 && demoState.reason && (
+                          <span>
+                            {demo.why} {demoState.reason}
+                          </span>
+                        )}
+                      </div>
+                      {pending.length > 0 && (
+                        <div className="out-actions">
+                          <button className="btn btn-ink btn-sm" type="button" onClick={acceptPlan}>
+                            {demo.accept}
+                          </button>
+                          <button className="btn btn-ghost btn-sm" type="button" onClick={clear}>
+                            {demo.clear}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {demoState.k === 'ask' && (
+                    <div className="out-row">
+                      <div className="out-text">
+                        <strong>{demoState.question}</strong>
+                      </div>
+                      <div className="out-actions">
+                        {demoState.options.map((o) => (
+                          <button key={o} type="button" className="chip chip-btn" onClick={() => answer(o)}>
+                            {o}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {demoState.k === 'accepted' && (
+                    <div className="out-row">
+                      <div className="out-text">
+                        <strong>
+                          <span className="tick" aria-hidden="true" /> {demo.accepted}
+                        </strong>
+                      </div>
+                      <div className="out-actions">
+                        <button className="btn btn-ghost btn-sm" type="button" onClick={undo}>
+                          {demo.undo}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {demoState.k === 'other' && (
+                    <div className="out-row">
+                      <div className="out-text">
+                        <strong>{demo.other}</strong>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <p className="demo-note">{demo.privacy}</p>
+              </div>
+            </section>
+
+            <section className="story" data-section="story" aria-labelledby="story-title">
+              <div className="sec-head">
+                <p className="label mono">{story.label}</p>
+                <h2 id="story-title" className="h2" data-split>
+                  <Words text={story.title} />
+                </h2>
+              </div>
+              <ol className="chapters">
+                {story.chapters.map((c, i) => (
+                  <li key={c.n} className={`chapter${i === scene ? ' is-active' : ''}`} data-chapter={i}>
+                    <span className="ch-n mono">{c.n}</span>
+                    <h3 className="h3 ch-title">{c.title}</h3>
+                    {'body' in c && <p className="body">{c.body}</p>}
+                    {'quote' in c && <blockquote className="say">{c.quote}</blockquote>}
+                    {'ask' in c && (
+                      <div className="ask" aria-label="Example question from Find Time">
+                        <span>{c.ask.q}</span>
+                        <span className="ask-opts">
+                          {c.ask.options.map((o) => (
+                            <span key={o} className="chip">
+                              {o}
+                            </span>
+                          ))}
+                        </span>
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            </section>
           </div>
-        </section>
+        </div>
 
         {/* ── manifesto ──────────────────────────────────────── */}
         <section className="manifesto frame" aria-label={manifesto.label}>
@@ -219,56 +470,6 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
           </p>
         </section>
 
-        {/* ── story ──────────────────────────────────────────── */}
-        <section className="story frame" data-section="story" aria-labelledby="story-title">
-          <div className="sec-head">
-            <p className="label mono">{story.label}</p>
-            <h2 id="story-title" className="h2" data-split>
-              <Words text={story.title} />
-            </h2>
-          </div>
-
-          <div className="story-grid">
-            <div className="story-stick">
-              <WeekCanvas stage={stage} label={`${story.canvasLabel} · step ${stage + 1} of 5`} />
-              <ul className="legend" aria-label="Legend">
-                {story.legend.map((l) => (
-                  <li key={l.kind}>
-                    <i className={`lg lg-${l.kind}`} aria-hidden="true" />
-                    {l.label}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <ol className="chapters">
-              {story.chapters.map((c, i) => (
-                <li
-                  key={c.n}
-                  className={`chapter${i === stage ? ' is-active' : ''}`}
-                  data-chapter={i}>
-                  <span className="ch-n mono">{c.n}</span>
-                  <h3 className="h3">{c.title}</h3>
-                  <p className="body">{c.body}</p>
-                  {'quote' in c && <blockquote className="say">{c.quote}</blockquote>}
-                  {'ask' in c && (
-                    <div className="ask" aria-label="Example question from Find Time">
-                      <span>{c.ask.q}</span>
-                      <span className="ask-opts">
-                        {c.ask.options.map((o) => (
-                          <span key={o} className="chip">
-                            {o}
-                          </span>
-                        ))}
-                      </span>
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ol>
-          </div>
-        </section>
-
         {/* ── what it keeps in mind ──────────────────────────── */}
         <section className="keeps frame" aria-labelledby="keeps-title">
           <div className="sec-head">
@@ -283,14 +484,13 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
                 <i className="row-rule" aria-hidden="true" />
                 <span className="row-n mono row-in">{r.n}</span>
                 <h3 className="row-name row-in">{r.name}</h3>
-                <p className="row-body row-in">{r.body}</p>
                 <span className="row-spec mono row-in">{r.spec}</span>
               </li>
             ))}
           </ul>
         </section>
 
-        {/* ── trust ──────────────────────────────────────────── */}
+        {/* ── trust (try them) ───────────────────────────────── */}
         <section className="trust frame" data-section="trust" aria-labelledby="trust-title">
           <div className="sec-head">
             <p className="label mono">{trust.label}</p>
@@ -301,43 +501,13 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
           <div className="trust-grid" data-rv-group>
             {trust.items.map((t) => (
               <article key={t.title} className="pledge" data-rv>
-                <div className="pledge-ui" aria-hidden="true">
-                  {t.ui === 'proposal' && (
-                    <div className="ui-proposal">
-                      <div className="ui-tile">
-                        <strong>{trust.uiText.proposalTitle.split(' · ')[0]}</strong>
-                        <span>{trust.uiText.proposalTitle.split(' · ')[1]}</span>
-                      </div>
-                      <div className="ui-actions">
-                        <span className="ui-btn ink">{trust.uiText.accept}</span>
-                        <span className="ui-btn">{trust.uiText.undo}</span>
-                      </div>
-                    </div>
-                  )}
-                  {t.ui === 'toggle' && (
-                    <div className="ui-toggle">
-                      <span>{trust.uiText.toggle}</span>
-                      <span className="sw">
-                        <i />
-                        <em className="mono">{trust.uiText.toggleState}</em>
-                      </span>
-                    </div>
-                  )}
-                  {t.ui === 'locked' && (
-                    <div className="ui-locked">
-                      <div className="ui-tile meet">
-                        <strong>{trust.uiText.lockedTitle.split(' · ')[0]}</strong>
-                        <span>{trust.uiText.lockedTitle.split(' · ')[1]}</span>
-                      </div>
-                      <span className="mono ui-note">
-                        <svg viewBox="0 0 16 16" width="12" height="12">
-                          <rect x="3" y="7" width="10" height="7" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
-                          <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" strokeWidth="1.4" />
-                        </svg>
-                        {trust.uiText.lockedNote}
-                      </span>
-                    </div>
-                  )}
+                <div className="pledge-ui">
+                  {t.ui === 'proposal' && <TryProposal />}
+                  {t.ui === 'toggle' && <TryToggle />}
+                  {t.ui === 'locked' && <TryLocked />}
+                  <span className="try mono" aria-hidden="true">
+                    {trust.hint}
+                  </span>
                 </div>
                 <h3 className="h3">{t.title}</h3>
                 <p className="body">{t.body}</p>
@@ -353,7 +523,6 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
             <h2 id="ins-title" className="h2" data-split>
               <Words text={insights.title} />
             </h2>
-            <p className="lede">{insights.body}</p>
           </div>
           <figure className="dash">
             <figcaption className="dash-cap mono">
@@ -394,6 +563,9 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
                           <i className="bar-seg seg-free" style={{ height: `${(b.free / BAR_MAX) * 100}%` }} />
                           <i className="bar-seg seg-meet" style={{ height: `${(b.meet / BAR_MAX) * 100}%` }} />
                           <i className="bar-seg seg-focus" style={{ height: `${(b.focus / BAR_MAX) * 100}%` }} />
+                          <span className="bar-tip mono">
+                            {fmt(Math.round((b.focus / 60) * 10) / 10)} h focus · {fmt(Math.round((b.meet / 60) * 10) / 10)} h meetings
+                          </span>
                         </>
                       )}
                     </div>
@@ -468,7 +640,7 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
               </form>
             )}
             <p id="lp-email-msg" className="form-msg" role="alert">
-              {form === 'invalid' || form === 'failed' ? formMsg : ''}
+              {formMsg}
             </p>
           </div>
         </section>
@@ -492,6 +664,66 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
           </span>
         </div>
       </footer>
+    </div>
+  );
+}
+
+/* ── trust: small working pieces of the product ──────────────── */
+const ui = trust.uiText;
+
+function TryProposal() {
+  const [yes, setYes] = useState(false);
+  return (
+    <div className="ui-proposal">
+      <div className={`ui-tile${yes ? ' is-yes' : ''}`}>
+        <strong>{ui.proposalTitle}</strong>
+        <span>{ui.proposalTime}</span>
+      </div>
+      <div className="ui-actions">
+        <button type="button" className="ui-btn ink" onClick={() => setYes(true)} disabled={yes}>
+          {ui.accept}
+        </button>
+        <button type="button" className="ui-btn" onClick={() => setYes(false)} disabled={!yes}>
+          {ui.undo}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TryToggle() {
+  const [on, setOn] = useState(false);
+  return (
+    <button type="button" className="ui-toggle" role="switch" aria-checked={on} onClick={() => setOn((v) => !v)}>
+      <span>{ui.toggle}</span>
+      <span className="sw" data-on={on || undefined}>
+        <i />
+        <em className="mono">{on ? ui.on : ui.off}</em>
+      </span>
+    </button>
+  );
+}
+
+function TryLocked() {
+  const [nudge, setNudge] = useState(0);
+  return (
+    <div className="ui-locked">
+      <button
+        type="button"
+        key={nudge}
+        className={`ui-tile meet${nudge ? ' is-nudged' : ''}`}
+        onClick={() => setNudge((n) => n + 1)}
+        aria-label={`${ui.lockedTitle}, ${ui.lockedTime}. ${ui.lockedNote}`}>
+        <strong>{ui.lockedTitle}</strong>
+        <span>{ui.lockedTime}</span>
+      </button>
+      <span className={`mono ui-note${nudge ? ' is-on' : ''}`}>
+        <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+          <rect x="3" y="7" width="10" height="7" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+          <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+        </svg>
+        {ui.lockedNote}
+      </span>
     </div>
   );
 }
