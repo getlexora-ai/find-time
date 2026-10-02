@@ -56,7 +56,7 @@ export function AccountButton({ showName = false }: { showName?: boolean }) {
             labelIcon={<Icon name="calendar" size={14} color={N.ink2} />}
             open="calendars"
           />
-          {/* Back into setup (hours, best hours, deep work) — also the way back after "Finish later". */}
+          {/* Back into setup (hours, best hours, deep work) — also the way back after "Skip for now". */}
           <UserButton.Action
             label="Set up my week"
             labelIcon={<Icon name="target" size={14} color={N.ink2} />}

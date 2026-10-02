@@ -1,8 +1,8 @@
 /**
  * The preview, folded into one sticky line for narrow screens: deep work per
- * day as bars, meetings as a count. Pinned to the bottom of the viewport on
- * `/welcome` below 980 px (auth.css), so the effect of each answer is visible
- * without scrolling past the questions to the full week.
+ * day as bars, meetings as dots. Pinned under the header on `/welcome` below
+ * 980 px (auth.css), so the effect of each answer is visible without
+ * scrolling past the questions — and never covers Back / Continue.
  */
 import type { CSSProperties } from 'react';
 
@@ -21,13 +21,13 @@ export function FocusStrip({ blocks, work, showFocus, weekStart }: Props) {
   const maxMin = 6 * 60;
 
   return (
-    <div className="fs" role="status" aria-label={showFocus ? `${total} hours of deep work this week` : 'Your working week'}>
+    <div className="fs" role="status" aria-label={`${showFocus ? `${total} hours of deep work` : `${work.filter(Boolean).length} working days`}, ${meet.reduce((n, m) => n + m, 0)} meetings this week`}>
       <div className="fs-days" aria-hidden="true">
         {order.map((d) => (
           <span key={d} className="fs-day" data-off={!work[d]}>
             <i className="fs-bar" style={{ '--h': `${showFocus ? Math.min(1, focus[d] / maxMin) * 100 : 0}%` } as CSSProperties} />
             <b>{D[d]}</b>
-            {meet[d] ? <small>{meet[d]}</small> : <small>&nbsp;</small>}
+            <small>{'•'.repeat(Math.min(3, meet[d])) || '\u00a0'}</small>
           </span>
         ))}
       </div>

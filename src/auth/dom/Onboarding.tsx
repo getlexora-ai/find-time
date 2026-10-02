@@ -258,17 +258,18 @@ export default function Onboarding() {
     if (step < STEPS.length - 1) goTo(step + 1);
   }
 
-  async function connectGoogle() {
+  /** `returnTo: '/app'` is the finish screen's connect: setup is already saved, so nothing to resume. */
+  async function connectGoogle(returnTo: '/welcome' | '/app' = '/welcome') {
     if (busy) return;
     setBusy('connect');
     setError(null);
     track('calendar', 'connect');
     // Come back to the step after this one, with everything so far.
-    writeSaved(storeKey, { a, step: CAL + 1, changed: [...changed] });
+    if (returnTo === '/welcome') writeSaved(storeKey, { a, step: CAL + 1, changed: [...changed] });
     try {
       // Google times are converted with the saved zone: store this one first,
       // or a new account's first import uses the default zone.
-      if (!existing) {
+      if (!existing && returnTo === '/welcome') {
         await apiFetch('/api/calendar/settings', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -278,7 +279,7 @@ export default function Onboarding() {
       const res = await apiFetch('/api/auth/google/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ returnTo: '/welcome' }),
+        body: JSON.stringify({ returnTo }),
       });
       const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
       if (res.ok && data.url) {
@@ -306,7 +307,7 @@ export default function Onboarding() {
           ? // "Keep my settings": nothing to write
             { skip: true }
           : kind === 'skip'
-            ? // "Use defaults" / "Finish later": keep what was touched, plus this
+            ? // "Skip for now": keep what was touched, plus this
               // device's time zone and clock (never leave the server default)
               { answers: a, changed: [...new Set<Group>([...changed, 'prefs'])] }
             : // first-timers save everything; returning users only what they changed
@@ -371,10 +372,12 @@ export default function Onboarding() {
           </a>
           {!done ? (
             <button type="button" className="au-btn au-quiet" onClick={() => void submit('skip')} disabled={!!busy}>
-              {busy === 'skip' ? 'Saving…' : existing ? 'Keep my settings' : step === 0 && !changed.size ? 'Use defaults' : 'Finish later'}
+              {busy === 'skip' ? 'Saving…' : existing ? 'Keep my settings' : 'Skip for now'}
             </button>
           ) : null}
         </header>
+        {/* phones: the preview folded into a line pinned under the header */}
+        {!done ? <FocusStrip blocks={blocks} work={work} showFocus={showFocus} weekStart={a.weekStart} /> : null}
 
         <div className="au-body">
           {done ? (
@@ -384,12 +387,15 @@ export default function Onboarding() {
               real={real}
               gl={gl === true}
               headingRef={headingRef}
+              busy={busy === 'connect'}
+              error={error}
+              onConnect={() => void connectGoogle('/app')}
               onPlace={() => router.replace(`/app?ask=${encodeURIComponent(PLACE_DEEP_WORK)}`)}
               onOpen={() => router.replace('/app')}
             />
           ) : (
             <>
-              <p className="au-eyebrow">{existing ? 'Review your setup' : 'Step 3 of 3 · Shape your week'}</p>
+              <p className="au-eyebrow">{existing ? 'Review your setup' : 'Shape your week'}</p>
               <ol className="ob-rail" aria-label="Setup progress">
                 {STEPS.map((s, i) => (
                   <li key={s} data-state={i < step ? 'done' : i === step ? 'now' : 'next'}>
@@ -651,6 +657,11 @@ export default function Onboarding() {
                     <button type="submit" className="au-btn au-ink" disabled={!!busy} aria-busy={busy === 'finish'}>
                       {busy === 'finish' ? <i className="au-spin" aria-hidden="true" /> : null}
                       {existing ? 'Save changes' : 'Finish setup'}
+                      {busy === 'finish' ? null : (
+                        <span className="arr" aria-hidden="true">
+                          →
+                        </span>
+                      )}
                     </button>
                   ) : (
                     <button type="submit" className={`au-btn ${step === CAL && !real ? 'au-ghost' : 'au-ink'}`} disabled={busy === 'connect'}>
@@ -689,8 +700,8 @@ export default function Onboarding() {
             />
             <div className="mw-legend" aria-hidden="true">
               <span>
-                <i className="k-focus" />
-                {done ? 'Deep work, booked' : 'Deep work, proposed'}
+                <i className={done ? 'k-focus' : 'k-prop'} />
+                {done ? 'Deep work, ready to place' : 'Deep work, proposed'}
               </span>
               <span>
                 <i className="k-meet" />
@@ -723,7 +734,7 @@ export default function Onboarding() {
             </dl>
           </div>
         ) : null}
-        {gl !== true ? (
+        {gl === false ? (
           <MiniWeek
             title={showFocus ? `Best hours ${hourLabel(peak.from, a.clock24)}–${hourLabel(peak.to, a.clock24)}` : 'Working hours'}
             meta={`${hourLabel(a.start, a.clock24)}–${hourLabel(a.end, a.clock24)}`}
@@ -745,7 +756,6 @@ export default function Onboarding() {
         ) : null}
       </aside>
 
-      {!done ? <FocusStrip blocks={blocks} work={work} showFocus={showFocus} weekStart={a.weekStart} /> : null}
     </div>
   );
 }
@@ -836,6 +846,9 @@ function Done({
   gl,
   onPlace,
   onOpen,
+  onConnect,
+  busy,
+  error,
   headingRef,
 }: {
   a: OnboardingAnswers;
@@ -845,6 +858,9 @@ function Done({
   gl: boolean;
   onPlace: () => void;
   onOpen: () => void;
+  onConnect: () => void;
+  busy: boolean;
+  error: string | null;
   headingRef: HeadingRef;
 }) {
   const root = useRef<HTMLDivElement>(null);
@@ -920,18 +936,32 @@ function Done({
         <div>
           <dt>Deep work</dt>
           <dd>
-            {a.focusH} h a day, {a.hardWork === 'spread' ? 'spread out' : 'clustered'} · {focusWeek} h {real ? 'fits this week' : 'in the example week'}
+            {a.focusH} h a day, {a.hardWork === 'spread' ? 'spread' : 'clustered'}
+            <small>{focusWeek} h {real ? 'fits this week' : 'in the example week'}</small>
           </dd>
         </div>
         <div>
           <dt>Calendar</dt>
-          <dd>{real ? 'Google connected' : 'Not connected yet'}</dd>
+          <dd>
+            {real ? (
+              'Google connected'
+            ) : (
+              <button type="button" className="au-link-btn" onClick={onConnect} disabled={busy} aria-busy={busy}>
+                {busy ? 'Opening Google…' : 'Connect Google'}
+              </button>
+            )}
+          </dd>
         </div>
         <div>
           <dt>Time zone</dt>
           <dd>{a.timezone.replace(/_/g, ' ')}</dd>
         </div>
       </dl>
+      {error ? (
+        <p className="au-err" role="alert">
+          {error}
+        </p>
+      ) : null}
       <div className="ob-finish" data-a="cta">
         <button type="button" className="au-btn au-ink au-wide" onClick={onPlace}>
           Place my deep work

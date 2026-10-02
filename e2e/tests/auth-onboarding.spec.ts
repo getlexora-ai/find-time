@@ -68,10 +68,10 @@ test.describe('skipping', () => {
   const email = testEmail('skip');
   test.afterAll(async () => deleteClerkUser(email));
 
-  test('"Use defaults" finishes setup and keeps this device\'s time zone', async ({ page }) => {
+  test('"Skip for now" finishes setup and keeps this device\'s time zone', async ({ page }) => {
     await signUp(page, email);
     await expect(page).toHaveURL(/\/welcome/);
-    await page.getByRole('button', { name: 'Use defaults' }).click();
+    await page.getByRole('button', { name: 'Skip for now' }).click();
     await expect(page).toHaveURL(/\/app/);
     // A way back into setup exists.
     await page.goto('/welcome?redo=1');

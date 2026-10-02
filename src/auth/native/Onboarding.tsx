@@ -178,7 +178,7 @@ export default function NativeOnboarding() {
           <Txt style={s.brand}>Find Time</Txt>
           {!done ? (
             <Press onPress={() => void submit('skip')} disabled={!!busy} hoverBg={N.hover} style={s.quiet} accessibilityRole="button">
-              <Txt style={s.quietTxt}>{busy === 'skip' ? 'Saving…' : existing ? 'Keep my settings' : step === 0 && !changed.size ? 'Use defaults' : 'Finish later'}</Txt>
+              <Txt style={s.quietTxt}>{busy === 'skip' ? 'Saving…' : existing ? 'Keep my settings' : 'Skip for now'}</Txt>
             </Press>
           ) : null}
         </View>

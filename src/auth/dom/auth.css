@@ -1,8 +1,10 @@
 /* ==========================================================================
    Find Time — sign in, sign up, onboarding
    Same Nexus light language as the landing (src/landing/dom/landing.css):
-   #FAFAFA ground with the faint hatch, ink actions, one orange signal, the
+   #FAFAFA ground with the faint hatch, ink actions, the
    three-step "beautiful" shadow ramp, Google Sans Flex + JetBrains Mono.
+   Orange is the planner's signal only — the current step, your best hours and
+   proposals waiting for a yes. Errors are red; choices are ink.
    Everything is scoped under .au; CSS imported on web is global.
 
    Motion tokens (MengTo animation-systems): micro 160ms, state 240ms,
@@ -28,6 +30,9 @@ html:has(.au) body { height: auto !important; overflow: visible !important; }
   --accent: #ea580c;
   --accent-ink: #c2410c;
   --accent-t: #fdeee5;
+  --bad: #dc2626;
+  --bad-ink: #b91c1c;
+  --bad-t: #fef2f2;
   --deep: #2563eb;
   --deep-t: #dce6fc;
   --sync: #7c3aed;
@@ -100,11 +105,12 @@ html:has(.au) body { height: auto !important; overflow: visible !important; }
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  /* pinned, not centred: the heading stays put while each step's height changes */
+  justify-content: flex-start;
   width: 100%;
   max-width: 400px;
   margin: 0 auto;
-  padding: 48px 0;
+  padding: clamp(40px, 12vh, 120px) 0 48px;
 }
 .au-foot { font-size: 12.5px; color: var(--muted); text-align: center; }
 .au-foot a { color: var(--ink-2); }
@@ -134,7 +140,7 @@ html:has(.au) body { height: auto !important; overflow: visible !important; }
   transition: box-shadow var(--t-micro) var(--ease);
 }
 .au-input:focus-within { box-shadow: var(--sh-sm), 0 0 0 1.5px var(--ink); }
-.au-input[data-invalid='true'] { box-shadow: var(--sh-sm), 0 0 0 1.5px var(--accent); }
+.au-input[data-invalid='true'] { box-shadow: var(--sh-sm), 0 0 0 1.5px var(--bad); }
 .au-input input {
   flex: 1; min-width: 0; width: 100%; height: 100%;
   padding: 0 14px; border: 0; outline: 0; background: transparent;
@@ -154,11 +160,11 @@ html:has(.au) body { height: auto !important; overflow: visible !important; }
 
 .au-err {
   display: flex; gap: 8px; align-items: flex-start;
-  font-size: 13.5px; line-height: 1.45; color: var(--accent-ink);
-  padding: 10px 12px; border-radius: 10px; background: var(--accent-t);
+  font-size: 13.5px; line-height: 1.45; color: var(--bad-ink);
+  padding: 10px 12px; border-radius: 10px; background: var(--bad-t);
 }
 .au-err::before { content: '!'; font-weight: 700; font-family: var(--mono); }
-.au-err-act { color: var(--accent-ink); font-weight: 500; text-underline-offset: 3px; }
+.au-err-act { color: var(--bad-ink); font-weight: 500; text-underline-offset: 3px; }
 
 .au-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 10px;
@@ -209,7 +215,7 @@ html:has(.au) body { height: auto !important; overflow: visible !important; }
 }
 .au-otp input:focus { box-shadow: var(--sh-sm), 0 0 0 1.5px var(--ink); }
 .au-otp input[data-filled='true'] { transform: translateY(-1px); }
-.au-otp[data-invalid='true'] input { box-shadow: var(--sh-sm), 0 0 0 1.5px var(--accent); }
+.au-otp[data-invalid='true'] input { box-shadow: var(--sh-sm), 0 0 0 1.5px var(--bad); }
 .au-otp[data-shake='true'] { animation: au-shake 0.36s var(--ease); }
 @keyframes au-shake {
   20% { transform: translateX(-6px); }
@@ -251,8 +257,12 @@ html:has(.au) body { height: auto !important; overflow: visible !important; }
   position: relative; border-radius: 18px; background: rgba(255, 255, 255, 0.55);
   box-shadow: var(--sh-md); overflow: hidden;
 }
-.b3d-card[data-on='false'] { display: none; }
-.b3d { position: relative; height: clamp(360px, 52vh, 520px); }
+/* Stays in the layout while three.js loads: the board must mount into a sized,
+   on-screen host (a display:none host starts it at 1×1 and off-screen). Narrow
+   screens never get the board, so there the pending card stays out of the way. */
+@media (max-width: 980px) { .b3d-card[data-on='false'] { display: none; } }
+/* shaped like the board seen from above, so it fills the card instead of floating in it */
+.b3d { position: relative; aspect-ratio: 16 / 10; max-height: 60vh; }
 .b3d canvas { display: block; width: 100%; height: 100%; animation: au-fade 0.9s var(--ease); cursor: default; }
 @keyframes au-fade { from { opacity: 0; } }
 .b3d-card .mw-legend, .b3d-card .mw-stat { background: rgba(255, 255, 255, 0.85); }
@@ -336,6 +346,7 @@ html:has(.au) body { height: auto !important; overflow: visible !important; }
 .mw-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .mw-legend i { width: 10px; height: 10px; border-radius: 3px; }
 .mw-legend .k-focus { background: var(--deep-t); box-shadow: inset 2px 0 0 var(--deep); }
+.mw-legend .k-prop { background: #fff; border: 1.5px dashed var(--accent); }
 .mw-legend .k-meet { background: var(--sync-t); box-shadow: inset 2px 0 0 var(--sync); }
 .mw-legend .k-peak { background: rgba(234, 88, 12, 0.16); }
 .mw-legend .k-off { background-image: repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.18) 0 1px, transparent 1px 4px); box-shadow: inset 0 0 0 1px var(--line); }
@@ -416,9 +427,9 @@ html:has(.au) body { height: auto !important; overflow: visible !important; }
 .ob-peak small { font-family: var(--mono); font-size: 11px; color: var(--muted); }
 .ob-peak svg { width: 100%; height: 34px; display: block; overflow: visible; }
 .ob-peak path { fill: none; stroke: var(--ghost); stroke-width: 1.5; transition: stroke var(--t-state); }
-.ob-peak .fill { fill: rgba(234, 88, 12, 0); stroke: none; transition: fill var(--t-state); }
-.ob-peak:has(input:checked) path { stroke: var(--accent); }
-.ob-peak:has(input:checked) .fill { fill: rgba(234, 88, 12, 0.1); }
+.ob-peak .fill { fill: rgba(23, 23, 23, 0); stroke: none; transition: fill var(--t-state); }
+.ob-peak:has(input:checked) path { stroke: var(--ink); }
+.ob-peak:has(input:checked) .fill { fill: rgba(23, 23, 23, 0.06); }
 
 /* range */
 .ob-range { display: grid; gap: 10px; }
@@ -535,19 +546,23 @@ html:has(.au) body { height: auto !important; overflow: visible !important; }
 /* mobile: the preview folded into a sticky strip */
 .fs { display: none; }
 @media (max-width: 980px) {
+  /* pinned under the header (never over Back / Continue, never under the
+     keyboard), solid so nothing scrolls through it */
   .au[data-page='onboarding'] .fs {
-    position: sticky; bottom: 0; z-index: 10; grid-column: 1 / -1;
+    position: sticky; top: 0; z-index: 10;
     display: flex; align-items: center; gap: 14px;
-    padding: 10px clamp(16px, 5vw, 64px) calc(10px + env(safe-area-inset-bottom));
-    background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-    border-top: 1px solid var(--line);
+    margin: 18px calc(-1 * clamp(20px, 5vw, 64px)) 0;
+    padding: 10px clamp(20px, 5vw, 64px);
+    background: var(--surface);
+    border-block: 1px solid var(--line);
+    box-shadow: 0 6px 12px -10px rgba(0, 0, 0, 0.18);
   }
 }
 .fs-days { flex: 1; display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
 .fs-day { display: grid; justify-items: center; gap: 2px; font-size: 11px; color: var(--ink-2); }
 .fs-day[data-off='true'] { color: var(--faint); }
 .fs-day b { font-weight: 500; }
-.fs-day small { font-family: var(--mono); font-size: 9.5px; color: var(--sync); line-height: 1; }
+.fs-day small { font-size: 9px; letter-spacing: 1px; color: var(--sync); line-height: 1; }
 .fs-bar {
   position: relative; width: 100%; max-width: 26px; height: 26px; border-radius: 5px; background: var(--sunken); overflow: hidden;
 }
@@ -584,8 +599,10 @@ html:has(.au) body { height: auto !important; overflow: visible !important; }
 .ob-sum { display: grid; gap: 0; border-radius: 14px; background: var(--surface); box-shadow: var(--sh-sm); }
 .ob-sum div { display: flex; justify-content: space-between; gap: 12px; padding: 12px 14px; font-size: 14px; }
 .ob-sum div + div { border-top: 1px solid var(--line); }
-.ob-sum dt { color: var(--muted); }
+.ob-sum dt { color: var(--muted); white-space: nowrap; }
 .ob-sum dd { margin: 0; font-weight: 500; text-align: right; }
+.ob-sum dd small { display: block; margin-top: 2px; font-size: 12.5px; font-weight: 400; color: var(--muted); }
+.ob-sum .au-link-btn { font-size: 14px; font-weight: 500; }
 
 /* loading shell */
 .au-wait { display: grid; place-items: center; min-height: 60vh; color: var(--muted); }

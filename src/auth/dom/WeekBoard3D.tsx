@@ -71,7 +71,9 @@ export function WeekBoard3D(props: Props) {
         mountBoard(host, {
           offsetX: () => 0,
           perfGuard: true,
-          frame: { count: 7, start: BOARD_START, end: BOARD_END, px: 150, fill: { w: 1, h: 0.95 }, elevation: 50 },
+          // a margin each side (perspective widens the near edge) and a steeper look-down,
+          // so the whole week — Sun included — fills the card and its labels read
+          frame: { count: 7, start: BOARD_START, end: BOARD_END, px: 150, fill: { w: 0.92, h: 0.9 }, elevation: 66 },
           onFail: () => {
             boardRef.current?.dispose();
             boardRef.current = null;

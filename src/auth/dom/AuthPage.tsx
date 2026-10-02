@@ -351,7 +351,7 @@ export default function AuthPage({ mode }: { mode: Mode }) {
     head = { eyebrow: 'One more step', title: 'Use a backup code', lede: 'Enter one of the backup codes you saved when you turned on two-step sign-in.' };
   } else if (view === 'code') {
     head = {
-      eyebrow: isUp ? 'Step 2 of 3' : 'One more step',
+      eyebrow: isUp ? 'Verify email' : 'One more step',
       title: 'Check your email',
       lede: (
         <>
@@ -360,7 +360,7 @@ export default function AuthPage({ mode }: { mode: Mode }) {
       ),
     };
   } else if (view === 'more') {
-    head = { eyebrow: 'Step 2 of 3', title: 'A few more details', lede: 'Your account needs these before it can be created.' };
+    head = { eyebrow: 'Almost done', title: 'A few more details', lede: 'Your account needs these before it can be created.' };
   } else if (phase === 'reset-request') {
     head = { eyebrow: 'Reset password', title: 'Forgot your password?', lede: 'We’ll email you a code to set a new one.' };
   } else if (phase === 'reset-code') {
@@ -375,7 +375,7 @@ export default function AuthPage({ mode }: { mode: Mode }) {
     };
   } else if (isUp) {
     head = {
-      eyebrow: 'Step 1 of 3',
+      eyebrow: 'Create account',
       title: 'Plan the week you meant to have.',
       lede: 'Create your account. Then we’ll set up your working hours and deep work together, in about a minute.',
     };
@@ -454,7 +454,7 @@ export default function AuthPage({ mode }: { mode: Mode }) {
                     </button>
                   ) : null}
                 </div>
-                <div className="au-input" data-invalid={touched && (isUp ? !pwLong : !password)}>
+                <div className="au-input" data-invalid={touched && emailOk && (isUp ? !pwLong : !password)}>
                   <input
                     id="au-pw"
                     type={showPw ? 'text' : 'password'}
@@ -805,7 +805,7 @@ function SignUpStage({ step }: { step: number }) {
             </dl>
           </div>
         ) : null}
-        {gl !== true ? (
+        {gl === false ? (
           <MiniWeek
             title="Example week"
             meta="09:00–18:00 · MON–FRI"
