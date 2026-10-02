@@ -101,7 +101,7 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: 'Database not configured (DATABASE_URL missing).' }, { status: 503 });
   }
   if (!aiConfigured()) {
-    return Response.json({ error: 'AI is not configured (OPENROUTER_API_KEY missing).' }, { status: 503 });
+    return Response.json({ error: 'AI is not configured (OPENAI_API_KEY missing).' }, { status: 503 });
   }
 
   const userId = await requireUserId(request);

@@ -1,39 +1,35 @@
 /**
- * The model, via OpenRouter — raw `fetch`, no vendor SDK. OpenRouter speaks the
- * OpenAI chat-completions format, so tool schemas are plain JSON Schema and go
- * through unchanged.
+ * The model: OpenAI's Responses API, raw `fetch`, no vendor SDK. Request shape
+ * as agent-v2 used it against the same model (reasoning effort low, no
+ * temperature — a reasoning model rejects it).
  *
- * Model: OPENROUTER_MODEL, default `openai/gpt-6-luna`. OPENROUTER_FALLBACK_MODEL,
- * when set, rides in OpenRouter's `models` list and is used only if the first
- * one fails.
- *
- * Privacy: `zdr` + `data_collection: 'deny'` route only to endpoints that keep
- * no prompts and don't collect them. A request no such endpoint can serve
- * fails rather than falling back to one that does.
+ * Model: OPENAI_MODEL, default `gpt-6-luna`. `store: false`: OpenAI keeps no
+ * conversation state for us. (Its API still holds requests up to 30 days for
+ * abuse monitoring and doesn't train on them — the privacy policy says so.)
  *
  * Every call forces a tool call: the model picks an action and fills its
  * arguments, deterministic code decides whether to carry it out. Calendar text
  * read into a prompt can never come back out as a free-text instruction.
  *
- * Server-only. Never import from the app bundle — this reads OPENROUTER_API_KEY.
+ * Server-only. Never import from the app bundle — this reads OPENAI_API_KEY.
  */
 
-const URL_ = 'https://openrouter.ai/api/v1/chat/completions';
-const DEFAULT_MODEL = 'openai/gpt-6-luna';
+const URL_ = 'https://api.openai.com/v1/responses';
+const DEFAULT_MODEL = 'gpt-6-luna';
 const RETRY_DELAY_MS = 800;
 
 function model(): string {
-  return process.env.OPENROUTER_MODEL?.trim() || DEFAULT_MODEL;
+  return process.env.OPENAI_MODEL?.trim() || DEFAULT_MODEL;
 }
 
 export function aiConfigured(): boolean {
-  return Boolean(process.env.OPENROUTER_API_KEY);
+  return Boolean(process.env.OPENAI_API_KEY);
 }
 
 export type ToolDef = { name: string; description: string; input_schema: Record<string, unknown> };
 export type ChatTurn = { role: 'user' | 'assistant'; text: string };
 
-/** The model's choice; `model` is the one that actually answered (a fallback shows here). */
+/** The model's choice and what it cost. */
 export type ToolChoice = {
   name: string;
   args: Record<string, unknown>;
@@ -43,13 +39,12 @@ export type ToolChoice = {
   outputTokens?: number;
 };
 
-type Completion = {
+type Response = {
   model?: string;
-  choices?: {
-    finish_reason?: string;
-    message?: { tool_calls?: { function?: { name?: string; arguments?: string } }[] };
-  }[];
-  usage?: { prompt_tokens?: number; completion_tokens?: number };
+  status?: string;
+  incomplete_details?: { reason?: string } | null;
+  output?: { type?: string; name?: string; arguments?: string }[];
+  usage?: { input_tokens?: number; output_tokens?: number };
 };
 
 /** Overloaded, rate-limited, or answered without the forced tool call: worth one more try. */
@@ -68,68 +63,63 @@ async function callOnce(opts: {
   tools: ToolDef[];
   /** one tool name forces that tool; otherwise any one of them */
   force?: string;
-  temperature: number;
   maxTokens?: number;
   signal?: AbortSignal;
 }): Promise<ToolChoice> {
-  const key = process.env.OPENROUTER_API_KEY;
-  if (!key) throw new Error('OPENROUTER_API_KEY is not set.');
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) throw new Error('OPENAI_API_KEY is not set.');
   if (opts.tools.length === 0) throw new Error('Needs at least one tool.');
 
-  const fallback = process.env.OPENROUTER_FALLBACK_MODEL?.trim();
   const startedAt = Date.now();
   const res = await fetch(URL_, {
     method: 'POST',
     signal: opts.signal,
-    headers: {
-      authorization: `Bearer ${key}`,
-      'content-type': 'application/json',
-      'HTTP-Referer': process.env.EXPO_PUBLIC_SITE_URL || 'https://findtime.ai',
-      'X-OpenRouter-Title': 'Find Time',
-    },
+    headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
     body: JSON.stringify({
-      ...(fallback && fallback !== model() ? { models: [model(), fallback] } : { model: model() }),
-      messages: [
-        { role: 'system', content: opts.system },
-        ...opts.history.map((m) => ({ role: m.role, content: m.text })),
-      ],
+      model: model(),
+      instructions: opts.system,
+      input: opts.history.map((m) => ({ role: m.role, content: m.text })),
       tools: opts.tools.map((t) => ({
         type: 'function',
-        function: { name: t.name, description: t.description, parameters: t.input_schema },
+        name: t.name,
+        description: t.description,
+        parameters: t.input_schema,
+        strict: false,
       })),
-      tool_choice: opts.force ? { type: 'function', function: { name: opts.force } } : 'required',
+      tool_choice: opts.force ? { type: 'function', name: opts.force } : 'required',
       parallel_tool_calls: false,
-      temperature: opts.temperature,
-      max_tokens: opts.maxTokens ?? 1024,
-      provider: { zdr: true, data_collection: 'deny' },
+      reasoning: { effort: 'low' },
+      // includes reasoning tokens, hence the headroom
+      max_output_tokens: opts.maxTokens ?? 2048,
+      store: false,
     }),
   });
 
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new LlmError(`OpenRouter ${res.status}: ${body.slice(0, 300)}`, res.status === 429 || res.status >= 500);
+    throw new LlmError(`OpenAI ${res.status}: ${body.slice(0, 300)}`, res.status === 429 || res.status >= 500);
   }
 
-  const data = (await res.json()) as Completion;
+  const data = (await res.json()) as Response;
   const names = opts.tools.map((t) => t.name);
-  const fn = data.choices?.[0]?.message?.tool_calls?.find((c) => names.includes(c.function?.name ?? ''))?.function;
+  const call = data.output?.find((o) => o.type === 'function_call' && names.includes(o.name ?? ''));
   let args: Record<string, unknown> | null = null;
   try {
-    args = fn?.arguments ? (JSON.parse(fn.arguments) as Record<string, unknown>) : null;
+    args = call?.arguments ? (JSON.parse(call.arguments) as Record<string, unknown>) : null;
   } catch {
     // malformed JSON arguments — same as no call
   }
-  if (!fn?.name || !args) {
-    const reason = data.choices?.[0]?.finish_reason;
-    throw new LlmError(`Model returned no tool call${reason ? ` (finish_reason ${reason})` : ''}.`, true);
+  if (!call?.name || !args) {
+    const reason = data.incomplete_details?.reason ?? data.status;
+    throw new LlmError(`Model returned no tool call${reason ? ` (${reason})` : ''}.`, true);
   }
   return {
-    name: fn.name,
+    name: call.name,
     args,
     model: data.model ?? model(),
     latencyMs: Date.now() - startedAt,
-    promptTokens: data.usage?.prompt_tokens,
-    outputTokens: data.usage?.completion_tokens,
+    promptTokens: data.usage?.input_tokens,
+    outputTokens: data.usage?.output_tokens,
   };
 }
 
@@ -156,18 +146,13 @@ export async function extractWithTool(opts: {
     history: [{ role: 'user', text: opts.user }],
     tools: [opts.tool],
     force: opts.tool.name,
-    temperature: 0,
     maxTokens: opts.maxTokens,
     signal: opts.signal,
   });
   return r.args;
 }
 
-/**
- * The conversational counterpart: carries history, offers several tools, the
- * model must pick exactly one. A shade above zero temperature so a rephrased
- * question doesn't get the same clarifying question back verbatim.
- */
+/** The conversational counterpart: carries history, offers several tools, the model picks exactly one. */
 export async function chatWithTools(opts: {
   system: string;
   history: ChatTurn[];
@@ -175,5 +160,5 @@ export async function chatWithTools(opts: {
   maxTokens?: number;
   signal?: AbortSignal;
 }): Promise<ToolChoice> {
-  return withRetry({ ...opts, temperature: 0.2 });
+  return withRetry(opts);
 }
