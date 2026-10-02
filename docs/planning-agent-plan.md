@@ -9,6 +9,9 @@ Written 2026-09-14. Supersedes the shorter version of this file (commit
 `25c05b6`). Status 2026-10-02: the task part of §8's engine is built — see
 "Built so far" at the end of §8. The rest is not.
 
+For the AI layer (model, context layer, multi-step, accuracy gates) see
+[ai-layer-plan.md](ai-layer-plan.md), which supersedes §4, §5, §9, §11, §13.
+
 Related: [ai-learning.md](ai-learning.md) (how the agent learns),
 [training-capture.md](training-capture.md) (what every turn logs),
 [db/calendar-schema.md](db/calendar-schema.md).
