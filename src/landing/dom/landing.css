@@ -610,6 +610,25 @@ html.lenis body { height: auto; }
   border: solid #fff; border-width: 0 1.6px 1.6px 0; transform: rotate(45deg);
 }
 
+/* ---------- legal pages (/privacy, /terms — ../LegalScreen.web.tsx) ---------- */
+.lp .legal { padding-block: calc(64px + clamp(56px, 8vw, 120px)) clamp(72px, 9vw, 140px); }
+.lp .legal-head { display: grid; gap: 20px; padding-bottom: clamp(40px, 5vw, 72px); border-bottom: 1px solid var(--line); }
+.lp .legal-head .h2 { max-width: none; }
+.lp .legal-grid {
+  display: grid; grid-template-columns: minmax(200px, 280px) minmax(0, 1fr); gap: clamp(32px, 6vw, 96px);
+  padding-top: clamp(40px, 5vw, 72px);
+}
+.lp .legal-toc { position: sticky; top: 96px; align-self: start; display: grid; gap: 16px; }
+.lp .legal-toc ol { display: grid; gap: 10px; }
+.lp .legal-toc .link { font-size: 14px; }
+.lp .legal-body { display: grid; gap: clamp(40px, 4vw, 56px); max-width: 68ch; }
+.lp .legal-sec { display: grid; gap: 14px; scroll-margin-top: 96px; }
+.lp .legal-sec .body { max-width: none; font-size: 16px; }
+@media (max-width: 900px) {
+  .lp .legal-grid { grid-template-columns: 1fr; }
+  .lp .legal-toc { position: static; }
+}
+
 /* ---------- footer ---------- */
 .lp .ftr { border-top: 1px solid var(--line); }
 .lp .ftr-row {

@@ -54,7 +54,8 @@
     "typecheck": "tsc --noEmit",
     "build:web": "expo export --platform web",
     "serve": "expo serve --port ${PORT:-8081}",
-    "invite:beta": "node --env-file=.env.local scripts/invite-beta.mjs"
+    "invite:beta": "node --env-file=.env.local scripts/invite-beta.mjs",
+    "links:check": "node scripts/links-check.mjs"
   },
   "private": true
 }

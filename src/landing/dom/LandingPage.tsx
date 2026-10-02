@@ -599,7 +599,7 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
         </section>
 
         {/* ── final cta ──────────────────────────────────────── */}
-        <section className="final frame" data-section="join" aria-labelledby="final-title">
+        <section id="join" className="final frame" data-section="join" aria-labelledby="final-title">
           <h2 id="final-title" className="display display-sm" data-split>
             {final.title.map((line, i) => (
               <span key={i} className="line">
