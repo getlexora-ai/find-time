@@ -43,7 +43,7 @@ import {
   TOOL_POSTPONE,
   TOOL_TRAVEL,
   TOOL_PLAN_SETTINGS,
-} from './chat.ts';
+} from './tools/names.ts';
 import { durationOptions } from './clarify.ts';
 import { ambiguousTime } from './place-at.ts';
 

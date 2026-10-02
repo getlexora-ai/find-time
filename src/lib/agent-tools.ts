@@ -5,15 +5,16 @@ import type { ToolUi } from './api-types';
  *
  * One list, owned by the server and served at GET /api/ai/tools. The panel
  * holds no labels or icons of its own: it draws whatever this says. To add a
- * tool, add its `ToolDef` to CHAT_TOOLS (src/server/ai/chat.ts) and an entry
- * here with the same `key` — its trace row, live row, colour and (optionally)
- * composer shortcut appear without touching the client.
+ * tool, add its name (src/server/ai/tools/names.ts), its handler
+ * (src/server/ai/tools/index.ts) and an entry here with the same `key` — its
+ * trace row, live row, colour and (optionally) composer shortcut appear
+ * without touching the client.
  *
  * Plain data with no server imports, so the dev-only `/preview` route can use
  * the same list.
  */
 
-/** Steps the route itself runs around the model call. */
+/** Steps the turn itself runs around the tool (src/server/ai/turn.ts). */
 export const STEP = {
   read: 'read_calendar',
   rules: 'apply_rules',
@@ -26,7 +27,7 @@ export const STEP = {
 } as const;
 
 export const AGENT_TOOLS: ToolUi[] = [
-  /* ── the model's tools (names match CHAT_TOOLS) ── */
+  /* ── tools (keys match src/server/ai/tools/names.ts) ── */
   {
     key: 'propose_blocks',
     label: 'Find time',
