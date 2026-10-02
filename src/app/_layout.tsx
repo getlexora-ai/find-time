@@ -13,7 +13,10 @@ import '../global.css';
  *
  *   `index` → the marketing landing page on web (`index.web.tsx`), and a bare
  *             redirect to `/app` on native (`index.tsx`).
- *   `login` → Clerk sign in / sign up. `/app` redirects here when signed out.
+ *   `login` / `signup` → sign in / sign up on Clerk's hooks (src/auth/dom on web).
+ *             `/app` redirects to `/login` when signed out.
+ *   `welcome` → first-run onboarding (web). `/app` redirects here until done.
+ *   `sso-callback` → where Google sign-in returns on web.
  *   `app`   → the calendar, which owns its own providers in `app/_layout.tsx`.
  *
  * `ClerkProvider` wraps everything (auth state is global); `AuthBridge` hands the
@@ -39,6 +42,9 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#FAFAFA' } }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="login" />
+        <Stack.Screen name="signup" />
+        <Stack.Screen name="welcome" />
+        <Stack.Screen name="sso-callback" />
         <Stack.Screen name="app" />
         <Stack.Screen name="privacy" />
         <Stack.Screen name="terms" />

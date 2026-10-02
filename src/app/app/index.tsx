@@ -1,7 +1,7 @@
-import { useAuth } from '@clerk/clerk-expo';
+import { useAuth, useUser } from '@clerk/clerk-expo';
 import { Redirect } from 'expo-router';
 import { useEffect } from 'react';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 
 import { refreshAccounts } from '@/calendar/account-store';
 import { CalendarScreen } from '@/calendar/CalendarScreen';
@@ -17,13 +17,16 @@ import { useMounted } from '@/design/useMounted';
  * desktop viewport, and there is nothing here for a crawler. So it paints a
  * plain box on the server and mounts for real on the client.
  *
- * Also gated on Clerk: no session → redirect to `/login`. Once signed in we
+ * Also gated on Clerk: no session → redirect to `/login`; on web, a user who
+ * hasn't finished onboarding (`publicMetadata.onboarded`, set by
+ * `/api/onboarding`) → `/welcome`. Once signed in we
  * prime the account store (its fetch needs the session token, which only exists
  * after ClerkProvider has loaded).
  */
 export default function CalendarRoute() {
   const mounted = useMounted();
   const { isLoaded, isSignedIn } = useAuth();
+  const { user, isLoaded: userLoaded } = useUser();
 
   useEffect(() => {
     if (isLoaded && isSignedIn) void refreshAccounts();
@@ -31,5 +34,9 @@ export default function CalendarRoute() {
 
   if (!mounted || !isLoaded) return <View style={{ flex: 1, backgroundColor: '#FAFAFA' }} />;
   if (!isSignedIn) return <Redirect href="/login" />;
+  if (Platform.OS === 'web') {
+    if (!userLoaded || !user) return <View style={{ flex: 1, backgroundColor: '#FAFAFA' }} />;
+    if (!user.publicMetadata?.onboarded) return <Redirect href="/welcome" />;
+  }
   return <CalendarScreen />;
 }

@@ -114,3 +114,53 @@ Local: `npx expo start --web`, then
   the Clerk delete fails the data is already gone and the response is still
   `200 { clerkDeleted: false }` — the shell account can be removed by hand.
 - **Rate limiting** on `/api/*` still not added (noted in `HANDOFF-mvp.md`).
+
+---
+
+## 5. Custom sign in / sign up + onboarding (web)
+
+Clerk's prebuilt `<SignIn/>` / `<SignUp/>` card is replaced on web by our own
+pages on Clerk's headless hooks, in the landing's Nexus light language
+(`src/auth/dom/auth.css`, scoped `.au`). Native `login.tsx` is unchanged.
+
+| Route | File | What |
+|---|---|---|
+| `/login` | `login.web.tsx` → `src/auth/dom/AuthPage.tsx` | email + password; Clerk second factor (`email_code`) when it asks; **forgot password** (emailed code → new password); Google |
+| `/signup` | `signup.web.tsx` → same page | email + password → 6-digit code (`Otp.tsx`: paste, autofill, auto-submit, resend after 30 s) → `/welcome` |
+| `/sso-callback` | `sso-callback.web.tsx` | Google returns here; `clerk.handleRedirectCallback` (transferable sign-in ⇄ sign-up) → `/app` |
+| `/welcome` | `welcome.web.tsx` → `src/auth/dom/Onboarding.tsx` | 5 steps: name · working days + hours · best hours · deep work a day + spread/cluster · time zone, clock, week start, Google connect |
+| `POST /api/onboarding` | `src/app/api/onboarding+api.ts` | saves the answers, sets Clerk `publicMetadata.onboarded = true`; `{ skip: true }` only sets the flag |
+
+Native gets redirect stubs for `/signup` (→ `/login`), `/welcome` and
+`/sso-callback` (→ `/app`).
+
+**Where each answer goes** (`src/auth/onboarding.ts`, shared by page + API):
+days/hours → `work_hours`; best hours → `energy_curve` (1.0 across the peak,
+−0.15/h either side, 6–21h); deep work/day → `max_daily_focus_min` and
+`focus_goal_h` (× working days); spread/cluster → `hard_work`; time zone, clock,
+week start → the calendar settings; first name → the Clerk user.
+
+**The preview** on the right is `MiniWeek.tsx` driven by `previewWeek()` — a
+small stand-in for the planner over example meetings (labelled "example"), so
+every answer visibly moves something. It is not the real planner.
+
+**Gate:** on web, `/app` redirects a signed-in user without
+`publicMetadata.onboarded` to `/welcome`. **Existing accounts see it once**
+(they can "Skip for now"). Without a database the answers aren't stored, but
+the flag is still set so nobody gets stuck (`saved: false`).
+
+**Clerk dashboard:** nothing new to configure. The pages need Email + password
+and Google enabled (already in §2a). If bot protection is on, the CAPTCHA mounts
+in `#clerk-captcha` on the forms.
+
+**Checks:** `npm run typecheck` · `npm run lint` · `npx tsx src/auth/onboarding.check.ts`
+· `npx expo export --platform web` (all four routes + `/api/onboarding` bundle).
+Rendered in Chromium at 1440 and 390 px with Clerk stubbed. **Not run against a
+real Clerk instance from here** — sign up, the email code, reset, and Google
+need a live `pk_test_` / `sk_test_` to verify end to end.
+
+**Design sources:** MengTo/Skills — `animation-systems` (motion tokens: 160 /
+240 / 520 ms, ease-out, 60 ms stagger, reduced-motion = instant),
+`beautiful-shadows` (the sm/md/lg ramp, already the landing's), `no-ai-design-slop`
+(no decorative orbs/gradients; every visual element shows state),
+`product-proof-saas` (the product's own week as the hero, sample data labelled).
