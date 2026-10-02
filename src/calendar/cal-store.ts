@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 
-import type { FindTimeProposal } from '@/lib/api-types';
 import { apiFetch, currentUserId, hasTokenGetter, onTokenGetter } from '@/lib/api';
 import { IMPORTED_ORIGIN, lockedFields } from '@/lib/synced-fields';
 
@@ -449,31 +448,6 @@ export function acceptEvent(id: number): Promise<boolean> {
   const cur = events.find((e) => e.id === id);
   if (!cur || cur.kind !== 'ai') return Promise.resolve(false);
   return updateEvent(id, { kind: 'event' });
-}
-
-/** Apply the AI "Find time" proposals from POST /api/ai/find-time: create each
- *  as an AI-kind block (dashed lime), persisted via POST /api/events.
- *
- *  Awaits the writes and returns how many actually landed. This used to be
- *  synchronous and return `proposals.length` unconditionally, so a failed POST
- *  showed "N blocks added to your calendar" and then silently removed them. */
-export async function applyProposals(proposals: FindTimeProposal[]): Promise<number> {
-  const results = await Promise.all(
-    proposals.map((p) =>
-      createEventAsync({
-        date: p.startISO.slice(0, 10),
-        start: p.startISO.slice(11, 16),
-        end: p.endISO.slice(11, 16),
-        title: p.title,
-        cat: API_CAT_TO_CAT[p.category] ?? 'deep',
-        kind: 'ai',
-      }).then(
-        () => true,
-        () => false,
-      ),
-    ),
-  );
-  return results.filter(Boolean).length;
 }
 
 /** Create one agent-proposed block at an explicit time. Used by the chat panel,

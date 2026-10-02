@@ -89,23 +89,6 @@ export type AccountsResponse = {
   accounts: ApiAccount[];
 };
 
-/** POST /api/ai/find-time — one proposed block to add to the calendar. */
-export type FindTimeProposal = {
-  title: string;
-  /** ISO instant, UTC wall-clock (same convention as ApiEvent.start). */
-  startISO: string;
-  endISO: string;
-  category: string;
-};
-
-export type FindTimeResponse = {
-  proposals: FindTimeProposal[];
-  /** one-sentence, first-person explanation for the user */
-  rationale: string;
-  /** how many blocks the request asked for (proposals may be fewer) */
-  requested: number;
-};
-
 // ── POST /api/ai/chat — the conversational agent ────────────────────────────
 
 /**

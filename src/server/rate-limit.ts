@@ -18,7 +18,6 @@ import { decide, windowStart, type Pair, type Window } from '@/server/rate-limit
 
 export type RateRoute =
   | 'waitlist'
-  | 'ai-find-time'
   | 'ai-chat'
   | 'ai-report'
   | 'google-connect'
@@ -28,8 +27,6 @@ export type RateRoute =
 const LIMITS: Record<RateRoute, Pair> = {
   // unauthenticated — spammable to junk; keep tight
   waitlist: { hour: 5, day: 20 },
-  // authed, burns model tokens per hit
-  'ai-find-time': { hour: 15, day: 40 },
   // authed, also burns tokens — but a *conversation* legitimately takes several
   // turns to land on the right slot, so the per-request cap has to be looser
   // than the one-shot planner's or normal use hits a wall mid-thread.
