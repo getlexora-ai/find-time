@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { readOAuthState, stateClearCookie } from '@/server/auth/session';
+import { readOAuthState, readReturnPath, returnClearCookie, stateClearCookie } from '@/server/auth/session';
 import { tx } from '@/server/db';
 import { decodeIdToken, exchangeCode, oauthConfigured, storeTokens, SCOPES } from '@/server/google/oauth';
 import { syncAccount } from '@/server/google/sync';
@@ -11,12 +11,15 @@ import { syncAccount } from '@/server/google/sync';
  * The signed `state` carries the Clerk user id that started the connect. We
  * verify it, exchange the code, attach a `connected_accounts` row to that user,
  * store the encrypted tokens, kick off the first sync, and send the browser back
- * to /app. No session is set — Clerk already owns that. Failure → /app?connect=error.
+ * to /app — or to /welcome when onboarding started the connect (the
+ * `ft_oauth_return` cookie). No session is set — Clerk already owns that.
+ * Failure → `<that page>?connect=error`.
  */
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
-  const back = (params: string) =>
-    redirect(new URL(`/app${params}`, url).toString(), [stateClearCookie(request)]);
+  const to = readReturnPath(request);
+  const clear = [stateClearCookie(request), returnClearCookie(request)];
+  const back = (params: string) => redirect(new URL(`${to}${params}`, url).toString(), clear);
 
   if (!oauthConfigured()) return back('?connect=error');
 
@@ -65,7 +68,7 @@ export async function GET(request: Request): Promise<Response> {
       console.error('initial syncAccount failed', err),
     );
 
-    return redirect(new URL('/app?connect=ok', url).toString(), [stateClearCookie(request)]);
+    return back('?connect=ok');
   } catch (err) {
     console.error('google callback', err);
     return back('?connect=error');

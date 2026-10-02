@@ -30,6 +30,8 @@ type Props = {
   weekStart?: 0 | 1;
   stats?: { label: string; value: string }[];
   height?: number;
+  /** legend text for meeting blocks — "Your meetings" once a calendar is connected */
+  meetingLabel?: string;
 };
 
 export function MiniWeek({
@@ -44,6 +46,7 @@ export function MiniWeek({
   weekStart = 1,
   stats,
   height = 360,
+  meetingLabel = 'Meetings (example)',
 }: Props) {
   // The visible window always shows a little either side of the working day.
   const vStart = Math.max(0, Math.min(7, start - 1));
@@ -126,7 +129,7 @@ export function MiniWeek({
         </span>
         <span>
           <i className="k-meet" />
-          Meetings (example)
+          {meetingLabel}
         </span>
         {peak ? (
           <span>

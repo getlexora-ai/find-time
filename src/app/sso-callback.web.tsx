@@ -10,7 +10,8 @@ import '@/auth/dom/auth.css';
  * `authenticateWithRedirect` (src/auth/dom/AuthPage.tsx). Clerk finishes the
  * sign in or sign up; both land on `/app`, which forwards first-timers to
  * `/welcome`. A Google account with no Find Time account yet is turned into a
- * sign-up (and vice versa) rather than bounced.
+ * sign-up (and vice versa) rather than bounced, and a sign-up that still
+ * needs details continues on `/signup?continue=1` (AuthPage's "more" step).
  */
 export default function SsoCallback() {
   const clerk = useClerk();
@@ -27,6 +28,8 @@ export default function SsoCallback() {
           signUpFallbackRedirectUrl: '/app',
           signInUrl: '/login',
           signUpUrl: '/signup',
+          // Clerk needs more details (name, terms…) → our sign-up page asks for them
+          continueSignUpUrl: '/signup?continue=1',
           transferable: true,
         },
         async (to: string) => router.replace(to as '/app'),

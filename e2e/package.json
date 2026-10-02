@@ -1,0 +1,13 @@
+{
+  "name": "find-time-e2e",
+  "private": true,
+  "description": "End-to-end tests for sign up, sign in and onboarding. Kept out of the app's package.json so the app's lockfile never moves for them.",
+  "scripts": {
+    "test": "playwright test",
+    "list": "playwright test --list"
+  },
+  "devDependencies": {
+    "@clerk/testing": "1.14.10",
+    "@playwright/test": "1.56.1"
+  }
+}

@@ -19,13 +19,21 @@ import { useAuth, useSignIn, useSignUp } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
 import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
+import { useMounted } from '@/design/useMounted';
+
 import { defaultAnswers, previewWeek } from '../onboarding';
 import { MiniWeek } from './MiniWeek';
 import { Otp } from './Otp';
 import './auth.css';
 
 type Mode = 'sign-in' | 'sign-up';
-type Phase = 'form' | 'code' | 'reset-request' | 'reset-code';
+type Phase = 'form' | 'code' | 'more' | 'reset-request' | 'reset-code';
+/** second-factor methods we can finish here, best first */
+type Factor = 'email_code' | 'phone_code' | 'totp' | 'backup_code';
+const FACTOR_ORDER: Factor[] = ['email_code', 'phone_code', 'totp', 'backup_code'];
+/** sign-up fields Clerk may still ask for after the email is verified */
+type MoreField = 'first_name' | 'last_name' | 'username' | 'legal_accepted';
+const MORE_FIELDS: MoreField[] = ['first_name', 'last_name', 'username', 'legal_accepted'];
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RESEND_S = 30;
@@ -58,7 +66,11 @@ export default function AuthPage({ mode }: { mode: Mode }) {
   const [shake, setShake] = useState(0);
   const [resendIn, setResendIn] = useState(0);
   /** sign-in second factor vs sign-up email verification */
-  const codeFor = useRef<'sign-up' | 'second-factor'>('sign-up');
+  const [codeFor, setCodeFor] = useState<'sign-up' | 'second-factor'>('sign-up');
+  const [factor, setFactor] = useState<Factor>('email_code');
+  const [factors, setFactors] = useState<Factor[]>([]);
+  const [missing, setMissing] = useState<string[]>([]);
+  const [more, setMore] = useState({ firstName: '', lastName: '', username: '', legal: false });
   /** set once a flow has picked its destination, so the redirect below doesn't race it */
   const leaving = useRef(false);
 
@@ -74,6 +86,18 @@ export default function AuthPage({ mode }: { mode: Mode }) {
   }, [resendIn]);
 
   const ready = inLoaded && upLoaded;
+
+  // Google sign-up that Clerk sent back for more details (sso-callback's
+  // continueSignUpUrl): open straight on the "a few more details" step.
+  const continuing =
+    mode === 'sign-up' &&
+    phase === 'form' &&
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).has('continue') &&
+    signUp?.status === 'missing_requirements';
+  const view: Phase = continuing ? 'more' : phase;
+  const need = (continuing ? (signUp?.missingFields ?? []) : missing) as string[];
+  const unsupported = need.filter((f) => !(MORE_FIELDS as string[]).includes(f));
   const emailOk = EMAIL_RE.test(email.trim());
   const pwLong = password.length >= 8;
 
@@ -102,7 +126,7 @@ export default function AuthPage({ mode }: { mode: Mode }) {
       if (mode === 'sign-up') {
         await signUp!.create({ emailAddress: email.trim(), password });
         await signUp!.prepareEmailAddressVerification({ strategy: 'email_code' });
-        codeFor.current = 'sign-up';
+        setCodeFor('sign-up');
         setCode('');
         setPhase('code');
         setResendIn(RESEND_S);
@@ -114,13 +138,10 @@ export default function AuthPage({ mode }: { mode: Mode }) {
           return;
         }
         if ((res.status as string) === 'needs_second_factor' || (res.status as string) === 'needs_client_trust') {
-          const hasEmail = res.supportedSecondFactors?.some((f) => f.strategy === 'email_code');
-          if (!hasEmail) return fail('This account needs a sign-in method we do not support here yet.');
-          await signIn!.prepareSecondFactor({ strategy: 'email_code' });
-          codeFor.current = 'second-factor';
-          setCode('');
-          setPhase('code');
-          setResendIn(RESEND_S);
+          const offered = FACTOR_ORDER.filter((f) => res.supportedSecondFactors?.some((x) => x.strategy === f));
+          if (!offered.length) return fail('This account needs a sign-in method we don’t support here yet. Try Google.');
+          setFactors(offered);
+          await startFactor(offered[0]);
           return;
         }
         fail('Signing in needs one more step we could not finish. Try Google, or reset your password.');
@@ -132,23 +153,52 @@ export default function AuthPage({ mode }: { mode: Mode }) {
     }
   }
 
-  // ── the 6-digit code ─────────────────────────────────────────────────
+  /** Switch to a second-factor method; email and SMS codes are sent first. */
+  async function startFactor(f: Factor) {
+    if (f === 'email_code' || f === 'phone_code') await signIn!.prepareSecondFactor({ strategy: f });
+    setCodeFor('second-factor');
+    setFactor(f);
+    setCode('');
+    setError(null);
+    setPhase('code');
+    setResendIn(f === 'email_code' || f === 'phone_code' ? RESEND_S : 0);
+  }
+
+  async function switchFactor(f: Factor) {
+    if (busy) return;
+    setBusy('resend');
+    try {
+      await startFactor(f);
+    } catch (err) {
+      fail(clerkError(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // ── the code ─────────────────────────────────────────────────────────
   async function verify(value = code) {
     if (!ready || busy === 'submit') return;
-    if (value.length !== 6) return fail('Enter all 6 digits.');
+    const backup = codeFor === 'second-factor' && factor === 'backup_code';
+    if (backup ? value.trim().length < 6 : value.length !== 6) return fail(backup ? 'Enter one of your backup codes.' : 'Enter all 6 digits.');
     setError(null);
     setBusy('submit');
     try {
-      if (codeFor.current === 'sign-up') {
+      if (codeFor === 'sign-up') {
         const res = await signUp!.attemptEmailAddressVerification({ code: value });
         if (res.status === 'complete') {
           await setSignUpActive!({ session: res.createdSessionId });
           await finish('/welcome');
           return;
         }
-        fail('Your email is verified, but the account needs more details. Try Google sign up instead.');
+        if (res.status === 'missing_requirements') {
+          setMissing(res.missingFields as string[]);
+          setPhase('more');
+          return;
+        }
+        fail('Your email is verified, but the account isn’t finished. Try again.');
       } else {
-        const res = await signIn!.attemptSecondFactor({ strategy: 'email_code', code: value });
+        const res = await signIn!.attemptSecondFactor({ strategy: factor, code: value.trim() });
         if (res.status === 'complete') {
           await setSignInActive!({ session: res.createdSessionId });
           await finish('/app');
@@ -171,12 +221,45 @@ export default function AuthPage({ mode }: { mode: Mode }) {
     try {
       if (phase === 'reset-code') {
         await signIn!.create({ strategy: 'reset_password_email_code', identifier: email.trim() });
-      } else if (codeFor.current === 'sign-up') {
+      } else if (codeFor === 'sign-up') {
         await signUp!.prepareEmailAddressVerification({ strategy: 'email_code' });
-      } else {
-        await signIn!.prepareSecondFactor({ strategy: 'email_code' });
+      } else if (factor === 'email_code' || factor === 'phone_code') {
+        await signIn!.prepareSecondFactor({ strategy: factor });
       }
       setResendIn(RESEND_S);
+    } catch (err) {
+      fail(clerkError(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // ── sign-up details Clerk still needs ───────────────────────────────
+  async function submitMore(e: FormEvent) {
+    e.preventDefault();
+    if (!ready || busy) return;
+    setError(null);
+    if (unsupported.length) return fail('This sign-up needs details we can’t collect here yet. Try signing up with email instead.');
+    if (need.includes('first_name') && !more.firstName.trim()) return fail('Enter your first name.');
+    if (need.includes('last_name') && !more.lastName.trim()) return fail('Enter your last name.');
+    if (need.includes('username') && !more.username.trim()) return fail('Choose a username.');
+    if (need.includes('legal_accepted') && !more.legal) return fail('Please accept the Terms and Privacy policy to continue.');
+    setBusy('submit');
+    try {
+      const res = await signUp!.update({
+        ...(need.includes('first_name') ? { firstName: more.firstName.trim() } : {}),
+        ...(need.includes('last_name') ? { lastName: more.lastName.trim() } : {}),
+        ...(need.includes('username') ? { username: more.username.trim() } : {}),
+        ...(need.includes('legal_accepted') ? { legalAccepted: true } : {}),
+      });
+      if (res.status === 'complete') {
+        await setSignUpActive!({ session: res.createdSessionId });
+        await finish('/welcome');
+        return;
+      }
+      setMissing(res.missingFields as string[]);
+      setPhase('more');
+      fail('A little more is needed to finish your account.');
     } catch (err) {
       fail(clerkError(err));
     } finally {
@@ -252,7 +335,14 @@ export default function AuthPage({ mode }: { mode: Mode }) {
   // ── view ─────────────────────────────────────────────────────────────
   const isUp = mode === 'sign-up';
   let head: { eyebrow: string; title: string; lede: ReactNode };
-  if (phase === 'code') {
+  const second = codeFor === 'second-factor';
+  if (view === 'code' && second && factor === 'phone_code') {
+    head = { eyebrow: 'One more step', title: 'Check your phone', lede: 'We texted a 6-digit code to the number on your account.' };
+  } else if (view === 'code' && second && factor === 'totp') {
+    head = { eyebrow: 'One more step', title: 'Enter your authenticator code', lede: 'Open your authenticator app and enter the 6-digit code for Find Time.' };
+  } else if (view === 'code' && second && factor === 'backup_code') {
+    head = { eyebrow: 'One more step', title: 'Use a backup code', lede: 'Enter one of the backup codes you saved when you turned on two-step sign-in.' };
+  } else if (view === 'code') {
     head = {
       eyebrow: isUp ? 'Step 2 of 3' : 'One more step',
       title: 'Check your email',
@@ -262,6 +352,8 @@ export default function AuthPage({ mode }: { mode: Mode }) {
         </>
       ),
     };
+  } else if (view === 'more') {
+    head = { eyebrow: 'Step 2 of 3', title: 'A few more details', lede: 'Your account needs these before it can be created.' };
   } else if (phase === 'reset-request') {
     head = { eyebrow: 'Reset password', title: 'Forgot your password?', lede: 'We’ll email you a code to set a new one.' };
   } else if (phase === 'reset-code') {
@@ -284,7 +376,7 @@ export default function AuthPage({ mode }: { mode: Mode }) {
     head = { eyebrow: 'Sign in', title: 'Welcome back.', lede: 'Pick up your week where you left it.' };
   }
 
-  const pathStep = phase === 'code' ? 1 : 0;
+  const pathStep = view === 'code' || view === 'more' ? 1 : 0;
 
   return (
     <div className="au" data-page="auth">
@@ -302,7 +394,7 @@ export default function AuthPage({ mode }: { mode: Mode }) {
           </p>
         </header>
 
-        <div className="au-body" key={`${mode}-${phase}`}>
+        <div className="au-body" key={`${mode}-${view}-${factor}`}>
           <p className="au-eyebrow au-in" style={{ '--i': 0 } as React.CSSProperties}>
             {head.eyebrow}
           </p>
@@ -313,7 +405,7 @@ export default function AuthPage({ mode }: { mode: Mode }) {
             {head.lede}
           </p>
 
-          {phase === 'form' ? (
+          {view === 'form' ? (
             <form className="au-form au-in" style={{ '--i': 3 } as React.CSSProperties} onSubmit={onSubmit} noValidate>
               <button type="button" className="au-btn au-ghost au-wide" onClick={google} disabled={!ready || !!busy} aria-busy={busy === 'google'}>
                 {busy === 'google' ? <i className="au-spin" aria-hidden="true" /> : <GoogleG />}
@@ -396,7 +488,7 @@ export default function AuthPage({ mode }: { mode: Mode }) {
             </form>
           ) : null}
 
-          {phase === 'code' ? (
+          {view === 'code' ? (
             <form
               className="au-form au-in"
               style={{ '--i': 3 } as React.CSSProperties}
@@ -404,16 +496,38 @@ export default function AuthPage({ mode }: { mode: Mode }) {
                 e.preventDefault();
                 void verify();
               }}>
-              <Otp
-                value={code}
-                onChange={setCode}
-                onComplete={(v) => void verify(v)}
-                invalid={!!error}
-                shake={shake}
-                disabled={busy === 'submit'}
-              />
+              {second && factor === 'backup_code' ? (
+                <div className="au-field">
+                  <label htmlFor="au-backup">Backup code</label>
+                  <div className="au-input" data-invalid={!!error}>
+                    <input
+                      id="au-backup"
+                      className="mono"
+                      autoComplete="one-time-code"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      value={code}
+                      onChange={(e) => setCode(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+                </div>
+              ) : (
+                <Otp
+                  value={code}
+                  onChange={setCode}
+                  onComplete={(v) => void verify(v)}
+                  invalid={!!error}
+                  shake={shake}
+                  disabled={busy === 'submit'}
+                />
+              )}
               <ErrorLine error={error} />
-              <button type="submit" className="au-btn au-ink au-wide" disabled={busy === 'submit' || code.length !== 6} aria-busy={busy === 'submit'}>
+              <button
+                type="submit"
+                className="au-btn au-ink au-wide"
+                disabled={busy === 'submit' || (second && factor === 'backup_code' ? !code.trim() : code.length !== 6)}
+                aria-busy={busy === 'submit'}>
                 {busy === 'submit' ? <i className="au-spin" aria-hidden="true" /> : null}
                 {isUp ? 'Verify email' : 'Verify and sign in'}
               </button>
@@ -425,10 +539,94 @@ export default function AuthPage({ mode }: { mode: Mode }) {
                     setPhase('form');
                     setError(null);
                   }}>
-                  Use a different email
+                  {second ? 'Back to sign in' : 'Use a different email'}
                 </button>
-                <ResendButton resendIn={resendIn} busy={busy === 'resend'} onClick={resend} />
+                {!second || factor === 'email_code' || factor === 'phone_code' ? (
+                  <ResendButton resendIn={resendIn} busy={busy === 'resend'} onClick={resend} />
+                ) : null}
               </div>
+              {second && factors.length > 1 ? (
+                <p className="au-alt">
+                  Other ways:{' '}
+                  {factors
+                    .filter((f) => f !== factor)
+                    .map((f, i) => (
+                      <span key={f}>
+                        {i ? ' · ' : ''}
+                        <button type="button" className="au-link-btn" onClick={() => void switchFactor(f)} disabled={!!busy}>
+                          {FACTOR_LABEL[f]}
+                        </button>
+                      </span>
+                    ))}
+                </p>
+              ) : null}
+            </form>
+          ) : null}
+
+          {view === 'more' ? (
+            <form className="au-form au-in" style={{ '--i': 3 } as React.CSSProperties} onSubmit={submitMore} noValidate>
+              {need.includes('first_name') || need.includes('last_name') ? (
+                <div className="au-two">
+                  {need.includes('first_name') ? (
+                    <div className="au-field">
+                      <label htmlFor="au-fn">First name</label>
+                      <div className="au-input">
+                        <input
+                          id="au-fn"
+                          autoComplete="given-name"
+                          value={more.firstName}
+                          onChange={(e) => setMore((m) => ({ ...m, firstName: e.target.value }))}
+                          autoFocus
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+                  {need.includes('last_name') ? (
+                    <div className="au-field">
+                      <label htmlFor="au-ln">Last name</label>
+                      <div className="au-input">
+                        <input
+                          id="au-ln"
+                          autoComplete="family-name"
+                          value={more.lastName}
+                          onChange={(e) => setMore((m) => ({ ...m, lastName: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              {need.includes('username') ? (
+                <div className="au-field">
+                  <label htmlFor="au-un">Username</label>
+                  <div className="au-input">
+                    <input
+                      id="au-un"
+                      autoComplete="username"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      value={more.username}
+                      onChange={(e) => setMore((m) => ({ ...m, username: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              ) : null}
+              {need.includes('legal_accepted') ? (
+                <label className="au-check">
+                  <input type="checkbox" checked={more.legal} onChange={(e) => setMore((m) => ({ ...m, legal: e.target.checked }))} />
+                  <span>
+                    I agree to the <a href="/terms">Terms</a> and <a href="/privacy">Privacy policy</a>.
+                  </span>
+                </label>
+              ) : null}
+              {unsupported.length ? (
+                <p className="au-hint">This sign-up also needs: {unsupported.join(', ').replace(/_/g, ' ')}, which can’t be added here yet.</p>
+              ) : null}
+              <ErrorLine error={error} />
+              <button type="submit" className="au-btn au-ink au-wide" disabled={!!busy} aria-busy={busy === 'submit'}>
+                {busy === 'submit' ? <i className="au-spin" aria-hidden="true" /> : null}
+                Create account
+              </button>
             </form>
           ) : null}
 
@@ -510,6 +708,45 @@ export default function AuthPage({ mode }: { mode: Mode }) {
 }
 
 function AuthStage({ isUp, step }: { isUp: boolean; step: number }) {
+  if (!isUp) return <SignInStage />;
+  return <SignUpStage step={step} />;
+}
+
+/**
+ * Sign in: no sample data for someone who already has a week — just today,
+ * and where it sits in the week. Client-only dates (the page is SSR'd), so
+ * the strip renders after hydration.
+ */
+function SignInStage() {
+  const mounted = useMounted();
+  const now = mounted ? new Date() : null;
+  const monday = now ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7)) : null;
+  return (
+    <aside className="au-stage" aria-label="Today">
+      <div className="si au-in" style={{ '--i': 2 } as React.CSSProperties}>
+        <div className="si-date">
+          <small>{now ? now.toLocaleDateString(undefined, { weekday: 'long' }) : '\u00a0'}</small>
+          <b>{now ? now.toLocaleDateString(undefined, { day: 'numeric', month: 'long' }) : '\u00a0'}</b>
+        </div>
+        <ol className="si-week" aria-hidden="true">
+          {Array.from({ length: 7 }, (_, i) => {
+            const d = monday ? new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i) : null;
+            const today = Boolean(d && now && d.toDateString() === now.toDateString());
+            return (
+              <li key={i} data-today={today} data-past={Boolean(d && now && d < now && !today)}>
+                {d ? d.toLocaleDateString(undefined, { weekday: 'short' }) : ''}
+                <b>{d ? d.getDate() : ''}</b>
+              </li>
+            );
+          })}
+        </ol>
+        <p>Your plans, focus blocks and everything it has learned are where you left them.</p>
+      </div>
+    </aside>
+  );
+}
+
+function SignUpStage({ step }: { step: number }) {
   const a = useMemo(() => defaultAnswers(), []);
   const blocks = useMemo(() => previewWeek(a), [a]);
   const work = [true, true, true, true, true, false, false];
@@ -517,7 +754,7 @@ function AuthStage({ isUp, step }: { isUp: boolean; step: number }) {
   return (
     <aside className="au-stage" aria-label="What Find Time does">
       <div className="au-stage-cap au-in" style={{ '--i': 2 } as React.CSSProperties}>
-        <h2>{isUp ? 'Deep work, placed around your meetings.' : 'Your focus time, already in the week.'}</h2>
+        <h2>Deep work, placed around your meetings.</h2>
       </div>
       <div className="au-in" style={{ '--i': 3 } as React.CSSProperties}>
         <MiniWeek
@@ -536,19 +773,24 @@ function AuthStage({ isUp, step }: { isUp: boolean; step: number }) {
           ]}
         />
       </div>
-      {isUp ? (
-        <ol className="au-path au-in" style={{ '--i': 4 } as React.CSSProperties} aria-label="Sign-up steps">
-          {['Account', 'Verify email', 'Shape your week'].map((label, i) => (
-            <li key={label} data-state={i < step ? 'done' : i === step ? 'now' : 'next'} aria-current={i === step ? 'step' : undefined}>
-              <span>{String(i + 1).padStart(2, '0')}</span>
-              {label}
-            </li>
-          ))}
-        </ol>
-      ) : null}
+      <ol className="au-path au-in" style={{ '--i': 4 } as React.CSSProperties} aria-label="Sign-up steps">
+        {['Account', 'Verify email', 'Shape your week'].map((label, i) => (
+          <li key={label} data-state={i < step ? 'done' : i === step ? 'now' : 'next'} aria-current={i === step ? 'step' : undefined}>
+            <span>{String(i + 1).padStart(2, '0')}</span>
+            {label}
+          </li>
+        ))}
+      </ol>
     </aside>
   );
 }
+
+const FACTOR_LABEL: Record<Factor, string> = {
+  email_code: 'Email a code',
+  phone_code: 'Text a code',
+  totp: 'Authenticator app',
+  backup_code: 'Backup code',
+};
 
 function ErrorLine({ error }: { error: string | null }) {
   return (

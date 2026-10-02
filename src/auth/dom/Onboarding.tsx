@@ -1,44 +1,66 @@
 /**
  * `/welcome` — the first minute after sign-up. Five short questions, each one
  * a field the planner really reads (src/auth/onboarding.ts maps them), with
- * the week on the right redrawing as you answer: hatching slides when you move
- * your hours, the orange band follows your peak, deep-work blocks re-flow
- * around the example meetings when you change the budget or the layout.
+ * the week on the right replanned as you answer by the planner's own ranking.
  *
- * Finishing (or skipping) posts to `/api/onboarding`, which saves the answers
- * and marks the Clerk user `onboarded`, so `/app` stops sending them here.
- * The last step can hand straight off to the Google Calendar connect.
+ *   01 Name      02 Calendar   03 Week   04 Peak   05 Focus   → done
  *
- * Progress survives a reload (sessionStorage, per user). Enter moves on;
- * every step can be revisited from the rail.
+ * Calendar comes second on purpose: once Google is connected, the preview
+ * plans around *your* meetings this week instead of example ones. Connecting
+ * leaves for Google and comes back here (`returnTo: '/welcome'`), with the
+ * answers so far kept in sessionStorage.
+ *
+ * Returning users (anyone who already has planner settings) open on their own
+ * settings, and only the groups they touch are written back — a learned energy
+ * curve isn't replaced unless they pick a peak.
+ *
+ * Finishing or skipping posts to `/api/onboarding`, which marks the Clerk
+ * user `onboarded` so `/app` stops sending them here. Each step seen, connect,
+ * skip and finish is logged for the drop-off funnel (db/022).
  */
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
-import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, type ReactNode, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { apiFetch } from '@/lib/api';
 
+import { loadOnboarding, type OnboardingState, saveOnboarding, syncCalendars, track } from '../client';
 import {
   defaultAnswers,
   energyCurveFor,
   FOCUS_MAX,
   FOCUS_MIN,
+  focusByDay,
+  type Group,
+  GROUP_OF,
   hourLabel,
+  modernZone,
   type OnboardingAnswers,
   PEAKS,
   previewWeek,
+  SAMPLE_MEETINGS,
+  type TrackStep,
   WEEKDAYS,
 } from '../onboarding';
+import { FocusStrip } from './FocusStrip';
 import { MiniWeek } from './MiniWeek';
+import { TimeZonePicker } from './TimeZonePicker';
 import './auth.css';
 
-const STEPS = ['Name', 'Week', 'Peak', 'Focus', 'Calendar'] as const;
+const STEPS = ['Name', 'Calendar', 'Week', 'Peak', 'Focus'] as const;
+const TRACK: TrackStep[] = ['name', 'calendar', 'week', 'peak', 'focus'];
+const CAL = 1;
+const WEEK = 2;
+const PEAK = 3;
 const DAY_SHORT = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const DAY_NAME = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-function browserEnv() {
+type Saved = { a: OnboardingAnswers; step: number; changed: Group[] };
+type HeadingRef = RefObject<HTMLHeadingElement | null>;
+
+function browserEnv(): { timezone?: string; clock24?: boolean } {
   try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const tz = modernZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
     const h12 = new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).resolvedOptions().hour12;
     return { timezone: tz, clock24: !h12 };
   } catch {
@@ -46,12 +68,22 @@ function browserEnv() {
   }
 }
 
-function zones(current: string): string[] {
+function readSaved(key: string | null): Saved | null {
   try {
-    const all = (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.('timeZone') ?? [];
-    return all.includes(current) ? all : [current, ...all];
+    const raw = key ? sessionStorage.getItem(key) : null;
+    return raw ? (JSON.parse(raw) as Saved) : null;
   } catch {
-    return [current];
+    return null;
+  }
+}
+
+function writeSaved(key: string | null, v: Saved | null) {
+  try {
+    if (!key) return;
+    if (v) sessionStorage.setItem(key, JSON.stringify(v));
+    else sessionStorage.removeItem(key);
+  } catch {
+    // storage blocked — progress just won't survive a reload
   }
 }
 
@@ -61,44 +93,71 @@ export default function Onboarding() {
   const { user, isLoaded: userLoaded } = useUser();
 
   const storeKey = user ? `ft-onboarding:${user.id}` : null;
-  const [a, setA] = useState<OnboardingAnswers>(() => defaultAnswers());
+  const env = useMemo(() => browserEnv(), []);
+  const [a, setA] = useState<OnboardingAnswers>(() => defaultAnswers(env));
+  const [changed, setChanged] = useState<Set<Group>>(() => new Set());
+  const [server, setServer] = useState<OnboardingState | null>(null);
+  const [ready, setReady] = useState(false);
   const [step, setStep] = useState(0);
   const [dir, setDir] = useState<'fwd' | 'back'>('fwd');
   const [seen, setSeen] = useState(0);
-  const [busy, setBusy] = useState<null | 'finish' | 'google' | 'skip'>(null);
+  const [busy, setBusy] = useState<null | 'finish' | 'connect' | 'skip' | 'sync'>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [done, setDone] = useState(false);
-  const hydrated = useRef(false);
+  const started = useRef(false);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  /** true once the user has moved between steps — from then on, focus follows the step */
+  const [moved, setMoved] = useState(false);
+  const viewed = useRef(new Set<number>());
 
-  // First paint for this user: browser clock + Clerk name, then any saved progress.
+  // Load: saved progress (after a Google round trip) > the user's own settings > defaults.
   useEffect(() => {
-    if (!user || hydrated.current) return;
-    hydrated.current = true;
-    let next = { ...defaultAnswers(browserEnv()), firstName: user.firstName ?? '' };
-    let at = 0;
-    try {
-      const raw = storeKey ? sessionStorage.getItem(storeKey) : null;
-      if (raw) {
-        const saved = JSON.parse(raw) as { a?: Partial<OnboardingAnswers>; step?: number };
-        next = { ...next, ...saved.a };
-        at = Math.min(STEPS.length - 1, Math.max(0, saved.step ?? 0));
+    if (!user || started.current) return;
+    started.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const connect = params.get('connect');
+    if (connect) window.history.replaceState(null, '', '/welcome');
+
+    void (async () => {
+      if (connect === 'ok') {
+        setBusy('sync');
+        track('calendar', 'connected');
+        await syncCalendars();
+      } else if (connect === 'error') {
+        track('calendar', 'connect_failed');
       }
-    } catch {
-      // storage blocked or malformed — start fresh
-    }
-    setA(next);
-    setStep(at);
-    setSeen(at);
-  }, [user, storeKey]);
+      const st = await loadOnboarding();
+      const saved = readSaved(`ft-onboarding:${user.id}`);
+      setServer(st);
+      if (saved) {
+        setA(saved.a);
+        setChanged(new Set(saved.changed));
+        setStep(saved.step);
+        setSeen(saved.step);
+      } else if (st?.existing && st.answers) {
+        setA({ ...st.answers, firstName: st.answers.firstName || user.firstName || '' });
+      } else {
+        setA({ ...defaultAnswers(env), firstName: user.firstName ?? '' });
+      }
+      if (connect === 'ok') {
+        const n = st?.meetings?.length ?? 0;
+        setNotice(
+          n
+            ? `Google Calendar connected. The preview now plans around your ${n} meeting${n === 1 ? '' : 's'} this week.`
+            : 'Google Calendar connected. No busy meetings this week yet — events can take a minute to import.',
+        );
+      } else if (connect === 'error') {
+        setError('Google Calendar didn’t connect. Try again, or carry on with the example week.');
+      }
+      setBusy(null);
+      setReady(true);
+    })();
+  }, [user, env]);
 
   useEffect(() => {
-    if (!storeKey || !hydrated.current) return;
-    try {
-      sessionStorage.setItem(storeKey, JSON.stringify({ a, step }));
-    } catch {
-      // ignore
-    }
-  }, [a, step, storeKey]);
+    if (ready && !done) writeSaved(storeKey, { a, step, changed: [...changed] });
+  }, [a, step, changed, storeKey, ready, done]);
 
   // Signed out → sign in. Already onboarded (another tab) → the app.
   useEffect(() => {
@@ -108,60 +167,94 @@ export default function Onboarding() {
     if (userLoaded && user?.publicMetadata?.onboarded && !busy && !done) router.replace('/app');
   }, [userLoaded, user, busy, done, router]);
 
-  const blocks = useMemo(() => previewWeek(a), [a]);
+  // Each step: log the view once, and move focus to its question (not on first paint).
+  useEffect(() => {
+    if (!ready || done) return;
+    if (!viewed.current.has(step)) {
+      viewed.current.add(step);
+      track(TRACK[step], 'view');
+    }
+    if (moved) headingRef.current?.focus();
+  }, [step, ready, done, moved]);
+
+  const meetings = server?.meetings ?? null;
+  const real = Boolean(server?.connected && meetings);
+  const blocks = useMemo(() => previewWeek(a, real && meetings ? meetings : SAMPLE_MEETINGS), [a, real, meetings]);
   const work = WEEKDAYS.map((d) => a.days.includes(d));
   const peak = PEAKS.find((p) => p.id === a.peak)!;
-  const focusWeek = blocks.filter((b) => b.kind === 'focus').reduce((n, b) => n + (b.e - b.s) / 60, 0);
+  const focusWeek = focusByDay(blocks).reduce((n, m) => n + m, 0) / 60;
   const workWeek = a.days.length * (a.end - a.start);
+  const showFocus = step >= PEAK || done;
+  const existing = Boolean(server?.existing);
 
-  const patch = (p: Partial<OnboardingAnswers>) => {
+  const patch = useCallback((p: Partial<OnboardingAnswers>) => {
     setError(null);
     setA((cur) => ({ ...cur, ...p }));
-  };
+    setChanged((cur) => {
+      const next = new Set(cur);
+      for (const k of Object.keys(p) as (keyof OnboardingAnswers)[]) next.add(GROUP_OF[k]);
+      return next;
+    });
+  }, []);
 
   function goTo(i: number) {
     if (i < 0 || i >= STEPS.length) return;
+    setMoved(true);
     setDir(i >= step ? 'fwd' : 'back');
     setStep(i);
     setSeen((s) => Math.max(s, i));
     setError(null);
+    setNotice(null);
   }
 
   function next() {
-    if (step === 1 && !a.days.length) return setError('Pick at least one working day.');
+    if (step === WEEK && !a.days.length) return setError('Pick at least one working day.');
     if (step < STEPS.length - 1) goTo(step + 1);
   }
 
-  async function submit(kind: 'finish' | 'google' | 'skip') {
+  async function connectGoogle() {
+    if (busy) return;
+    setBusy('connect');
+    setError(null);
+    track('calendar', 'connect');
+    // Come back to the step after this one, with everything so far.
+    writeSaved(storeKey, { a, step: CAL + 1, changed: [...changed] });
+    try {
+      const res = await apiFetch('/api/auth/google/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ returnTo: '/welcome' }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+      if (res.ok && data.url) {
+        window.location.assign(data.url);
+        return;
+      }
+      writeSaved(storeKey, { a, step, changed: [...changed] });
+      track('calendar', 'connect_failed');
+      setError(data.error ?? `Google connect isn’t available right now (${res.status}). Carry on with the example week.`);
+    } catch {
+      writeSaved(storeKey, { a, step, changed: [...changed] });
+      track('calendar', 'connect_failed');
+      setError('Could not reach the server. Carry on with the example week and connect later.');
+    }
+    setBusy(null);
+  }
+
+  async function submit(kind: 'finish' | 'skip') {
     if (busy) return;
     setBusy(kind);
     setError(null);
     try {
-      const res = await apiFetch('/api/onboarding', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(kind === 'skip' ? { skip: true } : a),
-      });
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? `Could not save (${res.status}).`);
-      try {
-        if (storeKey) sessionStorage.removeItem(storeKey);
-      } catch {
-        // ignore
-      }
+      await saveOnboarding(
+        kind === 'skip'
+          ? { skip: true }
+          : // first-timers save everything; returning users only what they changed
+            { answers: a, changed: existing ? [...changed] : undefined },
+      );
+      track(kind === 'skip' ? TRACK[step] : 'done', kind);
+      writeSaved(storeKey, null);
       await user?.reload();
-
-      if (kind === 'google') {
-        const g = await apiFetch('/api/auth/google/start', { method: 'POST' });
-        const gd = (await g.json().catch(() => ({}))) as { url?: string; error?: string };
-        if (g.ok && gd.url) {
-          window.location.assign(gd.url);
-          return;
-        }
-        // Saved, but connect is unavailable: land in the app, which shows the connect panel.
-        router.replace('/app?connect=error');
-        return;
-      }
       if (kind === 'finish') {
         setDone(true);
         return;
@@ -173,15 +266,19 @@ export default function Onboarding() {
     }
   }
 
-  if (!authLoaded || !userLoaded || !user) {
+  if (!authLoaded || !userLoaded || !user || !ready) {
     return (
       <div className="au" data-page="onboarding">
-        <p className="au-wait">Loading…</p>
+        <p className="au-wait" role="status">
+          <i className="au-spin" aria-hidden="true" style={{ marginRight: 10 }} />
+          {busy === 'sync' ? 'Reading your calendar…' : 'Loading…'}
+        </p>
       </div>
     );
   }
 
   const name = a.firstName.trim();
+  const isLast = step === STEPS.length - 1;
 
   return (
     <div className="au" data-page="onboarding">
@@ -193,26 +290,34 @@ export default function Onboarding() {
           </a>
           {!done ? (
             <button type="button" className="au-btn au-quiet" onClick={() => void submit('skip')} disabled={!!busy}>
-              {busy === 'skip' ? 'Skipping…' : 'Skip for now'}
+              {busy === 'skip' ? 'Skipping…' : existing ? 'Keep my settings' : 'Skip for now'}
             </button>
           ) : null}
         </header>
 
         <div className="au-body">
           {done ? (
-            <Done a={a} focusWeek={focusWeek} onOpen={() => router.replace('/app')} />
+            <Done a={a} focusWeek={focusWeek} real={real} headingRef={headingRef} onOpen={() => router.replace('/app')} />
           ) : (
             <>
-              <p className="au-eyebrow">Set up · step 3 of 3</p>
+              <p className="au-eyebrow">{existing ? 'Review your setup' : 'Shape your week'}</p>
               <ol className="ob-rail" aria-label="Setup progress">
                 {STEPS.map((s, i) => (
                   <li key={s} data-state={i < step ? 'done' : i === step ? 'now' : 'next'}>
-                    <button type="button" onClick={() => goTo(i)} disabled={i > seen} aria-current={i === step ? 'step' : undefined}>
+                    <button
+                      type="button"
+                      onClick={() => goTo(i)}
+                      disabled={i > seen && !existing}
+                      aria-current={i === step ? 'step' : undefined}
+                      aria-label={`Step ${i + 1} of ${STEPS.length}: ${s}`}>
                       {String(i + 1).padStart(2, '0')} <span className="ob-rail-l">{s.toUpperCase()}</span>
                     </button>
                   </li>
                 ))}
               </ol>
+              {existing && step === 0 && !changed.size ? (
+                <p className="ob-note">We filled in your current settings. Change only what you want — the rest stays as it is.</p>
+              ) : null}
 
               <form
                 key={step}
@@ -220,11 +325,14 @@ export default function Onboarding() {
                 data-dir={dir}
                 onSubmit={(e) => {
                   e.preventDefault();
-                  if (step === STEPS.length - 1) void submit('finish');
+                  if (isLast) void submit('finish');
                   else next();
                 }}>
                 {step === 0 ? (
-                  <Step q={name ? `Hi ${name}. What should we call you?` : 'What should we call you?'} sub="It’s how the week greets you. Nothing else.">
+                  <Step
+                    headingRef={headingRef}
+                    q={name ? `Hi ${name}. What should we call you?` : 'What should we call you?'}
+                    sub="It’s how the week greets you. Nothing else.">
                     <div className="au-field">
                       <label htmlFor="ob-name">First name</label>
                       <div className="au-input">
@@ -235,15 +343,50 @@ export default function Onboarding() {
                           value={a.firstName}
                           maxLength={60}
                           onChange={(e) => patch({ firstName: e.target.value })}
-                          autoFocus
+                          autoFocus={!moved}
                         />
                       </div>
                     </div>
                   </Step>
                 ) : null}
 
-                {step === 1 ? (
-                  <Step q="When do you work?" sub="Plans only land inside these hours. Days you switch off stay empty.">
+                {step === CAL ? (
+                  <Step
+                    headingRef={headingRef}
+                    q={real ? 'Your calendar is connected.' : 'Plan around your real meetings?'}
+                    sub={
+                      real
+                        ? 'The preview now plans around your own meetings this week.'
+                        : 'Connect Google Calendar and the preview — and every plan after it — works around what’s already booked.'
+                    }>
+                    <div className="ob-connect">
+                      <div className="ob-connect-h">
+                        <GoogleCal />
+                        <b>Google Calendar</b>
+                        {real ? <span className="ob-ok">Connected · {meetings?.length ?? 0} this week</span> : null}
+                      </div>
+                      <ul>
+                        <li>Reads first. Writes only if you ask: your focus blocks, as private busy events.</li>
+                        <li>Other people’s meetings never move. It plans around them.</li>
+                        <li>Disconnect any time; its imported events are removed.</li>
+                      </ul>
+                      {!real ? (
+                        <button
+                          type="button"
+                          className="au-btn au-ink"
+                          onClick={() => void connectGoogle()}
+                          disabled={!!busy}
+                          aria-busy={busy === 'connect'}>
+                          {busy === 'connect' ? <i className="au-spin" aria-hidden="true" /> : null}
+                          Connect Google Calendar
+                        </button>
+                      ) : null}
+                    </div>
+                  </Step>
+                ) : null}
+
+                {step === WEEK ? (
+                  <Step headingRef={headingRef} q="When do you work?" sub="Plans only land inside these hours. Days you switch off stay empty.">
                     <fieldset>
                       <legend className="au-lbl" style={{ marginBottom: 8 }}>
                         Working days
@@ -256,7 +399,9 @@ export default function Onboarding() {
                             aria-pressed={a.days.includes(d)}
                             aria-label={DAY_NAME[i]}
                             onClick={() =>
-                              patch({ days: a.days.includes(d) ? a.days.filter((x) => x !== d) : WEEKDAYS.filter((x) => x === d || a.days.includes(x)) })
+                              patch({
+                                days: a.days.includes(d) ? a.days.filter((x) => x !== d) : WEEKDAYS.filter((x) => x === d || a.days.includes(x)),
+                              })
                             }>
                             {DAY_SHORT[i]}
                           </button>
@@ -284,11 +429,53 @@ export default function Onboarding() {
                     <p className="au-hint">
                       {a.days.length} day{a.days.length === 1 ? '' : 's'} · {workWeek} h a week
                     </p>
+                    <div className="ob-rows">
+                      <div className="ob-row-tz">
+                        <span className="ob-rk" id="ob-tz">
+                          Time zone
+                        </span>
+                        <TimeZonePicker
+                          value={a.timezone}
+                          detected={env.timezone ?? a.timezone}
+                          onChange={(z) => patch({ timezone: z })}
+                          labelId="ob-tz"
+                        />
+                      </div>
+                      <div>
+                        <span className="ob-rk" id="ob-clock">
+                          Clock
+                        </span>
+                        <Mini
+                          labelledBy="ob-clock"
+                          options={[
+                            ['24h', a.clock24],
+                            ['12h', !a.clock24],
+                          ]}
+                          onPick={(i) => patch({ clock24: i === 0 })}
+                        />
+                      </div>
+                      <div>
+                        <span className="ob-rk" id="ob-ws">
+                          Week starts
+                        </span>
+                        <Mini
+                          labelledBy="ob-ws"
+                          options={[
+                            ['Monday', a.weekStart === 1],
+                            ['Sunday', a.weekStart === 0],
+                          ]}
+                          onPick={(i) => patch({ weekStart: i === 0 ? 1 : 0 })}
+                        />
+                      </div>
+                    </div>
                   </Step>
                 ) : null}
 
-                {step === 2 ? (
-                  <Step q="When do you think best?" sub="Demanding work is ranked into these hours first. It learns from your edits after that.">
+                {step === PEAK ? (
+                  <Step
+                    headingRef={headingRef}
+                    q="When do you think best?"
+                    sub="Demanding work is ranked into these hours first. It learns from your edits after that.">
                     <div className="ob-peaks" role="radiogroup" aria-label="Best hours">
                       {PEAKS.map((p) => (
                         <label key={p.id} className="ob-peak">
@@ -304,8 +491,11 @@ export default function Onboarding() {
                   </Step>
                 ) : null}
 
-                {step === 3 ? (
-                  <Step q="How much deep work a day?" sub="Your daily budget for focused, demanding work. The rest stays open for everything else.">
+                {step === 4 ? (
+                  <Step
+                    headingRef={headingRef}
+                    q="How much deep work a day?"
+                    sub="Your daily budget for focused, demanding work. The rest stays open for everything else.">
                     <div className="ob-range">
                       <div className="ob-range-top">
                         <label htmlFor="ob-focus" className="au-lbl">
@@ -351,62 +541,9 @@ export default function Onboarding() {
                   </Step>
                 ) : null}
 
-                {step === 4 ? (
-                  <Step q="Last thing: your calendar." sub="Connect Google Calendar so plans go around your real meetings. You can do it later from the sidebar.">
-                    <div className="ob-connect">
-                      <div className="ob-connect-h">
-                        <GoogleCal />
-                        <b>Google Calendar</b>
-                      </div>
-                      <ul>
-                        <li>Reads first. Writes only if you ask: your focus blocks, as private busy events.</li>
-                        <li>Other people’s meetings never move. It plans around them.</li>
-                        <li>Disconnect any time; its imported events are removed.</li>
-                      </ul>
-                    </div>
-                    <div className="ob-rows">
-                      <div>
-                        <label htmlFor="ob-tz">Time zone</label>
-                        <select id="ob-tz" value={a.timezone} onChange={(e) => patch({ timezone: e.target.value })}>
-                          {zones(a.timezone).map((z) => (
-                            <option key={z} value={z}>
-                              {z.replace(/_/g, ' ')}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <span className="ob-rk" id="ob-clock">
-                          Clock
-                        </span>
-                        <Mini
-                          labelledBy="ob-clock"
-                          options={[
-                            ['24h', a.clock24],
-                            ['12h', !a.clock24],
-                          ]}
-                          onPick={(i) => patch({ clock24: i === 0 })}
-                        />
-                      </div>
-                      <div>
-                        <span className="ob-rk" id="ob-ws">
-                          Week starts
-                        </span>
-                        <Mini
-                          labelledBy="ob-ws"
-                          options={[
-                            ['Monday', a.weekStart === 1],
-                            ['Sunday', a.weekStart === 0],
-                          ]}
-                          onPick={(i) => patch({ weekStart: i === 0 ? 1 : 0 })}
-                        />
-                      </div>
-                    </div>
-                  </Step>
-                ) : null}
-
                 <div aria-live="polite" role="status">
                   {error ? <p className="au-err">{error}</p> : null}
+                  {notice ? <p className="ob-notice">{notice}</p> : null}
                 </div>
 
                 <div className="ob-nav">
@@ -419,24 +556,18 @@ export default function Onboarding() {
                       Press <kbd>Enter</kbd> to continue
                     </span>
                   )}
-                  {step < STEPS.length - 1 ? (
-                    <button type="submit" className="au-btn au-ink">
-                      Continue
+                  {isLast ? (
+                    <button type="submit" className="au-btn au-ink" disabled={!!busy} aria-busy={busy === 'finish'}>
+                      {busy === 'finish' ? <i className="au-spin" aria-hidden="true" /> : null}
+                      {existing ? 'Save changes' : 'Finish setup'}
+                    </button>
+                  ) : (
+                    <button type="submit" className={`au-btn ${step === CAL && !real ? 'au-ghost' : 'au-ink'}`} disabled={busy === 'connect'}>
+                      {step === CAL && !real ? 'Use an example week' : 'Continue'}
                       <span className="arr" aria-hidden="true">
                         →
                       </span>
                     </button>
-                  ) : (
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                      <button type="submit" className="au-btn au-ghost" disabled={!!busy} aria-busy={busy === 'finish'}>
-                        {busy === 'finish' ? <i className="au-spin" aria-hidden="true" /> : null}
-                        Later
-                      </button>
-                      <button type="button" className="au-btn au-ink" onClick={() => void submit('google')} disabled={!!busy} aria-busy={busy === 'google'}>
-                        {busy === 'google' ? <i className="au-spin" aria-hidden="true" /> : null}
-                        Connect Google
-                      </button>
-                    </div>
                   )}
                 </div>
               </form>
@@ -448,34 +579,46 @@ export default function Onboarding() {
       <aside className="au-stage" aria-label="Preview of your week">
         <div className="au-stage-cap">
           <h2>{name ? `${name}’s week` : 'Your week'}</h2>
-          <p>Live preview · example meetings</p>
+          <p>{real ? `Live preview · your meetings, week of ${weekLabel(server?.weekOf)}` : 'Live preview · example meetings'}</p>
         </div>
         <MiniWeek
-          title={step >= 2 || done ? `Best hours ${hourLabel(peak.from, a.clock24)}–${hourLabel(peak.to, a.clock24)}` : 'Working hours'}
+          title={showFocus ? `Best hours ${hourLabel(peak.from, a.clock24)}–${hourLabel(peak.to, a.clock24)}` : 'Working hours'}
           meta={`${hourLabel(a.start, a.clock24)}–${hourLabel(a.end, a.clock24)}`}
           work={work}
           start={a.start}
           end={a.end}
-          peak={step >= 2 || done ? peak : null}
-          blocks={step >= 3 || done ? blocks : blocks.filter((b) => b.kind === 'meeting')}
+          peak={showFocus ? peak : null}
+          blocks={showFocus ? blocks : blocks.filter((b) => b.kind === 'meeting')}
           clock24={a.clock24}
           weekStart={a.weekStart}
           height={380}
+          meetingLabel={real ? 'Your meetings' : 'Meetings (example)'}
           stats={[
             { label: 'Working', value: `${workWeek} h` },
-            { label: 'Deep work', value: step >= 3 || done ? `${focusWeek} h` : '—' },
-            { label: 'Days off', value: `${7 - a.days.length}` },
+            { label: 'Deep work', value: showFocus ? `${focusWeek} h` : '—' },
+            { label: 'Meetings', value: `${blocks.filter((b) => b.kind === 'meeting').length}` },
           ]}
         />
       </aside>
+
+      {!done ? <FocusStrip blocks={blocks} work={work} showFocus={showFocus} weekStart={a.weekStart} /> : null}
     </div>
   );
 }
 
-function Step({ q, sub, children }: { q: string; sub: string; children: ReactNode }) {
+/** '2026-09-28' → '28 Sep' in the viewer's locale. */
+function weekLabel(isoDay: string | null | undefined): string {
+  if (!isoDay) return 'this week';
+  const d = new Date(`${isoDay}T12:00:00Z`);
+  return Number.isNaN(d.getTime()) ? 'this week' : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' });
+}
+
+function Step({ q, sub, children, headingRef }: { q: string; sub: string; children: ReactNode; headingRef: HeadingRef }) {
   return (
     <>
-      <h1 className="ob-q">{q}</h1>
+      <h1 className="ob-q" ref={headingRef} tabIndex={-1}>
+        {q}
+      </h1>
       <p className="ob-sub">{sub}</p>
       {children}
     </>
@@ -491,15 +634,15 @@ function Stepper(props: {
   incDisabled: boolean;
 }) {
   return (
-    <div className="ob-stepper">
-      <button type="button" onClick={props.onDec} disabled={props.decDisabled} aria-label={`${props.label} earlier`}>
+    <div className="ob-stepper" role="group" aria-label={`${props.label} time`}>
+      <button type="button" onClick={props.onDec} disabled={props.decDisabled} aria-label={`${props.label} earlier (now ${props.value})`}>
         −
       </button>
-      <output aria-live="polite">
+      <output>
         <small>{props.label}</small>
         <b>{props.value}</b>
       </output>
-      <button type="button" onClick={props.onInc} disabled={props.incDisabled} aria-label={`${props.label} later`}>
+      <button type="button" onClick={props.onInc} disabled={props.incDisabled} aria-label={`${props.label} later (now ${props.value})`}>
         +
       </button>
     </div>
@@ -534,13 +677,32 @@ function Curve({ peak }: { peak: (typeof PEAKS)[number]['id'] }) {
   );
 }
 
-function Done({ a, focusWeek, onOpen }: { a: OnboardingAnswers; focusWeek: number; onOpen: () => void }) {
+function Done({
+  a,
+  focusWeek,
+  real,
+  onOpen,
+  headingRef,
+}: {
+  a: OnboardingAnswers;
+  focusWeek: number;
+  real: boolean;
+  onOpen: () => void;
+  headingRef: HeadingRef;
+}) {
   const peak = PEAKS.find((p) => p.id === a.peak)!;
-  const days = WEEKDAYS.map((d, i) => (a.days.includes(d) ? DAY_SHORT[i] : null)).filter(Boolean).join(' ');
+  const days = WEEKDAYS.map((d, i) => (a.days.includes(d) ? DAY_SHORT[i] : null))
+    .filter(Boolean)
+    .join(' ');
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, [headingRef]);
   return (
     <div className="ob-done ob-step" data-dir="fwd">
       <p className="au-eyebrow">All set</p>
-      <h1 className="ob-q">{a.firstName.trim() ? `Your week is ready, ${a.firstName.trim()}.` : 'Your week is ready.'}</h1>
+      <h1 className="ob-q" ref={headingRef} tabIndex={-1}>
+        {a.firstName.trim() ? `Your week is ready, ${a.firstName.trim()}.` : 'Your week is ready.'}
+      </h1>
       <p className="ob-sub">Ask Find Time to plan something and it starts from these. It keeps learning from what you move.</p>
       <dl className="ob-sum">
         <div>
@@ -556,15 +718,19 @@ function Done({ a, focusWeek, onOpen }: { a: OnboardingAnswers; focusWeek: numbe
         <div>
           <dt>Deep work</dt>
           <dd>
-            {a.focusH} h a day, {a.hardWork === 'spread' ? 'spread out' : 'clustered'} · {focusWeek} h this week
+            {a.focusH} h a day, {a.hardWork === 'spread' ? 'spread out' : 'clustered'} · {focusWeek} h {real ? 'fits this week' : 'in the example week'}
           </dd>
+        </div>
+        <div>
+          <dt>Calendar</dt>
+          <dd>{real ? 'Google connected' : 'Not connected yet'}</dd>
         </div>
         <div>
           <dt>Time zone</dt>
           <dd>{a.timezone.replace(/_/g, ' ')}</dd>
         </div>
       </dl>
-      <button type="button" className="au-btn au-ink au-wide" onClick={onOpen} autoFocus>
+      <button type="button" className="au-btn au-ink au-wide" onClick={onOpen}>
         Open my week
         <span className="arr" aria-hidden="true">
           →

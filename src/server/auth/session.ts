@@ -92,3 +92,28 @@ export function readOAuthState(req: Request, state: string | null): string | nul
 export function stateClearCookie(req: Request): string {
   return `${OAUTH_STATE_COOKIE}=; ${attrs(0, wantsSecure(req))}`;
 }
+
+/**
+ * Where the callback sends the browser afterwards. Defaults to `/app`; the
+ * onboarding page asks for `/welcome` so setup carries on after Google. Kept
+ * to an allow-list so the callback can never be turned into an open redirect.
+ */
+export const OAUTH_RETURN_COOKIE = 'ft_oauth_return';
+const RETURN_PATHS = ['/app', '/welcome'] as const;
+export type OAuthReturn = (typeof RETURN_PATHS)[number];
+
+export function asReturnPath(v: unknown): OAuthReturn {
+  return (RETURN_PATHS as readonly unknown[]).includes(v) ? (v as OAuthReturn) : '/app';
+}
+
+export function returnCookie(req: Request, path: OAuthReturn): string {
+  return `${OAUTH_RETURN_COOKIE}=${encodeURIComponent(path)}; ${attrs(TEN_MIN, wantsSecure(req))}`;
+}
+
+export function readReturnPath(req: Request): OAuthReturn {
+  return asReturnPath(parseCookies(req)[OAUTH_RETURN_COOKIE]);
+}
+
+export function returnClearCookie(req: Request): string {
+  return `${OAUTH_RETURN_COOKIE}=; ${attrs(0, wantsSecure(req))}`;
+}

@@ -1,6 +1,6 @@
-import { Redirect } from 'expo-router';
+import NativeOnboarding from '@/auth/native/Onboarding';
 
-/** `/welcome` on native — onboarding is web-only for now; go straight to the app. */
+/** `/welcome` on iOS / Android — first-run setup (src/auth/native/Onboarding.tsx). */
 export default function Welcome() {
-  return <Redirect href="/app" />;
+  return <NativeOnboarding />;
 }

@@ -1,5 +1,5 @@
 import { requireUserId, unauthorized } from '@/server/auth/clerk';
-import { makeOAuthState } from '@/server/auth/session';
+import { asReturnPath, makeOAuthState, returnCookie } from '@/server/auth/session';
 import { authUrl, oauthConfigured } from '@/server/google/oauth';
 import { enforceRateLimit } from '@/server/rate-limit';
 
@@ -11,6 +11,9 @@ import { enforceRateLimit } from '@/server/rate-limit';
  * `{ url }` for the client to redirect to, and sets a short-lived
  * `ft_oauth_state` nonce cookie. The signed `state` carries the Clerk user id so
  * the callback knows who owns the new connection.
+ *
+ * Optional body `{ returnTo: '/welcome' }` (onboarding) sends the browser back
+ * there instead of `/app`; anything else falls back to `/app`.
  */
 export async function POST(request: Request): Promise<Response> {
   const userId = await requireUserId(request);
@@ -40,7 +43,15 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
+  let returnTo: unknown;
+  try {
+    returnTo = ((await request.json()) as { returnTo?: unknown })?.returnTo;
+  } catch {
+    // no body: the calendar's own Connect button
+  }
+
   const headers = new Headers({ 'Content-Type': 'application/json' });
   headers.append('Set-Cookie', cookie);
+  headers.append('Set-Cookie', returnCookie(request, asReturnPath(returnTo)));
   return new Response(JSON.stringify({ url: authUrl(state) }), { status: 200, headers });
 }

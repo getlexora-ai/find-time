@@ -164,3 +164,22 @@ need a live `pk_test_` / `sk_test_` to verify end to end.
 `beautiful-shadows` (the sm/md/lg ramp, already the landing's), `no-ai-design-slop`
 (no decorative orbs/gradients; every visual element shows state),
 `product-proof-saas` (the product's own week as the hero, sample data labelled).
+
+### 5.1 Second pass (2026-10-02)
+
+| Change | Where |
+|---|---|
+| **Returning users keep their settings.** `GET /api/onboarding` returns the saved settings as answers (`answersFromProfile`; peak read back from the stored curve). The form opens on them ("Review your setup", "Keep my settings"), and `POST` writes only the groups the user touched (`changed`: name · hours · peak · focus · hardWork · prefs) — a learned energy curve is replaced only if they pick a peak. First-time users send no `changed` = everything. | `src/auth/onboarding.ts`, `api/onboarding+api.ts` |
+| **More Clerk paths.** Sign-up that Clerk marks `missing_requirements` → "A few more details" (first/last name, username, terms checkbox; anything else is named as unsupported). Google sign-ups needing details continue at `/signup?continue=1` (`continueSignUpUrl`). Second factor: email code, SMS code, authenticator (TOTP) or backup code, with "Other ways" to switch. | `src/auth/dom/AuthPage.tsx`, `sso-callback.web.tsx` |
+| **Focus + numbering.** Each step change moves focus to the new question (`h1 tabIndex=-1`); steppers no longer announce every click (value is in the button label). One numbering system: the rail (01–05); the eyebrow is just "Shape your week". | `Onboarding.tsx` |
+| **Real planner in the preview.** `previewWeek` now places deep work with `rankFreeSlots` (src/server/ai/find-time.ts) using the profile the answers would save (`profileFrom`): energy curve, working hours, buffer. Each day's budget is split into even sittings ≤ 2½ h. | `src/auth/onboarding.ts` |
+| **Google connect is step 2.** Connect leaves for Google with `{ returnTo: '/welcome' }` (start sets an `ft_oauth_return` cookie, allow-list `/app` · `/welcome`; the callback honours it). Back on `/welcome?connect=ok` the page syncs, and the preview plans around **this week's real meetings** (`GET /api/onboarding` → `meetings`, busy per `blocksTime`, the planner's rule). Answers survive the round trip (sessionStorage). | `api/auth/google/{start,callback}`, `server/auth/session.ts`, `Onboarding.tsx` |
+| **Phone layout.** Below 980 px a sticky strip shows deep work per day + meeting counts while you answer. | `src/auth/dom/FocusStrip.tsx` |
+| **Time zone** is a searchable combobox (type "tokyo", "kolkata"…), detected zone pinned first, offsets shown. Legacy ICU ids (Asia/Calcutta, Europe/Kiev…) are shown and saved under their current names. | `TimeZonePicker.tsx`, `modernZone` |
+| **Sign-in panel** is today's date and this week, no sample data. | `AuthPage.tsx` `SignInStage` |
+| **Native onboarding** at `/welcome` on iOS/Android: same steps, contract and API, Nexus tokens, per-day bar preview. Google connect stays web-only (step 2 says so). `/app` now gates native too. | `src/auth/native/Onboarding.tsx`, `app/welcome.tsx`, `app/app/index.tsx` |
+| **Drop-off tracking.** `POST /api/onboarding/event` → `onboarding_events` (view / connect / connected / connect_failed / skip / finish per step, web or native). Funnel query in the migration header. **Apply `db/022_onboarding_events.sql`** before deploying (the endpoint tolerates its absence). | `db/022_onboarding_events.sql`, `api/onboarding/event+api.ts`, `src/auth/client.ts` |
+| **Rate limits.** `onboarding` 30/h · 100/day and `onboarding-event` 120/h · 400/day per user, on the existing limiter. | `src/server/rate-limit.ts` |
+| **E2E.** Playwright suite in `e2e/` (own package.json, so the app lockfile doesn't move): sign up → code → all five steps → done → `/app`; sign in again; skip; error states; signed-out gate; phone strip. Runs against a Clerk **dev** instance in test mode — see `e2e/README.md`. | `e2e/` |
+
+**Verified here:** typecheck · lint · `onboarding.check.ts` · web + iOS export · unauthenticated calls to the new routes → 401 · the callback sends `ft_oauth_return=/welcome` back to `/welcome` and an injected URL to `/app`. Rendered in Chromium (1440 / 1200 / 390 px) with Clerk and the API stubbed: returning-user prefill, the connect round trip with real meetings, the time-zone search, the phone strip, sign-in panel, authenticator-code and extra-details steps. `e2e` lists its 7 tests but **has not run against a real Clerk instance** — no keys in this environment.

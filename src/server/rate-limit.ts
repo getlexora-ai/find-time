@@ -16,7 +16,14 @@ import { decide, windowStart, type Pair, type Window } from '@/server/rate-limit
  * a limiter/DB outage (or DATABASE_URL unset) must never take a route down.
  */
 
-export type RateRoute = 'waitlist' | 'ai-find-time' | 'ai-chat' | 'ai-report' | 'google-connect';
+export type RateRoute =
+  | 'waitlist'
+  | 'ai-find-time'
+  | 'ai-chat'
+  | 'ai-report'
+  | 'google-connect'
+  | 'onboarding'
+  | 'onboarding-event';
 
 const LIMITS: Record<RateRoute, Pair> = {
   // unauthenticated — spammable to junk; keep tight
@@ -32,6 +39,11 @@ const LIMITS: Record<RateRoute, Pair> = {
   'ai-report': { hour: 30, day: 100 },
   // authed, kicks off a Google OAuth round trip
   'google-connect': { hour: 10, day: 30 },
+  // authed, writes settings + calls Clerk — a few saves (and the GET's
+  // calendar read) per setup is normal; this is a flood guard
+  onboarding: { hour: 30, day: 100 },
+  // authed, one tiny insert per step viewed
+  'onboarding-event': { hour: 120, day: 400 },
 };
 
 type Key = { kind: 'ip' } | { kind: 'user'; userId: string };
