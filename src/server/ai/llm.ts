@@ -49,11 +49,12 @@ type Response = {
 
 /** Overloaded, rate-limited, or answered without the forced tool call: worth one more try. */
 class LlmError extends Error {
-  constructor(
-    message: string,
-    readonly retryable: boolean,
-  ) {
+  // A plain field, not a constructor parameter property: Node's type stripping
+  // can't run those, and the evals import this file directly.
+  readonly retryable: boolean;
+  constructor(message: string, retryable: boolean) {
     super(message);
+    this.retryable = retryable;
   }
 }
 
