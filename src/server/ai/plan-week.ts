@@ -47,13 +47,33 @@
  *     optional tasks (low priority, no deadline). A task that missed may take
  *     the new sessions of a lower-priority one, kept only if it then fits whole.
  *
+ * Robustness (from the deterministic puzzle suite, src/server/ai/puzzles.check.mjs):
+ *
+ *   - Input is cleaned before anything is planned (`cleanPlanInput`): an item
+ *     that can't be trusted is left out, one that can be repaired is, and
+ *     either way it is listed in `issues` — never a silent guess.
+ *   - Work keeps to each day's own working hours; a day off gets no work.
+ *   - The buffer keeps new blocks clear of calendar events too, not only of
+ *     each other. Blocks already on the calendar never move over a buffer.
+ *   - Placement is greedy, and greedy can lose a packing that fits. When
+ *     anything misses, the week is re-planned with rigid tasks first and with
+ *     earliest-fit packing, and the plan that leaves the least important work
+ *     out wins (ties keep the scored plan).
+ *
  * Pure: no DB, no clock. The route supplies busy time already filtered by
  * `blocksTime`, and `verifyPlan` checks any result against the hard rules
  * independently of how it was built.
  */
 import { dayWindowFor } from './clarify.ts';
 import { type Busy, type RankedSlot, rankFreeSlots } from './find-time.ts';
-import { type AgentProfile, effectiveBuffer } from './preferences.ts';
+import {
+  type AgentProfile,
+  DEFAULT_WORK_HOURS,
+  defaultProfile,
+  effectiveBuffer,
+  PERSONAL_DAY_WINDOW,
+  WEEKDAYS,
+} from './preferences.ts';
 import type { SlotFeatures } from './scoring.ts';
 
 const MIN = 60_000;
@@ -181,14 +201,18 @@ export type WeekPlan = {
   moved: { eventId: string; taskId?: string; habitId?: string; why: string }[];
   /** soft shortfalls worth saying: a habit at its minimum but under its ideal */
   notes: string[];
+  /** input that was left out or repaired before planning (see cleanPlanInput) — for logs, not the user */
+  issues: string[];
 };
 
 export type PlanInput = {
   nowISO: string;
   tasks: PlanTask[];
   habits?: PlanHabit[];
-  /** busy time that is not one of these tasks' or habits' own blocks (travel included) */
+  /** busy time that is not one of these tasks' or habits' own blocks — kept clear by the buffer */
   busy: Busy[];
+  /** travel either side of in-person events (`travelPadding`) — busy, but already the gap, so no buffer */
+  travel?: Busy[];
   /** time away — busy, and named as the reason when it is why something missed */
   away?: Busy[];
   existing: ExistingBlock[];
@@ -205,13 +229,189 @@ const WINDOWS: Record<PreferredWindow, { start: number; end: number }> = {
 
 type Iv = { s: number; e: number };
 
+const HOUR = 60 * MIN;
 const iso = (ms: number) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, '.000Z');
 const dayStart = (ms: number) => Math.floor(ms / DAY) * DAY;
 const overlaps = (a: Iv, b: Iv) => a.s < b.e && a.e > b.s;
-const isWeekend = (ms: number) => [0, 6].includes(new Date(ms).getUTCDay());
 
-/** Work stays on weekdays; personal time may use the weekend. */
-const skipsWeekends = (t: { category: string }) => t.category !== 'personal';
+/**
+ * The hours a category may use on the day `dayMs` falls in, or null for none.
+ * Work keeps to that day's working hours (a day off — the weekend, by
+ * default — gets none); personal time keeps to the waking day, every day.
+ */
+export function hoursOn(profile: AgentProfile, category: string, dayMs: number): { start: number; end: number } | null {
+  if (category === 'personal') return { ...PERSONAL_DAY_WINDOW };
+  const key = WEEKDAYS[new Date(dayMs).getUTCDay()];
+  const h = key in profile.workHours ? profile.workHours[key] : DEFAULT_WORK_HOURS[key];
+  return h ?? null;
+}
+
+/** The time in [lo, hi) a category may not use: outside each day's hours, and whole days off. */
+function offHours(profile: AgentProfile, category: string, lo: number, hi: number): Iv[] {
+  const out: Iv[] = [];
+  for (let d = dayStart(lo); d < hi; d += DAY) {
+    const h = hoursOn(profile, category, d);
+    if (!h) {
+      out.push({ s: d, e: d + DAY });
+      continue;
+    }
+    if (h.start > 0) out.push({ s: d, e: d + h.start * HOUR });
+    if (h.end < 24) out.push({ s: d + h.end * HOUR, e: d + DAY });
+  }
+  return out;
+}
+
+// ── input ─────────────────────────────────────────────────────────────────
+
+const PRIORITIES: readonly string[] = ['low', 'medium', 'high'];
+const EFFORTS: readonly string[] = ['light', 'normal', 'hard'];
+const WINDOW_NAMES: readonly string[] = ['morning', 'afternoon', 'evening'];
+const isTime = (s: unknown) => typeof s === 'string' && Number.isFinite(Date.parse(s));
+const isSpan = (s: unknown, e: unknown) => isTime(s) && isTime(e) && Date.parse(e as string) > Date.parse(s as string);
+
+/**
+ * Check the input before planning. What can't be trusted is left out — a task
+ * with no id, no duration or an unreadable deadline would otherwise be planned
+ * on a guess — and what can be repaired is (an unknown priority reads as
+ * medium, a negative buffer as none). Both are listed in `issues`. Only an
+ * unreadable `nowISO` throws: without "now" nothing can be planned at all.
+ */
+export function cleanPlanInput(input: PlanInput): { input: PlanInput; issues: string[] } {
+  if (!isTime(input.nowISO)) throw new Error(`planWeek: nowISO is not a time (${String(input.nowISO)})`);
+  const issues: string[] = [];
+  const nameOf = (x: { title?: unknown; id?: unknown }, kind: string) =>
+    (typeof x.title === 'string' && x.title) || (typeof x.id === 'string' && x.id) || `a ${kind}`;
+
+  const tasks: PlanTask[] = [];
+  const taskIds = new Set<string>();
+  for (const t of input.tasks ?? []) {
+    const n = nameOf(t, 'task');
+    if (typeof t.id !== 'string' || !t.id) {
+      issues.push(`${n}: left out — it has no id`);
+      continue;
+    }
+    if (taskIds.has(t.id)) {
+      issues.push(`${n}: left out — id ${t.id} is used by another task`);
+      continue;
+    }
+    taskIds.add(t.id);
+    if (!(typeof t.durationMin === 'number' && Number.isFinite(t.durationMin) && t.durationMin > 0)) {
+      issues.push(`${n}: left out — duration ${String(t.durationMin)} is not a positive number of minutes`);
+      continue;
+    }
+    const badTime = (['dueByISO', 'notBeforeISO'] as const).find((k) => t[k] != null && !isTime(t[k]));
+    if (badTime) {
+      issues.push(`${n}: left out — ${badTime} "${String(t[badTime])}" is not a time`);
+      continue;
+    }
+    const c: PlanTask = { ...t, title: typeof t.title === 'string' && t.title ? t.title : t.id, durationMin: Math.round(t.durationMin) };
+    if (t.preferByISO != null && !isTime(t.preferByISO)) {
+      issues.push(`${n}: preferByISO "${String(t.preferByISO)}" is not a time — ignored`);
+      c.preferByISO = null;
+    }
+    if (!PRIORITIES.includes(t.priority)) {
+      issues.push(`${n}: priority "${String(t.priority)}" is not low, medium or high — planned as medium`);
+      c.priority = 'medium';
+    }
+    if (t.effort != null && !EFFORTS.includes(t.effort)) {
+      issues.push(`${n}: effort "${String(t.effort)}" is not light, normal or hard — planned as normal`);
+      c.effort = 'normal';
+    }
+    if (t.preferredWindow != null && !WINDOW_NAMES.includes(t.preferredWindow)) {
+      issues.push(`${n}: preferred window "${String(t.preferredWindow)}" is unknown — ignored`);
+      c.preferredWindow = null;
+    }
+    if (typeof t.category !== 'string' || !t.category) {
+      issues.push(`${n}: no category — planned as deep-work`);
+      c.category = 'deep-work';
+    }
+    c.splittable = t.splittable === true;
+    const chunk = typeof t.minChunkMin === 'number' && Number.isFinite(t.minChunkMin) ? t.minChunkMin : 15;
+    if (c.splittable && chunk > c.durationMin) issues.push(`${n}: minimum session (${chunk} min) is longer than the task — placed in one piece`);
+    c.minChunkMin = Math.max(15, Math.min(chunk, c.durationMin));
+    tasks.push(c);
+  }
+
+  const habits: PlanHabit[] = [];
+  const habitIds = new Set<string>();
+  for (const h of input.habits ?? []) {
+    const n = nameOf(h, 'habit');
+    if (typeof h.id !== 'string' || !h.id || habitIds.has(h.id)) {
+      issues.push(`${n}: left out — ${h.id ? `id ${h.id} is used by another habit` : 'it has no id'}`);
+      continue;
+    }
+    habitIds.add(h.id);
+    if (!(typeof h.durationMin === 'number' && Number.isFinite(h.durationMin) && h.durationMin > 0) || !Number.isFinite(h.perWeek)) {
+      issues.push(`${n}: left out — it needs a positive duration and a number of sessions a week`);
+      continue;
+    }
+    const c: PlanHabit = { ...h, title: typeof h.title === 'string' && h.title ? h.title : h.id, durationMin: Math.round(h.durationMin) };
+    const perWeek = Math.min(7, Math.max(1, Math.round(h.perWeek)));
+    if (perWeek !== h.perWeek) issues.push(`${n}: ${h.perWeek}x a week read as ${perWeek}x`);
+    c.perWeek = perWeek;
+    if (h.minPerWeek != null && !(Number.isFinite(h.minPerWeek) && h.minPerWeek >= 1 && h.minPerWeek <= perWeek)) {
+      issues.push(`${n}: minimum ${h.minPerWeek}x a week doesn't fit ${perWeek}x — using ${perWeek}x`);
+      c.minPerWeek = null;
+    }
+    if (h.preferredWindow != null && !WINDOW_NAMES.includes(h.preferredWindow)) {
+      issues.push(`${n}: preferred window "${String(h.preferredWindow)}" is unknown — ignored`);
+      c.preferredWindow = null;
+    }
+    if (typeof h.category !== 'string' || !h.category) c.category = 'personal';
+    habits.push(c);
+  }
+
+  const spans = (list: Busy[] | undefined, what: string) => {
+    const ok = (list ?? []).filter((b) => isSpan(b?.start, b?.end));
+    const dropped = (list ?? []).length - ok.length;
+    if (dropped) issues.push(`${dropped} ${what} with no valid start and end ignored`);
+    return ok;
+  };
+  const busy = spans(input.busy, 'busy time(s)');
+  const travel = spans(input.travel, 'travel time(s)');
+  const away = spans(input.away, 'time(s) away');
+
+  const existing: ExistingBlock[] = [];
+  for (const x of input.existing ?? []) {
+    if (!isSpan(x?.startISO, x?.endISO)) {
+      issues.push(`calendar block ${x?.eventId ?? '?'}: no valid start and end — ignored`);
+      continue;
+    }
+    if (x.taskId ? !taskIds.has(x.taskId) : !(x.habitId && habitIds.has(x.habitId))) {
+      issues.push(`calendar block ${x.eventId}: not for any task or habit being planned — left as it is`);
+      continue;
+    }
+    existing.push(x);
+  }
+
+  const fallback = defaultProfile();
+  const profile: AgentProfile = { ...input.profile };
+  if (!(Number.isFinite(profile.defaultBufferMin) && profile.defaultBufferMin >= 0)) {
+    issues.push(`buffer ${String(profile.defaultBufferMin)} min is not a valid length — using none`);
+    profile.defaultBufferMin = 0;
+  }
+  if (!(Number.isFinite(profile.maxDailyFocusMin) && profile.maxDailyFocusMin > 0)) {
+    issues.push(`daily focus budget ${String(profile.maxDailyFocusMin)} min is not valid — using ${fallback.maxDailyFocusMin}`);
+    profile.maxDailyFocusMin = fallback.maxDailyFocusMin;
+  }
+  if (!profile.workHours || typeof profile.workHours !== 'object') {
+    issues.push('no working hours — using the defaults');
+    profile.workHours = { ...DEFAULT_WORK_HOURS };
+  } else {
+    const hours = { ...profile.workHours };
+    for (const day of WEEKDAYS) {
+      const h = hours[day];
+      if (h == null) continue;
+      if (!(Number.isFinite(h.start) && Number.isFinite(h.end) && h.start >= 0 && h.end <= 24 && h.end > h.start)) {
+        issues.push(`working hours on ${day} (${h.start}–${h.end}) are not a valid range — treated as a day off`);
+        hours[day] = null;
+      }
+    }
+    profile.workHours = hours;
+  }
+
+  return { input: { ...input, tasks, habits, busy, travel, away, existing, profile }, issues };
+}
 
 /** The last instant this task's work may end. */
 export function latestFor(t: PlanTask, nowMs: number): number {
@@ -229,15 +429,15 @@ export function earliestFor(t: PlanTask, nowMs: number): number {
 
 /** Free minutes inside the task's day window between its earliest start and its bound. */
 export function freeMinutes(t: PlanTask, profile: AgentProfile, busy: Iv[], nowMs: number): { total: number; longest: number } {
-  const win = dayWindowFor(profile, t.category);
   const earliest = earliestFor(t, nowMs);
   const latest = latestFor(t, nowMs);
   let total = 0;
   let longest = 0;
   for (let d = dayStart(earliest); d < latest; d += DAY) {
-    if (skipsWeekends(t) && isWeekend(d)) continue;
-    const lo = Math.max(earliest, d + win.start * 60 * MIN);
-    const hi = Math.min(latest, d + win.end * 60 * MIN);
+    const h = hoursOn(profile, t.category, d);
+    if (!h) continue;
+    const lo = Math.max(earliest, d + h.start * HOUR);
+    const hi = Math.min(latest, d + h.end * HOUR);
     if (hi <= lo) continue;
     // Walk the day's busy intervals, measuring the gaps between them.
     const day = busy.filter((b) => b.e > lo && b.s < hi).sort((a, b) => a.s - b.s);
@@ -341,10 +541,67 @@ export function startLabel(ms: number): string {
   return ms % DAY ? `${day} ${d.toISOString().slice(11, 16)}` : day;
 }
 
-export function planWeek(input: PlanInput): WeekPlan {
+/** How a pass places things: the scored search, or variants that pack tighter when that one misses. */
+type Strategy = {
+  /**
+   * Who goes first. 'deadline' is EDF (then priority, slack…). 'rigid' puts
+   * tasks that can't be split ahead of ones that can. 'tightest' puts the task
+   * with the fewest legal slots first — the one most likely to be crowded out.
+   */
+  order: 'deadline' | 'rigid' | 'tightest';
+  /** each session takes the earliest legal slot instead of the best-scored one */
+  compact: boolean;
+};
+const STRATEGIES: Strategy[] = [
+  { order: 'deadline', compact: false },
+  { order: 'rigid', compact: false },
+  { order: 'tightest', compact: false },
+  { order: 'deadline', compact: true },
+  { order: 'rigid', compact: true },
+  { order: 'tightest', compact: true },
+];
+
+/**
+ * What a plan leaves out, most important first: habit minimums, then tasks by
+ * priority, then optional tasks. Compared element by element — less is better.
+ */
+function shortfall(plan: WeekPlan, input: PlanInput): number[] {
+  const tasks = new Map(input.tasks.map((t) => [t.id, t]));
+  const out = [0, 0, 0, 0, 0];
+  for (const u of plan.unplaced) {
+    const t = u.taskId ? tasks.get(u.taskId) : undefined;
+    const i = !t ? 0 : u.optional ? 4 : 1 + PRIORITY_RANK[t.priority];
+    out[i] += u.neededMin;
+  }
+  return out;
+}
+const lessThan = (a: number[], b: number[]) => {
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] < b[i];
+  return false;
+};
+
+export function planWeek(raw: PlanInput): WeekPlan {
+  const { input, issues } = cleanPlanInput(raw);
+  let best = planWith(input, STRATEGIES[0]);
+  if (best.unplaced.length) {
+    let cost = shortfall(best, input);
+    for (const s of STRATEGIES.slice(1)) {
+      const p = planWith(input, s);
+      const c = shortfall(p, input);
+      if (lessThan(c, cost)) {
+        best = p;
+        cost = c;
+      }
+      if (cost.every((n) => n === 0)) break;
+    }
+  }
+  return { ...best, issues };
+}
+
+function planWith(input: PlanInput, mode: Strategy): WeekPlan {
   const nowMs = Date.parse(input.nowISO);
   const { profile } = input;
-  const buf = effectiveBuffer(profile) * MIN;
+  const buf = Math.max(0, effectiveBuffer(profile)) * MIN;
   const tasks = new Map(input.tasks.map((t) => [t.id, t]));
   const habits = new Map((input.habits ?? []).map((h) => [h.id, h]));
   /** the day's budget of demanding work, in effort-weighted minutes */
@@ -366,7 +623,11 @@ export function planWeek(input: PlanInput): WeekPlan {
   // Everything placed goes through occupy/release, so a step can be undone
   // (the priority bump tries a change and takes it back if it doesn't help).
   type Held = Iv & { ref?: PlannedBlock };
-  let busy: Held[] = [...input.busy.map(toIv).filter(valid), ...away];
+  const events: Iv[] = input.busy.map(toIv).filter(valid);
+  const travel: Iv[] = (input.travel ?? []).map(toIv).filter(valid);
+  // New blocks keep the buffer from calendar events as well as from each
+  // other. Travel already is the gap around its event, so it gets none.
+  let busy: Held[] = [...events.map((b) => ({ s: b.s - buf, e: b.e + buf })), ...travel, ...away];
   let blocks: PlannedBlock[] = [];
   let credited = new Map<string, number>();
   /** task id, or "h:" + habit id → day → sessions that day (past habit sessions included) */
@@ -443,7 +704,11 @@ export function planWeek(input: PlanInput): WeekPlan {
 
   // ── 1. what is already on the calendar ──────────────────────────────────
   // Pinned first, so a kept block is checked against everything the user fixed.
-  const existing = [...input.existing].sort((a, b) => Number(b.pinned) - Number(a.pinned) || Date.parse(a.startISO) - Date.parse(b.startISO));
+  // A block moves only for a real overlap, never for sitting inside a buffer:
+  // these are checked against the events and kept blocks as they are, unpadded.
+  const taken: Iv[] = [...events, ...travel];
+  const clashes = (iv: Iv) => taken.some((b) => overlaps(b, iv));
+  const existing =[...input.existing].sort((a, b) => Number(b.pinned) - Number(a.pinned) || Date.parse(a.startISO) - Date.parse(b.startISO));
   for (const x of existing) {
     const s = Date.parse(x.startISO);
     const e = Date.parse(x.endISO);
@@ -470,7 +735,7 @@ export function planWeek(input: PlanInput): WeekPlan {
       let why: string | null = null;
       if (!x.pinned) {
         if (away.some((a) => overlaps(a, iv))) why = "you're away then";
-        else if (busy.some((b) => overlaps(b, iv))) why = 'something else is now booked at that time';
+        else if (clashes(iv)) why = 'something else is now booked at that time';
         else if (days.size >= h.perWeek) why = `the week already has ${h.perWeek} ${h.title} session${h.perWeek === 1 ? '' : 's'}`;
         else if (days.has(dayStart(s))) why = `there's already a ${h.title} session that day`;
       }
@@ -480,6 +745,7 @@ export function planWeek(input: PlanInput): WeekPlan {
         continue;
       }
       occupy({ habitId: h.id, title: h.title, category: h.category, ...keptFields });
+      taken.push(iv);
       continue;
     }
 
@@ -495,7 +761,7 @@ export function planWeek(input: PlanInput): WeekPlan {
     else if (!x.pinned) {
       if (e > latestFor(t, nowMs) && t.dueByISO) why = `it ended after the ${dueLabel(t.dueByISO)} deadline`;
       else if (away.some((a) => overlaps(a, iv))) why = "you're away then";
-      else if (busy.some((b) => overlaps(b, iv))) why = 'something else is now booked at that time';
+      else if (clashes(iv)) why = 'something else is now booked at that time';
       else if ((credited.get(t.id) ?? 0) >= t.durationMin) why = 'the task no longer needs it';
     }
     if (why) {
@@ -504,13 +770,15 @@ export function planWeek(input: PlanInput): WeekPlan {
       continue;
     }
     occupy({ taskId: t.id, title: t.title, category: t.category, ...keptFields });
+    taken.push(iv);
   }
 
   const gridUp = (ms: number) => Math.ceil(ms / (15 * MIN)) * 15 * MIN;
 
   /**
    * Ranked free slots of `size` minutes in [lo, hi): one list for the
-   * preferred part of the day, then one for the whole window.
+   * preferred part of the day, then one for the whole window. Each day keeps
+   * to its own hours for the category (off-hours count as busy).
    */
   const slotsIn = (
     category: string,
@@ -518,10 +786,9 @@ export function planWeek(input: PlanInput): WeekPlan {
     lo: number,
     hi: number,
     preferred: PreferredWindow | null | undefined,
-    weekends: boolean,
   ): RankedSlot[][] => {
     if (hi <= lo) return [];
-    const asBusy = busy.map((b) => ({ start: iso(b.s), end: iso(b.e) }));
+    const asBusy = [...busy, ...offHours(profile, category, lo, hi)].map((b) => ({ start: iso(b.s), end: iso(b.e) }));
     const win = dayWindowFor(profile, category);
     const windows = preferred
       ? [
@@ -540,7 +807,7 @@ export function planWeek(input: PlanInput): WeekPlan {
           dayStartHour: w.start,
           dayEndHour: w.end,
           bufferMin: 0,
-          skipWeekends: !weekends,
+          skipWeekends: false,
           category,
         },
         profile,
@@ -579,7 +846,7 @@ export function planWeek(input: PlanInput): WeekPlan {
       const days = habitDays(h.id, w);
       let pick: RankedSlot | null = null;
       for (const capped of [true, false]) {
-        for (const ranked of slotsIn(h.category, h.durationMin, lo, hi, h.preferredWindow, !skipsWeekends(h))) {
+        for (const ranked of slotsIn(h.category, h.durationMin, lo, hi, h.preferredWindow)) {
           // One a day, and not the day either side of another session if the week allows.
           const scored = ranked
             .filter((r) => !days.has(dayStart(Date.parse(r.startISO))) && (!capped || underCap(r, h.durationMin, weight)))
@@ -616,12 +883,15 @@ export function planWeek(input: PlanInput): WeekPlan {
   // ── tasks ───────────────────────────────────────────────────────────────
   const remaining = (t: PlanTask) => Math.max(0, t.durationMin - (credited.get(t.id) ?? 0));
 
-  /** The legal slots for a session of `t`, best first, from the first part of the day that has any. */
+  /**
+   * The legal slots for a session of `t`, best first, from the first part of
+   * the day that has any. In compact mode "best" is simply "earliest".
+   */
   const candidatesFor = (t: PlanTask, size: number, avoidDays: Set<number> | null, capped: boolean): RankedSlot[] => {
     const preferBy = t.preferByISO ? Date.parse(t.preferByISO) : NaN;
     const weight = EFFORT_WEIGHT[t.effort ?? 'normal'];
     const hard = t.effort === 'hard';
-    for (const ranked of slotsIn(t.category, size, earliestFor(t, nowMs), latestFor(t, nowMs), t.preferredWindow, !skipsWeekends(t))) {
+    for (const ranked of slotsIn(t.category, size, earliestFor(t, nowMs), latestFor(t, nowMs), t.preferredWindow)) {
       const pick = ranked
         .filter((r) => !avoidDays || !avoidDays.has(dayStart(Date.parse(r.startISO))))
         .filter((r) => !capped || underCap(r, size, weight))
@@ -629,7 +899,11 @@ export function planWeek(input: PlanInput): WeekPlan {
           ...r,
           score: shaped(r, weight, hard) + (Number.isFinite(preferBy) && Date.parse(r.endISO) <= preferBy ? PREFER_BY_BONUS : 0),
         }))
-        .sort((a, b) => b.score - a.score || Date.parse(a.startISO) - Date.parse(b.startISO));
+        .sort((a, b) =>
+          mode.compact
+            ? Date.parse(a.startISO) - Date.parse(b.startISO)
+            : b.score - a.score || Date.parse(a.startISO) - Date.parse(b.startISO),
+        );
       if (pick.length) return pick;
     }
     return [];
@@ -716,8 +990,16 @@ export function planWeek(input: PlanInput): WeekPlan {
   const slack = new Map(input.tasks.map((t) => [t.id, freeMinutes(t, profile, busy, nowMs).total - remaining(t)]));
   const dueOf = (t: PlanTask) => (t.dueByISO ? Date.parse(t.dueByISO) : Infinity);
   const preferOf = (t: PlanTask) => (t.preferByISO ? Date.parse(t.preferByISO) : Infinity);
+  /** legal slots for the task's first session on the calendar as it stands (only for 'tightest') */
+  const options = new Map(
+    mode.order === 'tightest'
+      ? input.tasks.map((t) => [t.id, slotsIn(t.category, sessionSize(remaining(t), t), earliestFor(t, nowMs), latestFor(t, nowMs), null).at(-1)?.length ?? 0])
+      : [],
+  );
   const ordered = [...input.tasks].sort(
     (a, b) =>
+      (mode.order === 'rigid' ? Number(a.splittable) - Number(b.splittable) : 0) ||
+      (mode.order === 'tightest' ? (options.get(a.id) ?? 0) - (options.get(b.id) ?? 0) : 0) ||
       dueOf(a) - dueOf(b) ||
       PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority] ||
       (slack.get(a.id) ?? 0) - (slack.get(b.id) ?? 0) ||
@@ -821,7 +1103,7 @@ export function planWeek(input: PlanInput): WeekPlan {
   }
 
   blocks.sort((a, b) => Date.parse(a.startISO) - Date.parse(b.startISO));
-  return { blocks, unplaced, order: [...required, ...optional].map((t) => t.id), moved, notes };
+  return { blocks, unplaced, order: [...required, ...optional].map((t) => t.id), moved, notes, issues: [] };
 }
 
 /** Why a task did not fit, against the time that was free when its turn came. */
@@ -853,13 +1135,17 @@ function explainMiss(
  * Check a plan against the hard rules, independently of how it was built.
  * Returns the problems found; an empty list is a valid plan.
  */
-export function verifyPlan(input: PlanInput, plan: WeekPlan): string[] {
+export function verifyPlan(raw: PlanInput, plan: WeekPlan): string[] {
+  // Judged against the same cleaned input the planner used.
+  const { input } = cleanPlanInput(raw);
   const nowMs = Date.parse(input.nowISO);
+  const buf = Math.max(0, effectiveBuffer(input.profile)) * MIN;
   const tasks = new Map(input.tasks.map((t) => [t.id, t]));
   const habits = new Map((input.habits ?? []).map((h) => [h.id, h]));
   const problems: string[] = [];
   const toIv = (b: Busy) => ({ s: Date.parse(b.start), e: Date.parse(b.end) });
   const busy = input.busy.map(toIv);
+  const travel = (input.travel ?? []).map(toIv);
   const away = (input.away ?? []).map(toIv);
   const placed: (Iv & { label: string; status: PlannedBlock['status'] })[] = [];
   const minutes = new Map<string, { kept: number; added: number }>();
@@ -882,12 +1168,14 @@ export function verifyPlan(input: PlanInput, plan: WeekPlan): string[] {
       if (t?.dueByISO && iv.e > Date.parse(t.dueByISO)) problems.push(`${label}: ends after the deadline`);
       if (t && iv.s < earliestFor(t, nowMs)) problems.push(`${label}: starts before its not-before`);
       if (busy.some((x) => overlaps(x, iv))) problems.push(`${label}: overlaps busy time`);
+      else if (busy.some((x) => overlaps({ s: x.s - buf, e: x.e + buf }, iv))) problems.push(`${label}: inside the buffer around busy time`);
+      if (travel.some((x) => overlaps(x, iv))) problems.push(`${label}: overlaps travel time`);
       if (away.some((x) => overlaps(x, iv))) problems.push(`${label}: overlaps time away`);
-      const win = dayWindowFor(input.profile, item.category);
-      const from = (iv.s - dayStart(iv.s)) / (60 * MIN);
-      const to = from + (iv.e - iv.s) / (60 * MIN);
-      if (from < win.start || to > win.end) problems.push(`${label}: outside the day window`);
-      if (skipsWeekends(item) && isWeekend(iv.s)) problems.push(`${label}: on a weekend`);
+      const hours = hoursOn(input.profile, item.category, dayStart(iv.s));
+      const from = (iv.s - dayStart(iv.s)) / HOUR;
+      const to = from + (iv.e - iv.s) / HOUR;
+      if (!hours) problems.push(`${label}: on a day off`);
+      else if (from < hours.start || to > hours.end) problems.push(`${label}: outside that day's hours`);
     }
     for (const p of placed) {
       if (overlaps(p, iv) && (b.status === 'new' || p.status === 'new')) problems.push(`${label}: overlaps ${p.label}`);

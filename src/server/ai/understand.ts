@@ -109,6 +109,8 @@ export type Draft = {
   atMin?: number;
   /** place_at: the time was a bare "at 6" and still needs am/pm */
   atUnsure?: boolean;
+  /** place_at, set by the route: the time overlaps something and the user was asked whether to go ahead */
+  clashAsked?: boolean;
   /** set by the route: the last turn put blocks on the card */
   placed?: boolean;
   lastStartISO?: string;
@@ -1310,6 +1312,16 @@ export function understand(text: string, ctx: UnderstandContext): Understood {
     }
     return readDelete(del[1], null, nowMs, today);
   }
+  // "12:00 overlaps Lunch — put Gym there anyway?" A yes places it as asked;
+  // a no drops it; a different time ("13:00") falls through and is re-checked.
+  if (prev?.tool === TOOL_PLACE_AT && prev.clashAsked) {
+    if (CONFIRM_YES.test(raw) || /^\s*(?:yes,?\s+)?(?:put|place|book)\s+it\s+there\b|\banyway\b/i.test(raw)) {
+      const placed = placeAtFrom({ ...prev, clashAsked: false }, today);
+      if (placed) return { ...placed, args: { ...placed.args, overlapOk: true }, summary: `${placed.summary} · overlap ok` };
+    }
+    if (CONFIRM_NO.test(raw)) return answer(`Okay — I haven't added ${prev.title ?? 'it'}.`, null);
+  }
+
   // Answering "which day should I clear?" — but a new request starts fresh.
   if (prev?.tool === TOOL_DELETE && !prev.deleteIds?.length && !titleFrom(readFacets(raw, nowMs).rest)) {
     return readDelete(raw, prev, nowMs, today);
@@ -1422,13 +1434,7 @@ export function understand(text: string, ctx: UnderstandContext): Understood {
     if (!d.durationMin || d.durationMin <= 0) {
       return ask(`How long do you need for ${name}?`, durationOptions(category), d, `${name} · ${hhmm(d.atMin ?? 0)} · length missing`);
     }
-    const start = from + (d.atMin ?? 0) * MIN;
-    return {
-      name: TOOL_PLACE_AT,
-      args: { title: name, category, startISO: iso(start), endISO: iso(start + d.durationMin * MIN), reply: '' },
-      draft: d,
-      summary: `${name} · ${dayLabel(from, today)} ${hhmm(d.atMin ?? 0)} · ${d.durationMin} min`,
-    };
+    return placeAtFrom({ ...d, clashAsked: false }, today)!;
   }
 
   const from = d.from ? fromYmd(d.from) : NaN;
@@ -1473,6 +1479,21 @@ export function understand(text: string, ctx: UnderstandContext): Understood {
     d.dayStartHour !== undefined || d.dayEndHour !== undefined ? `${d.dayStartHour ?? '…'}–${d.dayEndHour ?? '…'}h` : '',
   ].filter(Boolean);
   return { name: TOOL_PROPOSE, args, draft: d, summary: bits.join(' · ') };
+}
+
+/** A complete place_at draft (one day, a time, a length) as the call to make; null if anything is missing. */
+function placeAtFrom(d: Draft, today: number): Understood | null {
+  const from = d.from ? fromYmd(d.from) : NaN;
+  if (!d.single || !Number.isFinite(from) || d.atMin === undefined || !d.durationMin || d.durationMin <= 0) return null;
+  const category = d.category ?? 'deep-work';
+  const name = d.title ?? DEFAULT_TITLE[category];
+  const start = from + d.atMin * MIN;
+  return {
+    name: TOOL_PLACE_AT,
+    args: { title: name, category, startISO: iso(start), endISO: iso(start + d.durationMin * MIN), reply: '' },
+    draft: d,
+    summary: `${name} · ${dayLabel(from, today)} ${hhmm(d.atMin)} · ${d.durationMin} min`,
+  };
 }
 
 function timeOff(span: { startISO: string; endISO: string }, title: string): Understood {

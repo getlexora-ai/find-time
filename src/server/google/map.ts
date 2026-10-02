@@ -1,4 +1,5 @@
 import type { GEvent } from './calendar';
+import { wallClockAt } from '../wall-clock.ts';
 
 /**
  * Google `events` resource -> a `calendar_events` row (db/003). Pure; see
@@ -72,26 +73,8 @@ function wallClockIso(dateTime: string, zone: string | undefined): string {
   // so the literal prefix is precisely the wall-clock we want.
   if (!zone) return literalAsZ(dateTime) ?? dateTime;
 
-  const ms = Date.parse(dateTime);
-  if (!Number.isFinite(ms)) return literalAsZ(dateTime) ?? dateTime;
-  try {
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: zone,
-      hourCycle: 'h23',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    }).formatToParts(ms);
-    const p: Record<string, string> = {};
-    for (const part of parts) p[part.type] = part.value;
-    return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}.000Z`;
-  } catch {
-    // Unknown IANA zone — fall back to the offset already in the string.
-    return literalAsZ(dateTime) ?? dateTime;
-  }
+  // Unknown IANA zone (or no instant) — fall back to the offset already in the string.
+  return wallClockAt(Date.parse(dateTime), zone) ?? literalAsZ(dateTime) ?? dateTime;
 }
 
 export function toRow(

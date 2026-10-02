@@ -58,11 +58,43 @@ export function ambiguousTime(text: string): Ambiguous | null {
   return { said: hit[0].trim(), am: `${pad(hour)}:${minute}`, pm: `${pad(hour + 12)}:${minute}` };
 }
 
-/** "…it overlaps Call with Alice (18:30–19:00)" for the card, so a clash shows even if the model is silent. */
-export function clashNote(busy: { start: string; end: string; title: string }[], span: Span): string | null {
+type Shown = { start: string; end: string; title: string };
+
+/** What on the calendar the span overlaps, earliest first. */
+export function overlapping(events: Shown[], span: Span): Shown[] {
   const [s, e] = [Date.parse(span.startISO), Date.parse(span.endISO)];
-  const hits = busy.filter((b) => Date.parse(b.start) < e && Date.parse(b.end) > s);
-  if (!hits.length) return null;
+  return events.filter((b) => Date.parse(b.start) < e && Date.parse(b.end) > s).sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+}
+
+/** "Call with Alice (18:30–19:00), Lunch (12:00–13:00)" */
+export function overlapList(hits: Shown[]): string {
   const hhmm = (iso: string) => iso.slice(11, 16);
-  return `it's the time you asked for, but it overlaps ${hits.map((b) => `${b.title.slice(0, 40)} (${hhmm(b.start)}–${hhmm(b.end)})`).join(', ')}`;
+  return hits.map((b) => `${b.title.slice(0, 40)} (${hhmm(b.start)}–${hhmm(b.end)})`).join(', ');
+}
+
+/** "…it overlaps Call with Alice (18:30–19:00)" for the card, so a clash shows even if the model is silent. */
+export function clashNote(busy: Shown[], span: Span): string | null {
+  const hits = overlapping(busy, span);
+  return hits.length ? `it's the time you asked for, but it overlaps ${overlapList(hits)}` : null;
+}
+
+/**
+ * Up to two free start times ("13:00") on the span's day for a block of the
+ * same length: the first one after the asked time, then the last one before
+ * it. On a 15-minute grid, inside [dayStartHour, dayEndHour), never in the past.
+ */
+export function freeNear(events: Shown[], span: Span, nowISO: string, dayStartHour: number, dayEndHour: number): string[] {
+  const STEP = 15 * 60_000;
+  const s = Date.parse(span.startISO);
+  const len = Date.parse(span.endISO) - s;
+  const day = Math.floor(s / 86_400_000) * 86_400_000;
+  const lo = Math.max(day + dayStartHour * 3_600_000, Math.ceil(Date.parse(nowISO) / STEP) * STEP);
+  const hi = day + dayEndHour * 3_600_000;
+  const iv = events.map((b) => [Date.parse(b.start), Date.parse(b.end)]);
+  const free = (c: number) => c >= lo && c + len <= hi && !iv.some(([a, b]) => a < c + len && b > c);
+  const hhmm = (ms: number) => new Date(ms).toISOString().slice(11, 16);
+  const out: string[] = [];
+  for (let c = s + STEP; c + len <= hi; c += STEP) if (free(c)) { out.push(hhmm(c)); break; }
+  for (let c = s - STEP; c >= lo; c -= STEP) if (free(c)) { out.push(hhmm(c)); break; }
+  return out;
 }

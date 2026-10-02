@@ -164,6 +164,12 @@ export async function loadProfile(userId: string): Promise<AgentProfile> {
   return base;
 }
 
+/** The user's IANA zone, for reading "now" on their clock (src/server/wall-clock.ts). */
+export async function userTimeZone(userId: string): Promise<string> {
+  const row = await queryOne<{ timezone: string | null }>('select timezone from scheduler_profiles where user_id = $1', [userId]);
+  return row?.timezone || defaultProfile().timezone;
+}
+
 export async function saveWeights(
   userId: string,
   weights: AgentProfile['weights'],

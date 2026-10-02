@@ -324,4 +324,23 @@ assert.equal(say('45 min', r.draft).args.minutes, 45);
 // Travelling somewhere is still time away.
 assert.equal(say("I'm travelling to Copenhagen from the 17th to the 22nd").name, 'block_time_off');
 
+// ── a named time that overlaps something: the route asks, the next turn answers ──
+{
+  // What the route stores after asking "12:00 overlaps Lunch — put Gym there anyway?"
+  const asked = { ...say('gym at 12pm tomorrow for 30 min').draft, placed: false, clashAsked: true };
+  r = say('Yes, put it there', asked);
+  assert.deepEqual([r.name, r.args.startISO, r.args.overlapOk], ['place_at', '2026-10-02T12:00:00.000Z', true]);
+  assert.equal(say('yes', asked).args.overlapOk, true);
+  assert.equal(say('put it there anyway', asked).args.overlapOk, true);
+  // Picking an offered time re-places it there — and is checked again, not waved through.
+  r = say('14:30', asked);
+  assert.deepEqual([r.name, r.args.startISO, r.args.endISO, r.args.overlapOk], ['place_at', '2026-10-02T14:30:00.000Z', '2026-10-02T15:00:00.000Z', undefined]);
+  assert.equal(r.draft.clashAsked, false);
+  r = say('no', asked);
+  assert.equal(r.name, 'answer');
+  assert.match(r.args.reply, /haven't added Gym/);
+  // Without a pending clash question, "yes" means nothing special.
+  assert.notEqual(say('yes', { ...asked, clashAsked: false }).args.overlapOk, true);
+}
+
 console.log('understand.check: ok');

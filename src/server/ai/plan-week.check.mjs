@@ -53,10 +53,11 @@ const of = (plan, id) => plan.blocks.filter((b) => b.taskId === id);
 }
 {
   // Only an hour free before the deadline: nothing is placed after it, and the
-  // miss says why and what would help [1][9].
+  // miss says why and what would help [1][9]. (10:10, so the 10-min buffer
+  // before it still leaves a clean hour.)
   const busy = [
     { start: D(7, '09:00'), end: D(7, '18:00') },
-    { start: D(8, '10:00'), end: D(8, '18:00') },
+    { start: D(8, '10:10'), end: D(8, '18:00') },
   ];
   const p = run({ busy, tasks: [task({ id: 'r', title: 'Report', durationMin: 180, splittable: true, dueByISO: due(8) })] });
   for (const b of of(p, 'r')) assert.ok(Date.parse(b.endISO) <= Date.parse(due(8)));
@@ -76,7 +77,7 @@ const of = (plan, id) => plan.blocks.filter((b) => b.taskId === id);
 {
   // One free hour on Monday. The task due Monday gets it even though the other
   // one is high priority; the high-priority one goes to Tuesday.
-  const busy = [{ start: D(7, '10:00'), end: D(7, '18:00') }];
+  const busy = [{ start: D(7, '10:10'), end: D(7, '18:00') }]; // 10:10: the buffer still leaves 09:00–10:00
   const p = run({
     busy,
     tasks: [
@@ -91,7 +92,7 @@ const of = (plan, id) => plan.blocks.filter((b) => b.taskId === id);
 }
 {
   // No deadlines: priority decides who gets the only slot.
-  const busy = [{ start: D(7, '10:00'), end: D(7, '18:00') }];
+  const busy = [{ start: D(7, '10:10'), end: D(7, '18:00') }]; // 10:10: the buffer still leaves 09:00–10:00
   const days = [8, 9, 10, 11, 14, 15, 16, 17, 18].map((d) => ({ start: D(d, '09:00'), end: D(d, '18:00') }));
   const p = run({
     busy: [...busy, ...days],
@@ -382,7 +383,7 @@ const dayOfB = (b) => b.startISO.slice(0, 10);
 // ── who gives way when the week is full (benchmark SC1) ─────────────────────
 {
   // Low priority with no deadline goes last, and says why it was left out.
-  const busy = [7, 8, 9, 10, 11].map((d) => ({ start: D(d, d === 7 ? '10:00' : '09:00'), end: D(d + 1, '00:00') }));
+  const busy = [7, 8, 9, 10, 11].map((d) => ({ start: D(d, d === 7 ? '10:10' : '09:00'), end: D(d + 1, '00:00') }));
   const p = run({
     busy: [...busy, ...[14, 15, 16, 17, 18].map((d) => ({ start: D(d, '00:00'), end: D(d + 1, '00:00') }))],
     tasks: [task({ id: 'lo', title: 'Tidy notes', priority: 'low' }), task({ id: 'mid', title: 'Budget' })],
@@ -396,7 +397,7 @@ const dayOfB = (b) => b.startISO.slice(0, 10);
   // Only Monday 9–11 is free. EDF gives it to the low-priority task due Monday;
   // the high-priority one due Tuesday then takes it over, and the miss says so.
   const busy = [
-    { start: D(7, '11:00'), end: D(8, '00:00') },
+    { start: D(7, '11:10'), end: D(8, '00:00') }, // 11:10: the buffer still leaves 09:00–11:00
     { start: D(8, '00:00'), end: D(9, '00:00') },
   ];
   const p = run({
@@ -413,7 +414,7 @@ const dayOfB = (b) => b.startISO.slice(0, 10);
 {
   // …but never for a task of the same priority: then the earlier deadline keeps it.
   const busy = [
-    { start: D(7, '11:00'), end: D(8, '00:00') },
+    { start: D(7, '11:10'), end: D(8, '00:00') }, // 11:10: the buffer still leaves 09:00–11:00
     { start: D(8, '00:00'), end: D(9, '00:00') },
   ];
   const p = run({
@@ -438,10 +439,11 @@ const dayOfB = (b) => b.startISO.slice(0, 10);
   assert.deepEqual(travelPadding([{ ...meet, location: 'Room 4', videoUrl: 'https://meet.google.com/x' }], 30), []);
   assert.deepEqual(travelPadding([{ ...meet, location: 'Client HQ' }], 0), [], 'off at 0');
   assert.deepEqual(travelPadding([{ ...meet }], 30), [], 'no location, no travel');
-  // Padded, the half hour before the meeting is not offered.
-  const busy = [meet, ...travelPadding([{ ...meet, location: 'Client HQ' }], 30)];
-  const day = [{ start: D(8, '00:00'), end: D(8, '09:00') }, { start: D(8, '11:30'), end: D(9, '00:00') }];
-  const p = run({ busy: [...busy, ...day, { start: D(7, '00:00'), end: D(8, '00:00') }], tasks: [task({ id: 'r', title: 'R', durationMin: 30, dueByISO: due(8) })] });
+  // Padded, the half hour before the meeting is not offered — and travel is
+  // already the gap, so the buffer isn't added on top of it: 09:00–09:30 fits.
+  const travel = travelPadding([{ ...meet, location: 'Client HQ' }], 30);
+  const day = [{ start: D(8, '11:30'), end: D(9, '00:00') }]; // work hours already start at 09:00
+  const p = run({ busy: [meet, ...day, { start: D(7, '00:00'), end: D(8, '00:00') }], travel, tasks: [task({ id: 'r', title: 'R', durationMin: 30, dueByISO: due(8) })] });
   assert.equal(of(p, 'r')[0].startISO, D(8, '09:00'));
   assert.equal(p.unplaced.length, 0);
 }

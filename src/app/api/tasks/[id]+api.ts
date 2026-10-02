@@ -3,6 +3,8 @@ import { requireUserId, unauthorized } from '@/server/auth/clerk';
 import { isConfigured } from '@/server/db';
 import { POSTPONE_PRESETS, type PostponePreset, finishTask, postponeTask, presetInstant } from '@/server/task-actions';
 import { getTask, updateTask } from '@/server/tasks-repo';
+import { userTimeZone } from '@/server/ai/repo';
+import { DEFAULT_ZONE, wallClockNow } from '@/server/wall-clock';
 
 const iso = (ms: number) => new Date(ms).toISOString();
 
@@ -31,14 +33,16 @@ export async function PATCH(request: Request, { id }: Record<string, string>): P
   try {
     const task = await getTask(userId, id);
     if (!task) return Response.json({ error: 'Not found.' }, { status: 404 });
-    const nowISO = iso(Date.now());
+    // Now on the user's clock — calendar times are wall-clock (src/server/wall-clock.ts).
+    const nowMs = wallClockNow(await userTimeZone(userId).catch(() => DEFAULT_ZONE));
+    const nowISO = iso(nowMs);
 
     if (body.done === true) {
       const r = await finishTask(userId, task, nowISO);
       return Response.json(r satisfies TaskActionResponse);
     }
     if (typeof body.postpone === 'string' && (POSTPONE_PRESETS as readonly string[]).includes(body.postpone)) {
-      const at = iso(presetInstant(body.postpone as PostponePreset, Date.now()));
+      const at = iso(presetInstant(body.postpone as PostponePreset, nowMs));
       const r = await postponeTask(userId, task, at, nowISO);
       return Response.json(r satisfies TaskActionResponse);
     }

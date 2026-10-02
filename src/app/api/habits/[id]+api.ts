@@ -3,6 +3,8 @@ import { requireUserId, unauthorized } from '@/server/auth/clerk';
 import { isConfigured } from '@/server/db';
 import { getHabit } from '@/server/habits-repo';
 import { stopHabit } from '@/server/task-actions';
+import { userTimeZone } from '@/server/ai/repo';
+import { DEFAULT_ZONE, wallClockNow } from '@/server/wall-clock';
 
 /**
  * PATCH /api/habits/[id] — { stop: true } from the Tasks screen: the habit
@@ -27,7 +29,9 @@ export async function PATCH(request: Request, { id }: Record<string, string>): P
   try {
     const habit = await getHabit(userId, id);
     if (!habit) return Response.json({ error: 'Not found.' }, { status: 404 });
-    const r = await stopHabit(userId, habit, new Date().toISOString());
+    // Now on the user's clock — calendar times are wall-clock (src/server/wall-clock.ts).
+    const nowMs = wallClockNow(await userTimeZone(userId).catch(() => DEFAULT_ZONE));
+    const r = await stopHabit(userId, habit, new Date(nowMs).toISOString());
     return Response.json(r satisfies TaskActionResponse);
   } catch (err) {
     console.error('PATCH /api/habits/[id]', err);

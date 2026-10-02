@@ -5,6 +5,8 @@ import { blocksTime, findFreeSlots } from '@/server/ai/find-time';
 import { isConfigured } from '@/server/db';
 import { enforceRateLimit } from '@/server/rate-limit';
 import { listEvents } from '@/server/events-repo';
+import { userTimeZone } from '@/server/ai/repo';
+import { DEFAULT_ZONE, wallClockNow } from '@/server/wall-clock';
 
 /**
  * POST /api/ai/find-time — { prompt: string }.
@@ -119,7 +121,8 @@ export async function POST(request: Request): Promise<Response> {
   }
   prompt = prompt.slice(0, 500);
 
-  const now = new Date();
+  // Now on the user's clock — calendar times are wall-clock (src/server/wall-clock.ts).
+  const now = new Date(wallClockNow(await userTimeZone(userId).catch(() => DEFAULT_ZONE)));
   const nowISO = now.toISOString().replace(/\.\d{3}Z$/, '.000Z');
   const horizonISO = new Date(now.getTime() + HORIZON_DAYS * 86_400_000)
     .toISOString()

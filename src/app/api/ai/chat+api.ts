@@ -43,7 +43,7 @@ import {
 } from '@/server/ai/capture';
 import { blocksTime, buildScoreContext, rankFreeSlots, selectSlots, type RankedSlot } from '@/server/ai/find-time';
 import { SCORER_VERSION, slotNotes, ZERO_FEATURES } from '@/server/ai/scoring';
-import { ambiguousTime, checkPlaceAt, clashNote } from '@/server/ai/place-at';
+import { ambiguousTime, checkPlaceAt, clashNote, freeNear, overlapList, overlapping } from '@/server/ai/place-at';
 import { describeClaim } from '@/server/ai/learn';
 import { adjustDuration, CATEGORIES, effectiveBuffer, type AgentProfile } from '@/server/ai/preferences';
 import { dayWindowFor, durationOptions, missingInfo, questionFor, whenOptions } from '@/server/ai/clarify';
@@ -57,7 +57,9 @@ import {
   saveTravelMin,
   sessionExists,
   addRule,
+  userTimeZone,
 } from '@/server/ai/repo';
+import { DEFAULT_ZONE, wallClockNow } from '@/server/wall-clock';
 import { isConfigured } from '@/server/db';
 import { enforceRateLimit } from '@/server/rate-limit';
 import { checkTimeOff, splitByDay } from '@/server/ai/time-off';
@@ -258,7 +260,10 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
 
   await appendMessage(sessionId, { role: 'user', content: text });
 
-  const now = new Date();
+  // Now on the user's clock: every calendar time is wall-clock, so a real-UTC
+  // "now" is hours off — it offered 09:00 at 09:30 in Berlin (wall-clock.ts).
+  const zone = await userTimeZone(userId).catch(() => DEFAULT_ZONE);
+  const now = new Date(wallClockNow(zone));
   const t0 = Date.now();
   const nowISO = iso(now);
   const horizonISO = iso(new Date(now.getTime() + HORIZON_DAYS * 86_400_000));
@@ -294,6 +299,13 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
   // Only time the calendar itself calls busy is a conflict (see blocksTime).
   const busy = events
     .filter(blocksTime)
+    .map((e) => ({ start: e.start, end: e.end, title: e.title }));
+  // Everything on the calendar a person would see at a given time — busy or
+  // not. A time the user names is checked against this: "free" in Google or
+  // flexible here still means something is already there. All-day markers and
+  // declined invites aren't "something at 12:00".
+  const shown = events
+    .filter((e) => !e.allDay && e.rsvp !== 'declined')
     .map((e) => ({ start: e.start, end: e.end, title: e.title }));
 
   const card = preferenceCard(profile);
@@ -407,6 +419,8 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
   let deleted: ChatMessage['deleted'];
   /** the blocks a delete question listed — kept server-side, deleted only on a yes */
   let pendingDeleteIds: string[] | undefined;
+  /** place_at asked "it overlaps X — put it there anyway?"; the next turn reads the answer */
+  let clashAsked = false;
   let kind = 'text';
 
   if (choice.name === TOOL_PROPOSE && missing) {
@@ -631,6 +645,23 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
       reply = question.text;
     } else if (!checked.ok) {
       reply = checked.reason;
+    } else if (
+      // Anything you can see at that time — free, flexible or one of ours, not
+      // only what blocks time — is asked about before the block goes on top of it.
+      args.overlapOk !== true &&
+      overlapping(shown, checked.span).length
+    ) {
+      const hits = overlapping(shown, checked.span);
+      const win = dayWindowFor(profile, category);
+      const at = checked.span.startISO.slice(11, 16);
+      kind = 'question';
+      clashAsked = true;
+      question = {
+        text: `${at} overlaps ${overlapList(hits)}. Put ${title} there anyway?`,
+        options: ['Yes, put it there', ...freeNear(shown, checked.span, nowISO, win.start, win.end)],
+      };
+      reply = question.text;
+      step({ tool: STEP.check, label: doneLabel(STEP.check, 'Checked that time'), detail: `it overlaps ${hits.length === 1 ? 'something' : `${hits.length} things`} · asked first` });
     } else {
       // The user's own time, not a scorer pick: no features, no runners-up, no
       // occasion. The card and the feedback path are the same as any proposal.
@@ -749,11 +780,13 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
     const lo = typeof args.earliestISO === 'string' ? Date.parse(args.earliestISO) : now.getTime();
     const hi = typeof args.latestISO === 'string' ? Date.parse(args.latestISO) : Date.parse(horizonISO);
     const match = asString(args.match).toLowerCase();
+    // Filler words are already gone ("travel to work" → "travel work"), so match word by word.
+    const words = match.split(' ').filter(Boolean);
     const hits = events.filter(
       (e) =>
         Date.parse(e.start) < hi &&
         Date.parse(e.end) > Math.max(lo, now.getTime()) &&
-        (!match || e.title.toLowerCase().includes(match)),
+        words.every((w) => e.title.toLowerCase().includes(w)),
     );
     // Google's events come back on the next sync, so only Find Time's own blocks are offered.
     const own = hits.filter((e) => e.origin !== IMPORTED_ORIGIN);
@@ -1011,11 +1044,9 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
           minPerWeek: h.minPerWeek,
           category: (CATEGORIES as readonly string[]).includes(h.category) ? h.category : 'personal',
         })),
-        busy: [
-          ...others.map((e) => ({ start: e.start, end: e.end })),
-          // Travel either side of in-person events (off unless the user set it).
-          ...travelPadding(others, profile.travelMin),
-        ],
+        busy: others.map((e) => ({ start: e.start, end: e.end })),
+        // Travel either side of in-person events (off unless the user set it).
+        travel: travelPadding(others, profile.travelMin),
         away: planEvents.filter((e) => !ownBlock(e) && isAway(e)).map((e) => ({ start: e.start, end: e.end })),
         existing: planEvents.filter(ownBlock).map((e) => ({
           eventId: e.id,
@@ -1027,6 +1058,8 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
         })),
       };
       const plan = planWeek(input);
+      // Bad rows are left out or repaired by the planner, never guessed at; say so in the logs.
+      if (plan.issues.length) console.warn('ai/chat planWeek input', plan.issues);
       const problems = verifyPlan(input, plan);
       const added = plan.blocks.filter((b) => b.status === 'new');
       const kept = plan.blocks.length - added.length;
@@ -1139,6 +1172,7 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
     placed: kind === 'plan',
     ...(pendingDeleteIds ? { deleteIds: pendingDeleteIds } : {}),
     ...(proposals?.length ? { lastStartISO: proposals[0].startISO } : {}),
+    clashAsked,
   };
 
   const messageId = await appendMessage(sessionId, {
@@ -1154,7 +1188,7 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
     id: messageId,
     role: 'assistant',
     text: reply,
-    createdAt: nowISO,
+    createdAt: iso(new Date()), // a real timestamp, like the stored history — not a calendar time
     ...extras,
   };
 
