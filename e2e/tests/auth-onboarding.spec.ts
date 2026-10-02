@@ -43,9 +43,11 @@ test.describe('sign up → onboarding → app', () => {
     await page.getByRole('button', { name: 'Finish setup' }).click();
 
     await expect(page.getByRole('heading', { name: 'Your week is ready, Ada.' })).toBeFocused();
-    await expect(page.getByText('4 h a day, clustered')).toBeVisible();
-    await page.getByRole('button', { name: /Open my week/ }).click();
+    await expect(page.getByText(/4 h a day, clustered/)).toBeVisible();
+    // The finish hands straight to Plan with AI with the request typed in.
+    await page.getByRole('button', { name: /Place my deep work/ }).click();
     await expect(page).toHaveURL(/\/app/);
+    await expect(page.getByText('Plan my deep work for this week in my best hours')).toBeVisible();
 
     // Onboarded: /welcome now sends you straight on.
     await page.goto('/welcome');
@@ -66,11 +68,20 @@ test.describe('skipping', () => {
   const email = testEmail('skip');
   test.afterAll(async () => deleteClerkUser(email));
 
-  test('skip for now marks setup done without saving answers', async ({ page }) => {
+  test('"Use defaults" finishes setup and keeps this device\'s time zone', async ({ page }) => {
     await signUp(page, email);
     await expect(page).toHaveURL(/\/welcome/);
-    await page.getByRole('button', { name: 'Skip for now' }).click();
+    await page.getByRole('button', { name: 'Use defaults' }).click();
     await expect(page).toHaveURL(/\/app/);
+    // A way back into setup exists.
+    await page.goto('/welcome?redo=1');
+    await expect(page.getByText('Review your setup')).toBeVisible();
+
+    // Browser Back steps back through setup instead of leaving it.
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('heading', { name: /real meetings|calendar is connected/ })).toBeVisible();
+    await page.goBack();
+    await expect(page.getByRole('heading', { name: 'What should we call you?' })).toBeVisible();
   });
 });
 
@@ -87,6 +98,13 @@ test.describe('sign-in errors', () => {
     await page.getByLabel('Password', { exact: true }).fill('whatever-123');
     await page.getByRole('button', { name: /^Sign in/ }).click();
     await expect(page.getByText(/No account uses that email|password is not right/)).toBeVisible();
+    // "No account" carries its way out, with the email kept.
+    const create = page.getByRole('link', { name: 'Create an account' });
+    if (await create.isVisible()) {
+      await create.click();
+      await expect(page).toHaveURL(/\/signup\?email=/);
+      await expect(page.getByLabel('Email')).toHaveValue(/clerk_test@example\.com/);
+    }
   });
 
   test('signed-out /app goes to /login', async ({ page }) => {

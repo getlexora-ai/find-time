@@ -24,6 +24,7 @@ import { useMounted } from '@/design/useMounted';
 import { defaultAnswers, previewWeek } from '../onboarding';
 import { MiniWeek } from './MiniWeek';
 import { Otp } from './Otp';
+import { WeekBoard3D } from './WeekBoard3D';
 import './auth.css';
 
 type Mode = 'sign-in' | 'sign-up';
@@ -38,13 +39,16 @@ const MORE_FIELDS: MoreField[] = ['first_name', 'last_name', 'username', 'legal_
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RESEND_S = 30;
 
+const NO_ACCOUNT = 'No account uses that email.';
+const HAS_ACCOUNT = 'An account already uses that email.';
+
 function clerkError(err: unknown): string {
   const e = err as { errors?: { message?: string; longMessage?: string; code?: string }[] };
   const first = e?.errors?.[0];
   if (first?.code === 'form_password_incorrect') return 'That password is not right. Try again or reset it.';
-  if (first?.code === 'form_identifier_not_found') return 'No account uses that email. Create one instead?';
+  if (first?.code === 'form_identifier_not_found') return NO_ACCOUNT;
   if (first?.code === 'form_code_incorrect') return 'That code is not right. Check the latest email.';
-  if (first?.code === 'form_identifier_exists') return 'An account already uses that email. Sign in instead?';
+  if (first?.code === 'form_identifier_exists') return HAS_ACCOUNT;
   return first?.longMessage ?? first?.message ?? 'Something went wrong. Try again.';
 }
 
@@ -55,7 +59,10 @@ export default function AuthPage({ mode }: { mode: Mode }) {
   const { signUp, setActive: setSignUpActive, isLoaded: upLoaded } = useSignUp();
 
   const [phase, setPhase] = useState<Phase>('form');
-  const [email, setEmail] = useState('');
+  const mounted = useMounted();
+  const [typedEmail, setEmail] = useState<string | null>(null);
+  // carried over from the other page's error link (?email=…); read after hydration
+  const email = typedEmail ?? (mounted ? (new URLSearchParams(window.location.search).get('email') ?? '').slice(0, 254) : '');
   const [password, setPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -370,7 +377,7 @@ export default function AuthPage({ mode }: { mode: Mode }) {
     head = {
       eyebrow: 'Step 1 of 3',
       title: 'Plan the week you meant to have.',
-      lede: 'Create your account. Then we’ll set up your working hours and focus time together, in about a minute.',
+      lede: 'Create your account. Then we’ll set up your working hours and deep work together, in about a minute.',
     };
   } else {
     head = { eyebrow: 'Sign in', title: 'Welcome back.', lede: 'Pick up your week where you left it.' };
@@ -455,7 +462,8 @@ export default function AuthPage({ mode }: { mode: Mode }) {
                     placeholder={isUp ? 'At least 8 characters' : 'Your password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    aria-describedby={isUp ? 'au-pw-hint' : undefined}
+                    aria-invalid={touched && (isUp ? !pwLong : !password)}
+                    aria-describedby={[isUp ? 'au-pw-hint' : '', error ? 'au-err' : ''].filter(Boolean).join(' ') || undefined}
                   />
                   <button
                     type="button"
@@ -473,7 +481,7 @@ export default function AuthPage({ mode }: { mode: Mode }) {
                   </p>
                 ) : null}
               </div>
-              <ErrorLine error={error} />
+              <ErrorLine error={error} email={email.trim()} />
               <button type="submit" className="au-btn au-ink au-wide" disabled={!ready || !!busy} aria-busy={busy === 'submit'}>
                 {busy === 'submit' ? <i className="au-spin" aria-hidden="true" /> : null}
                 {isUp ? 'Create account' : 'Sign in'}
@@ -522,7 +530,7 @@ export default function AuthPage({ mode }: { mode: Mode }) {
                   disabled={busy === 'submit'}
                 />
               )}
-              <ErrorLine error={error} />
+              <ErrorLine error={error} email={email.trim()} />
               <button
                 type="submit"
                 className="au-btn au-ink au-wide"
@@ -622,7 +630,7 @@ export default function AuthPage({ mode }: { mode: Mode }) {
               {unsupported.length ? (
                 <p className="au-hint">This sign-up also needs: {unsupported.join(', ').replace(/_/g, ' ')}, which can’t be added here yet.</p>
               ) : null}
-              <ErrorLine error={error} />
+              <ErrorLine error={error} email={email.trim()} />
               <button type="submit" className="au-btn au-ink au-wide" disabled={!!busy} aria-busy={busy === 'submit'}>
                 {busy === 'submit' ? <i className="au-spin" aria-hidden="true" /> : null}
                 Create account
@@ -646,7 +654,7 @@ export default function AuthPage({ mode }: { mode: Mode }) {
                   />
                 </div>
               </div>
-              <ErrorLine error={error} />
+              <ErrorLine error={error} email={email.trim()} />
               <button type="submit" className="au-btn au-ink au-wide" disabled={!ready || !!busy} aria-busy={busy === 'submit'}>
                 {busy === 'submit' ? <i className="au-spin" aria-hidden="true" /> : null}
                 Email me a code
@@ -682,13 +690,19 @@ export default function AuthPage({ mode }: { mode: Mode }) {
                   </button>
                 </div>
               </div>
-              <ErrorLine error={error} />
+              <ErrorLine error={error} email={email.trim()} />
               <button type="submit" className="au-btn au-ink au-wide" disabled={!!busy} aria-busy={busy === 'submit'}>
                 {busy === 'submit' ? <i className="au-spin" aria-hidden="true" /> : null}
                 Set password and sign in
               </button>
               <div className="au-row">
-                <button type="button" className="au-link-btn" onClick={() => setPhase('form')}>
+                <button
+                  type="button"
+                  className="au-link-btn"
+                  onClick={() => {
+                    setPhase('form');
+                    setError(null);
+                  }}>
                   Back to sign in
                 </button>
                 <ResendButton resendIn={resendIn} busy={busy === 'resend'} onClick={resend} />
@@ -740,7 +754,7 @@ function SignInStage() {
             );
           })}
         </ol>
-        <p>Your plans, focus blocks and everything it has learned are where you left them.</p>
+        <p>Your plans, deep-work blocks and everything it has learned are where you left them.</p>
       </div>
     </aside>
   );
@@ -749,29 +763,65 @@ function SignInStage() {
 function SignUpStage({ step }: { step: number }) {
   const a = useMemo(() => defaultAnswers(), []);
   const blocks = useMemo(() => previewWeek(a), [a]);
-  const work = [true, true, true, true, true, false, false];
+  const work = useMemo(() => [true, true, true, true, true, false, false], []);
+  const [gl, setGl] = useState<boolean | null>(null);
+  // Account step: the week as it is. From the code step on, deep work floats in
+  // as proposals — what the account is about to do for you.
+  const showFocus = step >= 1;
   const focusH = blocks.filter((b) => b.kind === 'focus').reduce((n, b) => n + (b.e - b.s) / 60, 0);
+  const meetings = blocks.filter((b) => b.kind === 'meeting').length;
   return (
     <aside className="au-stage" aria-label="What Find Time does">
       <div className="au-stage-cap au-in" style={{ '--i': 2 } as React.CSSProperties}>
-        <h2>Deep work, placed around your meetings.</h2>
+        <h2>{showFocus ? 'Deep work, placed around your meetings.' : 'A week with room to think.'}</h2>
       </div>
       <div className="au-in" style={{ '--i': 3 } as React.CSSProperties}>
-        <MiniWeek
-          title="Example week"
-          meta="09:00–18:00 · MON–FRI"
-          work={work}
-          start={a.start}
-          end={a.end}
-          peak={{ from: 8, to: 11 }}
-          blocks={blocks}
-          height={330}
-          stats={[
-            { label: 'Deep work', value: `${focusH} h` },
-            { label: 'Meetings', value: `${blocks.filter((b) => b.kind === 'meeting').length}` },
-            { label: 'You approve', value: 'Every block' },
-          ]}
-        />
+        {gl !== false ? (
+          <div className="b3d-card" data-on={gl === true}>
+            <WeekBoard3D
+              blocks={blocks}
+              settled={false}
+              showFocus={showFocus}
+              work={work}
+              start={a.start}
+              end={a.end}
+              peak={showFocus ? { from: 8, to: 11 } : null}
+              label={`Example week: ${meetings} meetings${showFocus ? `, ${focusH} hours of deep work proposed around them` : ''}.`}
+              onGl={setGl}
+            />
+            <dl className="mw-stat">
+              <div>
+                <dt>Deep work</dt>
+                <dd>{showFocus ? `${focusH} h` : '—'}</dd>
+              </div>
+              <div>
+                <dt>Meetings</dt>
+                <dd>{meetings}</dd>
+              </div>
+              <div>
+                <dt>You approve</dt>
+                <dd>Every block</dd>
+              </div>
+            </dl>
+          </div>
+        ) : null}
+        {gl !== true ? (
+          <MiniWeek
+            title="Example week"
+            meta="09:00–18:00 · MON–FRI"
+            work={work}
+            start={a.start}
+            end={a.end}
+            peak={{ from: 8, to: 11 }}
+            blocks={blocks}
+            height={330}
+            stats={[
+              { label: 'Deep work', value: `${focusH} h` },
+              { label: 'Meetings', value: `${meetings}` },
+              { label: 'You approve', value: 'Every block' },
+            ]}
+          />
+        ) : null}
       </div>
       <ol className="au-path au-in" style={{ '--i': 4 } as React.CSSProperties} aria-label="Sign-up steps">
         {['Account', 'Verify email', 'Shape your week'].map((label, i) => (
@@ -792,10 +842,36 @@ const FACTOR_LABEL: Record<Factor, string> = {
   backup_code: 'Backup code',
 };
 
-function ErrorLine({ error }: { error: string | null }) {
+/**
+ * The form's error, announced (role=alert) and pointed at by the inputs'
+ * aria-describedby. "No account" / "already have one" carry their way out —
+ * a link to the other page with the email kept.
+ */
+function ErrorLine({ error, email }: { error: string | null; email?: string }) {
+  const keep = email ? `?email=${encodeURIComponent(email)}` : '';
+  const action =
+    error === NO_ACCOUNT
+      ? { href: `/signup${keep}`, label: 'Create an account' }
+      : error === HAS_ACCOUNT
+        ? { href: `/login${keep}`, label: 'Sign in instead' }
+        : null;
   return (
-    <div aria-live="polite" role="status">
-      {error ? <p className="au-err">{error}</p> : null}
+    <div id="au-err" role="alert">
+      {error ? (
+        <p className="au-err">
+          <span>
+            {error}
+            {action ? (
+              <>
+                {' '}
+                <a href={action.href} className="au-err-act">
+                  {action.label}
+                </a>
+              </>
+            ) : null}
+          </span>
+        </p>
+      ) : null}
     </div>
   );
 }

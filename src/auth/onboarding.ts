@@ -243,7 +243,6 @@ export const SAMPLE_MEETINGS: PreviewBlock[] = [
   { id: 'x2', day: 2, s: 9 * 60 + 30, e: 10 * 60, title: 'Stand-up', kind: 'meeting' },
   { id: 'x3', day: 3, s: 16 * 60, e: 17 * 60, title: 'Review', kind: 'meeting' },
   { id: 'x4', day: 4, s: 11 * 60, e: 12 * 60, title: 'Planning', kind: 'meeting' },
-  { id: 'x5', day: 5, s: 10 * 60, e: 11 * 60, title: 'Brunch', kind: 'meeting' },
 ];
 
 /** The planner's profile under these answers — what it would rank with after onboarding. */
@@ -363,6 +362,9 @@ export function focusByDay(blocks: PreviewBlock[]): number[] {
   for (const b of blocks) if (b.kind === 'focus') out[b.day] += b.e - b.s;
   return out;
 }
+
+/** The first request a new week gets — onboarding's finish and the calendar's empty week both send it to Plan with AI. */
+export const PLACE_DEEP_WORK = 'Plan my deep work for this week in my best hours';
 
 // ── drop-off tracking ──────────────────────────────────────────────────────
 

@@ -1,18 +1,22 @@
 import { useAuth, useSignIn, useSignUp, useSSO } from '@clerk/clerk-expo';
 import { makeRedirectUri } from 'expo-auth-session';
-import { Redirect, useRouter } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { type ReactNode, useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Linking, StyleSheet, TextInput, View } from 'react-native';
 
 import { C, R, T, w } from '@/design/tokens';
 import { MONO, Press, Txt } from '@/design/ui';
 
 /**
- * `/login` on native — a custom Clerk flow (web gets the prebuilt UI in
- * `login.web.tsx`). Email + password sign in / sign up with an email-code
- * verification step, plus "Continue with Google" via SSO.
+ * `/login` on native — a custom Clerk flow (web has its own page,
+ * src/auth/dom/AuthPage.tsx). Email + password sign in / sign up with an
+ * email-code step (sign-up verification, or Clerk's email second factor on a
+ * new device), resend, "Continue with Google" via SSO. `?mode=signup` opens
+ * on sign-up (`/signup` redirects here). Password reset and sign-ups that
+ * still need details hand over to the web page, which handles them.
  */
+const SITE = (process.env.EXPO_PUBLIC_SITE_URL || 'https://www.usefindtime.com').replace(/\/$/, '');
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -31,7 +35,11 @@ export default function LoginScreen() {
   const { signUp, setActive: setSignUpActive, isLoaded: signUpLoaded } = useSignUp();
   const { startSSOFlow } = useSSO();
 
-  const [mode, setMode] = useState<Mode>('login');
+  const params = useLocalSearchParams<{ mode?: string }>();
+  const [mode, setMode] = useState<Mode>(params.mode === 'signup' ? 'signup' : 'login');
+  /** what the pending code is for */
+  const [codeFor, setCodeFor] = useState<'signup' | 'second'>('signup');
+  const [resent, setResent] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
@@ -54,14 +62,24 @@ export default function LoginScreen() {
       if (mode === 'signup') {
         await signUp.create({ emailAddress: email.trim(), password });
         await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+        setCodeFor('signup');
         setPendingCode(true);
       } else {
         const res = await signIn.create({ identifier: email.trim(), password });
         if (res.status === 'complete') {
           await setSignInActive({ session: res.createdSessionId });
           router.replace('/app');
+        } else if (
+          ((res.status as string) === 'needs_second_factor' || (res.status as string) === 'needs_client_trust') &&
+          res.supportedSecondFactors?.some((f) => f.strategy === 'email_code')
+        ) {
+          // New device: Clerk emails a code before letting you in.
+          await signIn.prepareSecondFactor({ strategy: 'email_code' });
+          setCodeFor('second');
+          setCode('');
+          setPendingCode(true);
         } else {
-          setError('Extra verification is needed — finish signing in on the web app.');
+          setError('This sign-in needs a step only the web app supports (authenticator or backup code). Sign in there once, then here.');
         }
       }
     } catch (err) {
@@ -76,13 +94,38 @@ export default function LoginScreen() {
     setBusy(true);
     setError(null);
     try {
+      if (codeFor === 'second') {
+        const res = await signIn!.attemptSecondFactor({ strategy: 'email_code', code: code.trim() });
+        if (res.status === 'complete') {
+          await setSignInActive!({ session: res.createdSessionId });
+          router.replace('/app');
+        } else setError('That code did not verify. Try again.');
+        return;
+      }
       const res = await signUp.attemptEmailAddressVerification({ code: code.trim() });
       if (res.status === 'complete') {
         await setSignUpActive({ session: res.createdSessionId });
         router.replace('/app');
+      } else if (res.status === 'missing_requirements') {
+        setError('Your email is verified. A few more details are needed — finish creating the account on the web.');
       } else {
         setError('That code did not verify. Try again.');
       }
+    } catch (err) {
+      setError(clerkError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resend() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (codeFor === 'second') await signIn!.prepareSecondFactor({ strategy: 'email_code' });
+      else await signUp!.prepareEmailAddressVerification({ strategy: 'email_code' });
+      setResent(true);
     } catch (err) {
       setError(clerkError(err));
     } finally {
@@ -95,13 +138,16 @@ export default function LoginScreen() {
     setBusy(true);
     setError(null);
     try {
-      const { createdSessionId, setActive } = await startSSOFlow({
+      const { createdSessionId, setActive, signUp: ssoSignUp } = await startSSOFlow({
         strategy: 'oauth_google',
         redirectUrl: makeRedirectUri(),
       });
       if (createdSessionId && setActive) {
         await setActive({ session: createdSessionId });
         router.replace('/app');
+      } else if (ssoSignUp?.status === 'missing_requirements') {
+        // Never fail silently: say what is missing and where to finish.
+        setError('Your Google sign-up needs a few more details. Finish it on the web, then sign in here.');
       }
     } catch (err) {
       setError(clerkError(err));
@@ -134,6 +180,19 @@ export default function LoginScreen() {
             {error && <Txt style={styles.error}>{error}</Txt>}
             <Press onPress={verify} disabled={busy} hoverBg={C.limeHover} style={styles.primary}>
               {busy ? <ActivityIndicator color={C.surface} /> : <Txt style={styles.primaryTxt}>Verify</Txt>}
+            </Press>
+            <Press onPress={resend} disabled={busy} hoverBg={w(0.05)} style={styles.switch} accessibilityRole="button">
+              <Txt style={styles.switchTxt}>{resent ? 'Sent again — check your inbox' : 'Resend code'}</Txt>
+            </Press>
+            <Press
+              onPress={() => {
+                setPendingCode(false);
+                setError(null);
+              }}
+              hoverBg={w(0.05)}
+              style={styles.switch}
+              accessibilityRole="button">
+              <Txt style={styles.switchTxt}>Back</Txt>
             </Press>
           </>
         ) : (
@@ -171,6 +230,17 @@ export default function LoginScreen() {
                 {error}
               </Txt>
             )}
+
+            {mode === 'login' ? (
+              <Press
+                onPress={() => void Linking.openURL(`${SITE}/login`)}
+                hoverBg={w(0.05)}
+                style={styles.forgot}
+                accessibilityRole="link"
+                accessibilityHint="Opens the web app, where you can reset it">
+                <Txt style={styles.switchTxt}>Forgot password? Reset it on the web</Txt>
+              </Press>
+            ) : null}
 
             <Press onPress={submit} disabled={busy} hoverBg={C.limeHover} style={styles.primary}>
               {busy ? (
@@ -267,6 +337,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   googleTxt: { color: '#fff', fontSize: T.sm.fontSize, fontWeight: '500' },
+  forgot: { alignSelf: 'flex-start', paddingVertical: 4, marginBottom: 8 },
   switch: { marginTop: 16, alignItems: 'center', paddingVertical: 8, borderRadius: R.md },
   switchTxt: { color: w(0.5), fontSize: T.xs.fontSize },
 });

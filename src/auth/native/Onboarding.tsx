@@ -101,6 +101,11 @@ export default function NativeOnboarding() {
 
   const existing = Boolean(server?.existing);
   const real = Boolean(server?.connected && server.meetings);
+  // Connecting a calendar is web-only: the step only appears when one is already connected.
+  const flow = real ? [0, 1, 2, 3, 4] : [0, 2, 3, 4];
+  const pos = Math.max(0, flow.indexOf(step));
+  const nextOf = () => flow[Math.min(flow.length - 1, pos + 1)];
+  const prevOf = () => flow[Math.max(0, pos - 1)];
   const blocks = useMemo(
     () => previewWeek(a, real && server?.meetings ? server.meetings : SAMPLE_MEETINGS),
     [a, real, server],
@@ -132,7 +137,14 @@ export default function NativeOnboarding() {
     setBusy(kind);
     setError(null);
     try {
-      await saveOnboarding(kind === 'skip' ? { skip: true } : { answers: a, changed: existing ? [...changed] : undefined });
+      await saveOnboarding(
+        kind === 'skip' && existing
+          ? { skip: true }
+          : kind === 'skip'
+            ? // keep what was touched, plus this device's time zone and clock
+              { answers: a, changed: [...new Set<Group>([...changed, 'prefs'])] }
+            : { answers: a, changed: existing ? [...changed] : undefined },
+      );
       track(kind === 'skip' ? TRACK[step] : 'done', kind, 'native');
       await user?.reload();
       if (kind === 'finish') {
@@ -166,7 +178,7 @@ export default function NativeOnboarding() {
           <Txt style={s.brand}>Find Time</Txt>
           {!done ? (
             <Press onPress={() => void submit('skip')} disabled={!!busy} hoverBg={N.hover} style={s.quiet} accessibilityRole="button">
-              <Txt style={s.quietTxt}>{busy === 'skip' ? 'Skipping…' : existing ? 'Keep my settings' : 'Skip for now'}</Txt>
+              <Txt style={s.quietTxt}>{busy === 'skip' ? 'Saving…' : existing ? 'Keep my settings' : step === 0 && !changed.size ? 'Use defaults' : 'Finish later'}</Txt>
             </Press>
           ) : null}
         </View>
@@ -189,14 +201,14 @@ export default function NativeOnboarding() {
             </View>
           ) : (
             <View style={s.gap}>
-              <Txt style={s.eyebrow}>{existing ? 'REVIEW YOUR SETUP' : 'SHAPE YOUR WEEK'}</Txt>
-              <View style={s.rail} accessibilityLabel={`Step ${step + 1} of ${STEPS.length}: ${STEPS[step]}`}>
-                {STEPS.map((label, i) => (
-                  <View key={label} style={[s.railItem, i < step && s.railDone, i === step && s.railNow]} />
+              <Txt style={s.eyebrow}>{existing ? 'REVIEW YOUR SETUP' : 'STEP 3 OF 3 · SHAPE YOUR WEEK'}</Txt>
+              <View style={s.rail} accessibilityLabel={`Question ${pos + 1} of ${flow.length}: ${STEPS[step]}`}>
+                {flow.map((idx, i) => (
+                  <View key={idx} style={[s.railItem, i < pos && s.railDone, i === pos && s.railNow]} />
                 ))}
               </View>
               <Txt style={s.railLbl}>
-                {String(step + 1).padStart(2, '0')} / {String(STEPS.length).padStart(2, '0')} · {STEPS[step].toUpperCase()}
+                {String(pos + 1).padStart(2, '0')} / {String(flow.length).padStart(2, '0')} · {STEPS[step].toUpperCase()}
               </Txt>
 
               {step === 0 ? (
@@ -216,7 +228,7 @@ export default function NativeOnboarding() {
                     style={s.input}
                     accessibilityLabel="First name"
                     returnKeyType="next"
-                    onSubmitEditing={() => goTo(1)}
+                    onSubmitEditing={() => goTo(nextOf())}
                   />
                 </>
               ) : null}
@@ -279,7 +291,7 @@ export default function NativeOnboarding() {
                   <Txt style={s.q} accessibilityRole="header">
                     When do you think best?
                   </Txt>
-                  <Txt style={s.sub}>Demanding work is ranked into these hours first.</Txt>
+                  <Txt style={s.sub}>Deep work is ranked into these hours first.</Txt>
                   <View style={s.gapSm} accessibilityRole="radiogroup">
                     {PEAKS.map((p) => {
                       const on = a.peak === p.id;
@@ -307,7 +319,7 @@ export default function NativeOnboarding() {
                   <Txt style={s.q} accessibilityRole="header">
                     How much deep work a day?
                   </Txt>
-                  <Txt style={s.sub}>Your daily budget for focused, demanding work.</Txt>
+                  <Txt style={s.sub}>Your daily budget for deep work.</Txt>
                   <Stepper
                     label="Each working day"
                     value={`${a.focusH} h`}
@@ -334,7 +346,7 @@ export default function NativeOnboarding() {
 
               <View style={s.nav}>
                 {step > 0 ? (
-                  <Press onPress={() => goTo(step - 1)} style={s.quiet} hoverBg={N.hover} accessibilityRole="button">
+                  <Press onPress={() => goTo(prevOf())} style={s.quiet} hoverBg={N.hover} accessibilityRole="button">
                     <Txt style={s.quietTxt}>← Back</Txt>
                   </Press>
                 ) : (
@@ -342,7 +354,7 @@ export default function NativeOnboarding() {
                 )}
                 <Primary
                   label={isLast ? (existing ? 'Save changes' : 'Finish setup') : step === 1 && !real ? 'Use an example week' : 'Continue'}
-                  onPress={() => (isLast ? void submit('finish') : goTo(step + 1))}
+                  onPress={() => (isLast ? void submit('finish') : goTo(nextOf()))}
                   busy={busy === 'finish'}
                 />
               </View>

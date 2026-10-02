@@ -183,3 +183,32 @@ need a live `pk_test_` / `sk_test_` to verify end to end.
 | **E2E.** Playwright suite in `e2e/` (own package.json, so the app lockfile doesn't move): sign up → code → all five steps → done → `/app`; sign in again; skip; error states; signed-out gate; phone strip. Runs against a Clerk **dev** instance in test mode — see `e2e/README.md`. | `e2e/` |
 
 **Verified here:** typecheck · lint · `onboarding.check.ts` · web + iOS export · unauthenticated calls to the new routes → 401 · the callback sends `ft_oauth_return=/welcome` back to `/welcome` and an injected URL to `/app`. Rendered in Chromium (1440 / 1200 / 390 px) with Clerk and the API stubbed: returning-user prefill, the connect round trip with real meetings, the time-zone search, the phone strip, sign-in panel, authenticator-code and extra-details steps. `e2e` lists its 7 tests but **has not run against a real Clerk instance** — no keys in this environment.
+
+### 5.2 3D board, finish moment, onboarding QA (2026-10-02)
+
+**3D board.** The landing's three.js week board (`src/landing/dom/board.ts`) now also runs in sign-up and onboarding (`src/auth/dom/WeekBoard3D.tsx`). The board module gained per-mount `frame` (columns, hour window, texture density, camera fill/elevation), `setFace()` (day labels, hatched days off and hours outside work, the peak band), and `perfGuard` (hands over to the flat week if the median frame time over the first 40 frames is above 66 ms — no usable GPU). With none of these the landing behaves exactly as before.
+- Onboarding: meetings are slabs; deep work arrives as **proposals hovering** above the board and re-flows with every answer. **Finish drops them into place** (the landing's "accept" squash), then the Done copy follows on one GSAP timeline, CTA last. The timeline uses `fromTo` + `gsap.context().revert()` and a 2.6 s `progress(1)` safety net, so the CTA can never stay hidden (it did once: a `from` reading a mid-transition opacity).
+- Sign-up panel: meetings while you fill the form; deep-work proposals float in at the code step.
+- Desktop (≥ 981 px) + WebGL + motion allowed only; otherwise, or on context loss / slow frames, the flat `MiniWeek` shows. three.js is a lazy chunk (`board-*.js`, ~830 KB) — `/login` and phones never load it.
+
+**QA pass** (an agent audited the flows against general onboarding heuristics — the referenced designerup.co article is blocked by this environment's network policy, so it worked from the article's search snippets plus standard heuristics). Fixed:
+
+| Finding | Fix |
+|---|---|
+| Finish landed on an empty calendar | Primary CTA **"Place my deep work"** → `/app?ask=…` opens Plan with AI with the request typed in (`PLACE_DEEP_WORK`); "Just open my calendar" secondary. The calendar also shows an **empty-week card** (Place my deep work / Connect Google) when nothing is on the visible days. |
+| Skip / Google-first left new users on the default Berlin zone | "Use defaults" / "Finish later" now save what was touched **plus the device's time zone, clock and week start**; connecting Google first PATCHes the zone before leaving (sync converts with it). |
+| Skip was permanent | **"Set up my week"** in the account menu (web + native) → `/welcome?redo=1` (onboarded users may stay; flag kept across the Google round trip). |
+| Failed connect returned to the wrong step | Back on the Calendar step with the error. |
+| Settings load failure fell back to defaults (could overwrite) | Shows "We couldn't load your settings, so we haven't changed anything" + Try again. |
+| Mixed terms (focus time / demanding / hard work) | "Deep work" everywhere. |
+| Two progress models | "Step 3 of 3 · Shape your week" continues sign-up's "Step n of 3". |
+| Error with no way forward | "No account uses that email" → **Create an account** link (and the reverse), email carried via `?email=`. Errors are `role=alert`, inputs `aria-invalid` + `aria-describedby`. |
+| Contrast | All text off `--faint` (2.4:1) onto `--muted` (4.6:1); remaining `--faint` uses are decorative. |
+| Focus ring around question headings | Removed (focus still moves there). |
+| Name heading rewrote per keystroke | Static. |
+| Browser Back left setup | Each step is a history entry; Back steps back. |
+| Google users asked for Google again unexplained | "One more permission: reading your calendar…" when the account came from Google. |
+| Weekend "Brunch" sample | Removed. |
+| Native dead ends | `/signup` opens sign-up mode; email second factor; resend; "Back"; forgot password → web; Google sign-ups needing details say so; native onboarding hides the Calendar step unless already connected. |
+
+**Not changed (decisions for the owner):** the landing's only CTA is the waitlist while `/signup` is open — gate sign-up in Clerk (Restrictions) or add a sign-up link. In-app coach marks / a getting-started checklist were left out; the empty-week card covers the first action.

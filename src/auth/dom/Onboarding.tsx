@@ -20,6 +20,7 @@
  */
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
+import { gsap } from 'gsap';
 import { type CSSProperties, type ReactNode, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { apiFetch } from '@/lib/api';
@@ -37,6 +38,7 @@ import {
   modernZone,
   type OnboardingAnswers,
   PEAKS,
+  PLACE_DEEP_WORK,
   previewWeek,
   SAMPLE_MEETINGS,
   type TrackStep,
@@ -45,6 +47,7 @@ import {
 import { FocusStrip } from './FocusStrip';
 import { MiniWeek } from './MiniWeek';
 import { TimeZonePicker } from './TimeZonePicker';
+import { WeekBoard3D } from './WeekBoard3D';
 import './auth.css';
 
 const STEPS = ['Name', 'Calendar', 'Week', 'Peak', 'Focus'] as const;
@@ -105,10 +108,23 @@ export default function Onboarding() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  /** the 3D board is up (desktop + WebGL + motion allowed); null while deciding */
+  const [gl, setGl] = useState<boolean | null>(null);
   const started = useRef(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   /** true once the user has moved between steps — from then on, focus follows the step */
   const [moved, setMoved] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  /** came from "Set up my week" (account menu): an onboarded user may stay here */
+  const [redo] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      if (new URLSearchParams(window.location.search).has('redo')) sessionStorage.setItem('ft-redo', '1');
+      return sessionStorage.getItem('ft-redo') === '1';
+    } catch {
+      return new URLSearchParams(window.location.search).has('redo');
+    }
+  });
   const viewed = useRef(new Set<number>());
 
   // Load: saved progress (after a Google round trip) > the user's own settings > defaults.
@@ -128,13 +144,22 @@ export default function Onboarding() {
         track('calendar', 'connect_failed');
       }
       const st = await loadOnboarding();
+      if (!st) {
+        // Never guess: treating a returning user as new would overwrite their settings.
+        setLoadFailed(true);
+        setBusy(null);
+        setReady(true);
+        return;
+      }
       const saved = readSaved(`ft-onboarding:${user.id}`);
       setServer(st);
       if (saved) {
         setA(saved.a);
         setChanged(new Set(saved.changed));
-        setStep(saved.step);
-        setSeen(saved.step);
+        // a failed connect lands back on the step with the Connect button
+        const at = connect === 'error' ? CAL : saved.step;
+        setStep(at);
+        setSeen(Math.max(at, saved.step));
       } else if (st?.existing && st.answers) {
         setA({ ...st.answers, firstName: st.answers.firstName || user.firstName || '' });
       } else {
@@ -164,8 +189,28 @@ export default function Onboarding() {
     if (authLoaded && !isSignedIn) router.replace('/login');
   }, [authLoaded, isSignedIn, router]);
   useEffect(() => {
-    if (userLoaded && user?.publicMetadata?.onboarded && !busy && !done) router.replace('/app');
-  }, [userLoaded, user, busy, done, router]);
+    if (userLoaded && user?.publicMetadata?.onboarded && !busy && !done && !redo) router.replace('/app');
+  }, [userLoaded, user, busy, done, redo, router]);
+
+  // Browser Back steps back through setup instead of leaving it.
+  useEffect(() => {
+    if (!ready) return;
+    window.history.replaceState({ ob: step }, '');
+    const onPop = (e: PopStateEvent) => {
+      const to = (e.state as { ob?: number } | null)?.ob;
+      if (typeof to === 'number') {
+        setMoved(true);
+        setDir('back');
+        setStep(to);
+        setError(null);
+        setNotice(null);
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+    // only once ready; later steps are pushed by goTo
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
 
   // Each step: log the view once, and move focus to its question (not on first paint).
   useEffect(() => {
@@ -199,6 +244,7 @@ export default function Onboarding() {
 
   function goTo(i: number) {
     if (i < 0 || i >= STEPS.length) return;
+    if (i !== step) window.history.pushState({ ob: i }, '');
     setMoved(true);
     setDir(i >= step ? 'fwd' : 'back');
     setStep(i);
@@ -220,6 +266,15 @@ export default function Onboarding() {
     // Come back to the step after this one, with everything so far.
     writeSaved(storeKey, { a, step: CAL + 1, changed: [...changed] });
     try {
+      // Google times are converted with the saved zone: store this one first,
+      // or a new account's first import uses the default zone.
+      if (!existing) {
+        await apiFetch('/api/calendar/settings', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ timezone: a.timezone, clock24: a.clock24, weekStart: a.weekStart }),
+        }).catch(() => {});
+      }
       const res = await apiFetch('/api/auth/google/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -247,11 +302,21 @@ export default function Onboarding() {
     setError(null);
     try {
       await saveOnboarding(
-        kind === 'skip'
-          ? { skip: true }
-          : // first-timers save everything; returning users only what they changed
-            { answers: a, changed: existing ? [...changed] : undefined },
+        kind === 'skip' && existing
+          ? // "Keep my settings": nothing to write
+            { skip: true }
+          : kind === 'skip'
+            ? // "Use defaults" / "Finish later": keep what was touched, plus this
+              // device's time zone and clock (never leave the server default)
+              { answers: a, changed: [...new Set<Group>([...changed, 'prefs'])] }
+            : // first-timers save everything; returning users only what they changed
+              { answers: a, changed: existing ? [...changed] : undefined },
       );
+      try {
+        sessionStorage.removeItem('ft-redo');
+      } catch {
+        // ignore
+      }
       track(kind === 'skip' ? TRACK[step] : 'done', kind);
       writeSaved(storeKey, null);
       await user?.reload();
@@ -277,8 +342,24 @@ export default function Onboarding() {
     );
   }
 
+  if (loadFailed) {
+    return (
+      <div className="au" data-page="onboarding">
+        <div className="au-wait" role="alert" style={{ display: 'grid', gap: 14, justifyItems: 'center', textAlign: 'center' }}>
+          <p>We couldn’t load your settings, so we haven’t changed anything.</p>
+          <button type="button" className="au-btn au-ink" onClick={() => window.location.reload()}>
+            Try again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const name = a.firstName.trim();
   const isLast = step === STEPS.length - 1;
+  const googleUser = Boolean(
+    (user as { externalAccounts?: { provider?: string }[] }).externalAccounts?.some((x) => x.provider?.includes('google')),
+  );
 
   return (
     <div className="au" data-page="onboarding">
@@ -290,17 +371,25 @@ export default function Onboarding() {
           </a>
           {!done ? (
             <button type="button" className="au-btn au-quiet" onClick={() => void submit('skip')} disabled={!!busy}>
-              {busy === 'skip' ? 'Skipping…' : existing ? 'Keep my settings' : 'Skip for now'}
+              {busy === 'skip' ? 'Saving…' : existing ? 'Keep my settings' : step === 0 && !changed.size ? 'Use defaults' : 'Finish later'}
             </button>
           ) : null}
         </header>
 
         <div className="au-body">
           {done ? (
-            <Done a={a} focusWeek={focusWeek} real={real} headingRef={headingRef} onOpen={() => router.replace('/app')} />
+            <Done
+              a={a}
+              focusWeek={focusWeek}
+              real={real}
+              gl={gl === true}
+              headingRef={headingRef}
+              onPlace={() => router.replace(`/app?ask=${encodeURIComponent(PLACE_DEEP_WORK)}`)}
+              onOpen={() => router.replace('/app')}
+            />
           ) : (
             <>
-              <p className="au-eyebrow">{existing ? 'Review your setup' : 'Shape your week'}</p>
+              <p className="au-eyebrow">{existing ? 'Review your setup' : 'Step 3 of 3 · Shape your week'}</p>
               <ol className="ob-rail" aria-label="Setup progress">
                 {STEPS.map((s, i) => (
                   <li key={s} data-state={i < step ? 'done' : i === step ? 'now' : 'next'}>
@@ -331,7 +420,7 @@ export default function Onboarding() {
                 {step === 0 ? (
                   <Step
                     headingRef={headingRef}
-                    q={name ? `Hi ${name}. What should we call you?` : 'What should we call you?'}
+                    q="What should we call you?"
                     sub="It’s how the week greets you. Nothing else.">
                     <div className="au-field">
                       <label htmlFor="ob-name">First name</label>
@@ -357,7 +446,9 @@ export default function Onboarding() {
                     sub={
                       real
                         ? 'The preview now plans around your own meetings this week.'
-                        : 'Connect Google Calendar and the preview — and every plan after it — works around what’s already booked.'
+                        : googleUser
+                          ? 'One more permission: reading your calendar. Signing in with Google didn’t include it. The preview — and every plan after it — then works around what’s already booked.'
+                          : 'Connect Google Calendar and the preview — and every plan after it — works around what’s already booked.'
                     }>
                     <div className="ob-connect">
                       <div className="ob-connect-h">
@@ -366,7 +457,7 @@ export default function Onboarding() {
                         {real ? <span className="ob-ok">Connected · {meetings?.length ?? 0} this week</span> : null}
                       </div>
                       <ul>
-                        <li>Reads first. Writes only if you ask: your focus blocks, as private busy events.</li>
+                        <li>Reads first. Writes only if you ask: your deep-work blocks, as private busy events.</li>
                         <li>Other people’s meetings never move. It plans around them.</li>
                         <li>Disconnect any time; its imported events are removed.</li>
                       </ul>
@@ -475,7 +566,7 @@ export default function Onboarding() {
                   <Step
                     headingRef={headingRef}
                     q="When do you think best?"
-                    sub="Demanding work is ranked into these hours first. It learns from your edits after that.">
+                    sub="Deep work is ranked into these hours first. It learns from your edits after that.">
                     <div className="ob-peaks" role="radiogroup" aria-label="Best hours">
                       {PEAKS.map((p) => (
                         <label key={p.id} className="ob-peak">
@@ -495,7 +586,7 @@ export default function Onboarding() {
                   <Step
                     headingRef={headingRef}
                     q="How much deep work a day?"
-                    sub="Your daily budget for focused, demanding work. The rest stays open for everything else.">
+                    sub="Your daily budget for deep work. The rest of the day stays open for everything else.">
                     <div className="ob-range">
                       <div className="ob-range-top">
                         <label htmlFor="ob-focus" className="au-lbl">
@@ -525,7 +616,7 @@ export default function Onboarding() {
                     </div>
                     <div>
                       <p className="au-lbl" id="ob-hw" style={{ marginBottom: 8 }}>
-                        Hard work across the week
+                        Deep work across the week
                       </p>
                       <div className="ob-seg" data-v={a.hardWork === 'cluster' ? 1 : 0} role="group" aria-labelledby="ob-hw">
                         <button type="button" aria-pressed={a.hardWork === 'spread'} onClick={() => patch({ hardWork: 'spread' })}>
@@ -581,29 +672,90 @@ export default function Onboarding() {
           <h2>{name ? `${name}’s week` : 'Your week'}</h2>
           <p>{real ? `Live preview · your meetings, week of ${weekLabel(server?.weekOf)}` : 'Live preview · example meetings'}</p>
         </div>
-        <MiniWeek
-          title={showFocus ? `Best hours ${hourLabel(peak.from, a.clock24)}–${hourLabel(peak.to, a.clock24)}` : 'Working hours'}
-          meta={`${hourLabel(a.start, a.clock24)}–${hourLabel(a.end, a.clock24)}`}
-          work={work}
-          start={a.start}
-          end={a.end}
-          peak={showFocus ? peak : null}
-          blocks={showFocus ? blocks : blocks.filter((b) => b.kind === 'meeting')}
-          clock24={a.clock24}
-          weekStart={a.weekStart}
-          height={380}
-          meetingLabel={real ? 'Your meetings' : 'Meetings (example)'}
-          stats={[
-            { label: 'Working', value: `${workWeek} h` },
-            { label: 'Deep work', value: showFocus ? `${focusWeek} h` : '—' },
-            { label: 'Meetings', value: `${blocks.filter((b) => b.kind === 'meeting').length}` },
-          ]}
-        />
+        {gl !== false ? (
+          <div className="b3d-card" data-on={gl === true}>
+            <WeekBoard3D
+              blocks={blocks}
+              settled={done}
+              showFocus={showFocus}
+              work={work}
+              start={a.start}
+              end={a.end}
+              peak={showFocus ? peak : null}
+              weekStart={a.weekStart}
+              dates={weekDates(real ? server?.weekOf : null)}
+              label={`Preview of your week: ${workWeek} hours of work, ${showFocus ? `${focusWeek} hours of deep work, ` : ''}${blocks.filter((b) => b.kind === 'meeting').length} meetings.`}
+              onGl={setGl}
+            />
+            <div className="mw-legend" aria-hidden="true">
+              <span>
+                <i className="k-focus" />
+                {done ? 'Deep work, booked' : 'Deep work, proposed'}
+              </span>
+              <span>
+                <i className="k-meet" />
+                {real ? 'Your meetings' : 'Meetings (example)'}
+              </span>
+              {showFocus ? (
+                <span>
+                  <i className="k-peak" />
+                  Your best hours
+                </span>
+              ) : null}
+              <span>
+                <i className="k-off" />
+                Not working
+              </span>
+            </div>
+            <dl className="mw-stat">
+              <div>
+                <dt>Working</dt>
+                <dd>{workWeek} h</dd>
+              </div>
+              <div>
+                <dt>Deep work</dt>
+                <dd>{showFocus ? `${focusWeek} h` : '—'}</dd>
+              </div>
+              <div>
+                <dt>Meetings</dt>
+                <dd>{blocks.filter((b) => b.kind === 'meeting').length}</dd>
+              </div>
+            </dl>
+          </div>
+        ) : null}
+        {gl !== true ? (
+          <MiniWeek
+            title={showFocus ? `Best hours ${hourLabel(peak.from, a.clock24)}–${hourLabel(peak.to, a.clock24)}` : 'Working hours'}
+            meta={`${hourLabel(a.start, a.clock24)}–${hourLabel(a.end, a.clock24)}`}
+            work={work}
+            start={a.start}
+            end={a.end}
+            peak={showFocus ? peak : null}
+            blocks={showFocus ? blocks : blocks.filter((b) => b.kind === 'meeting')}
+            clock24={a.clock24}
+            weekStart={a.weekStart}
+            height={380}
+            meetingLabel={real ? 'Your meetings' : 'Meetings (example)'}
+            stats={[
+              { label: 'Working', value: `${workWeek} h` },
+              { label: 'Deep work', value: showFocus ? `${focusWeek} h` : '—' },
+              { label: 'Meetings', value: `${blocks.filter((b) => b.kind === 'meeting').length}` },
+            ]}
+          />
+        ) : null}
       </aside>
 
       {!done ? <FocusStrip blocks={blocks} work={work} showFocus={showFocus} weekStart={a.weekStart} /> : null}
     </div>
   );
+}
+
+/** Day-of-month for Mon…Sun of a real week ('2026-09-28' → [28, 29, …, 4]); null for the example week. */
+function weekDates(isoMonday: string | null | undefined): number[] | null {
+  if (!isoMonday) return null;
+  const m = Date.parse(`${isoMonday}T00:00:00Z`);
+  if (Number.isNaN(m)) return null;
+  return Array.from({ length: 7 }, (_, i) => new Date(m + i * 86_400_000).getUTCDate());
 }
 
 /** '2026-09-28' → '28 Sep' in the viewer's locale. */
@@ -681,15 +833,21 @@ function Done({
   a,
   focusWeek,
   real,
+  gl,
+  onPlace,
   onOpen,
   headingRef,
 }: {
   a: OnboardingAnswers;
   focusWeek: number;
   real: boolean;
+  /** the 3D board is showing: let its blocks land before the button arrives */
+  gl: boolean;
+  onPlace: () => void;
   onOpen: () => void;
   headingRef: HeadingRef;
 }) {
+  const root = useRef<HTMLDivElement>(null);
   const peak = PEAKS.find((p) => p.id === a.peak)!;
   const days = WEEKDAYS.map((d, i) => (a.days.includes(d) ? DAY_SHORT[i] : null))
     .filter(Boolean)
@@ -697,13 +855,57 @@ function Done({
   useEffect(() => {
     headingRef.current?.focus();
   }, [headingRef]);
+
+  // The finish, in one sequence (animation-systems: primary first, CTA last):
+  // the board's proposals drop into place, the heading rises, the summary
+  // rows follow, and "Open my week" arrives once the blocks have landed.
+  useEffect(() => {
+    const el = root.current;
+    if (!el || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    // gsap.context + revert: a cleanup mid-animation (React re-running the
+    // effect) restores the elements instead of leaving them invisible.
+    // Explicit end values (fromTo): `from` reads the current style as its end,
+    // and a revert mid-way leaves the button's CSS opacity transition running
+    // — the next `from` would then read ~0 and animate to invisible.
+    let tl: gsap.core.Timeline | null = null;
+    const show = { y: 0, opacity: 1, scale: 1 };
+    const ctx = gsap.context(() => {
+      gsap.set('[data-a="cta"]', { transition: 'none' });
+      tl = gsap
+        .timeline({ defaults: { ease: 'power3.out' } })
+        .fromTo('[data-a="eyebrow"]', { y: 10, opacity: 0 }, { ...show, duration: 0.4 }, 0.05)
+        .fromTo('[data-a="title"]', { y: 18, opacity: 0 }, { ...show, duration: 0.6 }, 0.12)
+        .fromTo('[data-a="sub"]', { y: 12, opacity: 0 }, { ...show, duration: 0.5 }, 0.28)
+        .fromTo('.ob-sum > div', { y: 10, opacity: 0 }, { ...show, duration: 0.45, stagger: 0.07 }, 0.4)
+        .fromTo(
+          '[data-a="cta"]',
+          { y: 12, opacity: 0, scale: 0.97 },
+          // hand the button back to its CSS (hover/press transitions) once it has arrived
+          { ...show, duration: 0.55, ease: 'back.out(1.6)', clearProps: 'transition,transform,opacity,translate,scale,rotate' },
+          gl ? 1.35 : 0.85,
+        );
+    }, el);
+    // Never let a busy main thread (GSAP slows down with long frames) hold
+    // the way out hostage: everything is visible by 2.6 s regardless.
+    const safety = window.setTimeout(() => tl?.progress(1), 2600);
+    return () => {
+      window.clearTimeout(safety);
+      ctx.revert();
+    };
+  }, [gl]);
+
   return (
-    <div className="ob-done ob-step" data-dir="fwd">
-      <p className="au-eyebrow">All set</p>
-      <h1 className="ob-q" ref={headingRef} tabIndex={-1}>
+    <div className="ob-done ob-step" data-dir="fwd" ref={root}>
+      <p className="au-eyebrow" data-a="eyebrow">
+        All set
+      </p>
+      <h1 className="ob-q" ref={headingRef} tabIndex={-1} data-a="title">
         {a.firstName.trim() ? `Your week is ready, ${a.firstName.trim()}.` : 'Your week is ready.'}
       </h1>
-      <p className="ob-sub">Ask Find Time to plan something and it starts from these. It keeps learning from what you move.</p>
+      <p className="ob-sub" data-a="sub">
+        {gl ? 'That’s how your week could look. ' : ''}Let Find Time place this week’s deep work now — you approve every block. It keeps
+        learning from what you move.
+      </p>
       <dl className="ob-sum">
         <div>
           <dt>Working</dt>
@@ -730,12 +932,17 @@ function Done({
           <dd>{a.timezone.replace(/_/g, ' ')}</dd>
         </div>
       </dl>
-      <button type="button" className="au-btn au-ink au-wide" onClick={onOpen}>
-        Open my week
-        <span className="arr" aria-hidden="true">
-          →
-        </span>
-      </button>
+      <div className="ob-finish" data-a="cta">
+        <button type="button" className="au-btn au-ink au-wide" onClick={onPlace}>
+          Place my deep work
+          <span className="arr" aria-hidden="true">
+            →
+          </span>
+        </button>
+        <button type="button" className="au-link-btn" onClick={onOpen}>
+          Just open my calendar
+        </button>
+      </div>
     </div>
   );
 }

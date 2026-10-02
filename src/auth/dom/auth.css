@@ -10,7 +10,7 @@
    collapses to instant under prefers-reduced-motion.
    ========================================================================== */
 
-html:has(.au) { height: auto !important; overflow-y: auto !important; }
+html:has(.au) { height: auto !important; overflow-y: auto !important; scrollbar-gutter: stable; }
 html:has(.au) body { height: auto !important; overflow: visible !important; }
 #root:has(.au) { display: block !important; height: auto !important; }
 
@@ -158,6 +158,7 @@ html:has(.au) body { height: auto !important; overflow: visible !important; }
   padding: 10px 12px; border-radius: 10px; background: var(--accent-t);
 }
 .au-err::before { content: '!'; font-weight: 700; font-family: var(--mono); }
+.au-err-act { color: var(--accent-ink); font-weight: 500; text-underline-offset: 3px; }
 
 .au-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 10px;
@@ -185,7 +186,7 @@ html:has(.au) body { height: auto !important; overflow: visible !important; }
 }
 @keyframes au-spin { to { transform: rotate(360deg); } }
 
-.au-or { display: flex; align-items: center; gap: 12px; color: var(--faint); font-size: 12px; font-family: var(--mono); letter-spacing: 0.08em; }
+.au-or { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 12px; font-family: var(--mono); letter-spacing: 0.08em; }
 .au-or::before, .au-or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
 
 .au-g { width: 18px; height: 18px; flex: none; }
@@ -244,6 +245,17 @@ html:has(.au) body { height: auto !important; overflow: visible !important; }
 .au-stage-cap { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
 .au-stage-cap h2 { font-size: clamp(20px, 1.7vw, 24px); font-weight: 500; letter-spacing: -0.025em; line-height: 1.2; }
 .au-stage-cap p { font-size: 13.5px; color: var(--muted); }
+
+/* the 3D board (WeekBoard3D) — the landing's board, in a card */
+.b3d-card {
+  position: relative; border-radius: 18px; background: rgba(255, 255, 255, 0.55);
+  box-shadow: var(--sh-md); overflow: hidden;
+}
+.b3d-card[data-on='false'] { display: none; }
+.b3d { position: relative; height: clamp(360px, 52vh, 520px); }
+.b3d canvas { display: block; width: 100%; height: 100%; animation: au-fade 0.9s var(--ease); cursor: default; }
+@keyframes au-fade { from { opacity: 0; } }
+.b3d-card .mw-legend, .b3d-card .mw-stat { background: rgba(255, 255, 255, 0.85); }
 
 /* sign-up path: what happens next, ticking as you go */
 .au-path { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
@@ -340,7 +352,7 @@ html:has(.au) body { height: auto !important; overflow: visible !important; }
 .ob-rail li { flex: 1 1 auto; }
 .ob-rail button {
   display: block; width: 100%; padding: 8px 0 0; border: 0; background: none; cursor: pointer; text-align: left;
-  font-family: var(--mono); font-size: 10px; letter-spacing: 0.03em; white-space: nowrap; color: var(--faint);
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.03em; white-space: nowrap; color: var(--muted);
   border-top: 2px solid var(--ghost);
   transition: color var(--t-state) var(--ease), border-color var(--t-state) var(--ease);
 }
@@ -356,7 +368,7 @@ html:has(.au) body { height: auto !important; overflow: visible !important; }
 .ob-q { font-size: clamp(26px, 2.6vw, 34px); line-height: 1.08; font-weight: 500; letter-spacing: -0.035em; text-wrap: balance; }
 .ob-sub { color: var(--ink-2); font-size: 15.5px; line-height: 1.55; margin-top: -10px; text-wrap: pretty; }
 .ob-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; }
-.ob-kbd { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+.ob-kbd { font-family: var(--mono); font-size: 11px; color: var(--muted); }
 .ob-kbd kbd {
   font-family: inherit; padding: 1px 6px; border-radius: 5px; background: #fff; box-shadow: var(--sh-sm); color: var(--ink-2);
 }
@@ -431,7 +443,7 @@ html:has(.au) body { height: auto !important; overflow: visible !important; }
 .ob-range input[type='range']::-moz-range-thumb {
   width: 22px; height: 22px; border: 0; border-radius: 999px; background: #fff; box-shadow: var(--sh-md), 0 0 0 1.5px var(--ink);
 }
-.ob-ticks { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+.ob-ticks { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
 
 /* segmented */
 .ob-seg {
@@ -495,8 +507,8 @@ html:has(.au) body { height: auto !important; overflow: visible !important; }
   padding: 3px 8px; border-radius: 999px; background: #e6f2f1;
 }
 .ob-connect .au-btn { justify-self: start; margin-top: 4px; }
-.au .ob-q:focus { outline: none; }
-.au .ob-q:focus-visible { outline: 2px solid var(--ink); outline-offset: 6px; }
+.au .ob-q:focus, .au .ob-q:focus-visible { outline: none; }
+.ob-finish { display: grid; gap: 12px; justify-items: center; }
 
 /* time zone combobox */
 .ob-rows > .ob-row-tz { align-items: center; }

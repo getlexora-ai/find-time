@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { syncNow, useAccounts } from './account-store';
+import { connect, syncNow, useAccounts } from './account-store';
 import { refresh as refreshEvents, useCalEvents, useCalLoad } from './cal-store';
 import { addDays, fromIso, fromMin, iso, MO, startOfWeek, today, WD_LONG, wdIndex } from './cal-date';
 import { AiPanel } from './components/AiPanel';
@@ -20,6 +20,8 @@ import { QuickCreate } from './components/QuickCreate';
 import { useToast } from './components/Toast';
 import { WeekView } from './components/WeekView';
 import { getHours, useHours, workFor } from './hours';
+import { repeatsOn } from './layout';
+import { PLACE_DEEP_WORK } from '@/auth/onboarding';
 import { computeKpis, slicesIn } from './kpi';
 import type { CalActions, CalState, ComposePreset, Page, PointAnchor, Slot, ViewKind } from './state';
 import { N, SANS } from './tokens';
@@ -118,6 +120,18 @@ export function CalendarScreen() {
     window.history.replaceState(null, '', window.location.pathname);
   }, [toast]);
 
+  // `/app?ask=…` (onboarding's "Place my deep work") opens Plan with AI with that
+  // request typed in, ready to send — the first plan is one tap away.
+  const [ai, setAi] = useState<{ prefill?: string } | null>(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return null;
+    const ask = new URLSearchParams(window.location.search).get('ask');
+    return ask ? { prefill: ask.slice(0, 500) } : null;
+  });
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    if (new URLSearchParams(window.location.search).has('ask')) window.history.replaceState(null, '', window.location.pathname);
+  }, []);
+
   const [state, setState] = useState<CalState>(() => ({
     view: urlParam('view') === 'day' ? 'day' : 'week',
     cursor: today(),
@@ -161,7 +175,6 @@ export function CalendarScreen() {
   const [detail, setDetail] = useState<{ id: number; anchor: PointAnchor | null } | null>(null);
   const [quick, setQuick] = useState<Slot | null>(null);
   const [list, setList] = useState<{ title: string; events: CalEvent[]; anchor: PointAnchor | null } | null>(null);
-  const [ai, setAi] = useState<{ prefill?: string } | null>(null);
   const [picker, setPicker] = useState<{ anchor: PointAnchor | null } | null>(null);
   const [filters, setFilters] = useState<{ anchor: PointAnchor | null } | null>(null);
 
@@ -220,6 +233,12 @@ export function CalendarScreen() {
     [events, days, clashes.pairs.length, hours],
   );
   const title = titleFor(state.view, state.cursor, state.selected);
+
+  /** Nothing at all on the days on screen — a new account's first week. */
+  const emptyWeek = useMemo(
+    () => load.status === 'ready' && days.every((d) => !events.some((e) => repeatsOn(e, d))),
+    [load.status, days, events],
+  );
   const proposals = useMemo(
     () => events.filter((e) => e.kind === 'ai' && days.includes(e.date)),
     [events, days],
@@ -341,6 +360,32 @@ export function CalendarScreen() {
                 </Press>
               </View>
             )}
+            {emptyWeek && page === 'planner' && !ai ? (
+              <View style={styles.empty} accessibilityRole="summary">
+                <View style={{ flex: 1, minWidth: 220, gap: 2 }}>
+                  <Txt style={styles.emptyTitle}>{state.view === 'day' ? 'Nothing planned today.' : 'Your week is wide open.'}</Txt>
+                  <Txt style={styles.emptyTxt}>
+                    {accounts.length
+                      ? 'Ask Find Time to place your deep work in your best hours — you approve every block.'
+                      : 'Connect Google Calendar so plans go around your meetings, or let Find Time place your deep work now.'}
+                  </Txt>
+                </View>
+                <View style={styles.emptyActs}>
+                  {!accounts.length && Platform.OS === 'web' ? (
+                    <Press hoverBg={N.hover} style={styles.emptyGhost} accessibilityRole="button" onPress={() => void connect()}>
+                      <Txt style={styles.emptyGhostTxt}>Connect Google</Txt>
+                    </Press>
+                  ) : null}
+                  <Press
+                    hoverBg="#262626"
+                    style={styles.emptyCta}
+                    accessibilityRole="button"
+                    onPress={() => actions.openAI(PLACE_DEEP_WORK)}>
+                    <Txt style={styles.emptyCtaTxt}>Place my deep work</Txt>
+                  </Press>
+                </View>
+              </View>
+            ) : null}
             {page === 'tasks' ? (
               <Tasks actions={actions} toast={toast} />
             ) : page === 'insights' ? (
@@ -474,6 +519,27 @@ const styles = StyleSheet.create({
   main: { flex: 1, minWidth: 0, minHeight: 0 },
   row: { flex: 1, minHeight: 0, flexDirection: 'row' },
   grid: { flex: 1, minHeight: 0 },
+  empty: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 12,
+    marginHorizontal: 20,
+    marginBottom: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: N.line,
+    borderRadius: 12,
+    backgroundColor: N.sunken,
+  },
+  emptyTitle: { fontFamily: SANS, fontSize: 14, lineHeight: 20, fontWeight: '500', color: N.ink },
+  emptyTxt: { fontFamily: SANS, fontSize: 13, lineHeight: 18, color: N.ink2 },
+  emptyActs: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  emptyCta: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999, backgroundColor: N.ink },
+  emptyCtaTxt: { fontFamily: SANS, fontSize: 13, lineHeight: 18, color: N.onInk, fontWeight: '500' },
+  emptyGhost: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1, borderColor: N.line, backgroundColor: N.surface },
+  emptyGhostTxt: { fontFamily: SANS, fontSize: 13, lineHeight: 18, color: N.ink },
   loadErr: { flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: 20, marginBottom: 12, paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: N.line, borderRadius: 10 },
   loadErrTxt: { flex: 1, fontFamily: SANS, fontSize: 13, lineHeight: 18, color: N.accentInk },
   loadErrBtn: { paddingVertical: 4, paddingHorizontal: 8, borderRadius: 6 },

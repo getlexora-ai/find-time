@@ -1,4 +1,5 @@
 import { useClerk, useUser } from '@clerk/clerk-expo';
+import { useRouter } from 'expo-router';
 import { Alert, StyleSheet, View } from 'react-native';
 
 import { apiFetch } from '@/lib/api';
@@ -9,11 +10,13 @@ import { Press, Txt } from '../ui';
 /**
  * Native account control. Clerk has no `<UserButton />` / `<UserProfile />` on
  * native, so this is a small avatar that opens a native action sheet: manage
- * profile (web only), sign out, or delete the account (wipes Neon + Clerk).
+ * profile (web only), set up my week (onboarding again), sign out, or delete
+ * the account (wipes Neon + Clerk).
  */
 export function AccountButton({ showName = false }: { showName?: boolean }) {
   const { user } = useUser();
   const { signOut } = useClerk();
+  const router = useRouter();
 
   const name = user?.fullName || user?.primaryEmailAddress?.emailAddress || 'Account';
 
@@ -38,6 +41,7 @@ export function AccountButton({ showName = false }: { showName?: boolean }) {
 
   function open() {
     Alert.alert(name, 'Manage your profile in the Find Time web app.', [
+      { text: 'Set up my week', onPress: () => router.push('/welcome?redo=1') },
       { text: 'Sign out', onPress: () => void signOut() },
       { text: 'Delete account', style: 'destructive', onPress: confirmDelete },
       { text: 'Cancel', style: 'cancel' },

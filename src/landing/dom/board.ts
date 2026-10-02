@@ -12,6 +12,11 @@
  * the difference. Labels are canvas textures painted in the page's own fonts.
  * Rendering pauses offscreen and in hidden tabs; everything is disposed on
  * unmount; a lost context hands over to the DOM week (`onFail`).
+ *
+ * Also mounted by onboarding (src/auth/dom/WeekBoard3D.tsx) with its own
+ * `frame` (7 days, a wider hour window) and a live face (`setFace`: day
+ * labels, hatched days off and hours outside work, the peak band). With no
+ * `frame` / `setFace` call it is exactly the landing's board.
  */
 import { gsap } from 'gsap';
 import {
@@ -50,10 +55,40 @@ export type BoardTile = {
 export type BoardMark = { id: string; day: number; s: number; e: number; kind: 'free' | 'crumb' };
 export type BoardView = 'hero' | 'story';
 
+/** What is painted on the board's face (not the tiles). Minutes from midnight. */
+export type BoardFace = {
+  days: { short: string; num?: number }[];
+  /** per column: false = a day off, hatched */
+  work?: boolean[];
+  /** working hours; outside them is hatched */
+  open?: { start: number; end: number };
+  /** best hours: a faint orange band across working days */
+  peak?: { start: number; end: number } | null;
+};
+
+/** The board's shape. Defaults are the landing's example week. */
+export type BoardFrame = {
+  /** number of day columns */
+  count: number;
+  /** visible window, minutes from midnight */
+  start: number;
+  end: number;
+  /** texture pixels per world unit — lower repaints faster (onboarding repaints on every answer) */
+  px?: number;
+  /**
+   * How much of the canvas the board fills (width, depth), 0–1. The landing
+   * leaves room for the hero copy beside it; a board alone in a card fills it.
+   */
+  fill?: { w: number; h: number };
+  /** camera elevation in degrees (landing: 52 hero, 62 story) */
+  elevation?: number;
+};
+
 export type Board = {
   setTiles: (tiles: BoardTile[]) => void;
   setMarks: (marks: BoardMark[]) => void;
   setView: (view: BoardView) => void;
+  setFace: (face: BoardFace) => void;
   dispose: () => void;
 };
 
@@ -63,15 +98,8 @@ const GUT = 0.95;
 const HDR = 0.8;
 const HOUR = 0.5;
 const PAD = 0.28;
-const HOURS = (DAY_END - DAY_START) / 60;
-const BW = PAD * 2 + GUT + DAYS.length * COL;
-const BD = PAD * 2 + HDR + HOURS * HOUR;
 const T = 0.17; // tile thickness
 const FLOAT = 0.62; // proposal hover height
-const PX = 230; // texture pixels per world unit
-
-const colX = (day: number) => -BW / 2 + PAD + GUT + day * COL + COL / 2;
-const minZ = (m: number) => -BD / 2 + PAD + HDR + ((m - DAY_START) / 60) * HOUR;
 
 /* ── palette (src/calendar/tokens.ts) ───────────────────────────── */
 const INK = '#171717';
@@ -119,9 +147,30 @@ function hatch(g: CanvasRenderingContext2D, w: number, h: number, color: string,
 
 export async function mountBoard(
   host: HTMLElement,
-  opts: { offsetX: () => number; onFail: () => void },
+  opts: {
+    offsetX: () => number;
+    onFail: () => void;
+    frame?: BoardFrame;
+    /**
+     * Hand over to the DOM fallback (`onFail`) when the device can't keep up:
+     * median frame time over the first ~40 frames above ~66 ms (< 15 fps),
+     * i.e. no usable GPU. A board that stutters is worse than a flat week.
+     */
+    perfGuard?: boolean;
+  },
 ): Promise<Board> {
   await document.fonts?.ready;
+
+  const FRAME_START = opts.frame?.start ?? DAY_START;
+  const FRAME_END = opts.frame?.end ?? DAY_END;
+  const COUNT = opts.frame?.count ?? DAYS.length;
+  const PX = opts.frame?.px ?? 230;
+  const HOURS = (FRAME_END - FRAME_START) / 60;
+  const BW = PAD * 2 + GUT + COUNT * COL;
+  const BD = PAD * 2 + HDR + HOURS * HOUR;
+  const colX = (day: number) => -BW / 2 + PAD + GUT + day * COL + COL / 2;
+  const minZ = (m: number) => -BD / 2 + PAD + HDR + ((m - FRAME_START) / 60) * HOUR;
+  let spec: BoardFace = { days: DAYS.map((d) => ({ short: d.short, num: d.num })) };
 
   const renderer = new WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, window.innerWidth < 700 ? 1.5 : 2));
@@ -162,7 +211,7 @@ export async function mountBoard(
   base.receiveShadow = true;
   world.add(base);
 
-  const faceTex = keep(new CanvasTexture(paintFace()));
+  const faceTex = new CanvasTexture(paintFace());
   faceTex.colorSpace = SRGBColorSpace;
   faceTex.anisotropy = maxAniso;
   const face = new Mesh(
@@ -186,29 +235,76 @@ export async function mountBoard(
     const u = (v: number) => v * PX;
     g.fillStyle = '#ffffff';
     g.fillRect(0, 0, c.width, c.height);
+    const top = u(PAD + HDR);
+    const bottom = u(BD - PAD);
+    const yOf = (m: number) => top + u(((Math.min(FRAME_END, Math.max(FRAME_START, m)) - FRAME_START) / 60) * HOUR);
+    // days off and hours outside work: hatched; best hours: a faint orange band
+    for (let i = 0; i < COUNT; i++) {
+      const x0 = u(PAD + GUT + i * COL);
+      const cw = u(COL);
+      const off = spec.work ? !spec.work[i] : false;
+      const spans: [number, number][] = off
+        ? [[FRAME_START, FRAME_END]]
+        : spec.open
+          ? [
+              [FRAME_START, spec.open.start],
+              [spec.open.end, FRAME_END],
+            ]
+          : [];
+      for (const [a, b] of spans) {
+        const y0 = yOf(a);
+        const y1 = yOf(b);
+        if (y1 - y0 < 1) continue;
+        g.save();
+        g.beginPath();
+        g.rect(x0, y0, cw, y1 - y0);
+        g.clip();
+        g.fillStyle = '#fbfbfb';
+        g.fillRect(x0, y0, cw, y1 - y0);
+        g.translate(x0, y0);
+        hatch(g, cw, y1 - y0, 'rgba(0,0,0,0.06)', u(0.12));
+        g.restore();
+      }
+      if (!off && spec.peak) {
+        const a = Math.max(spec.peak.start, spec.open?.start ?? FRAME_START);
+        const b = Math.min(spec.peak.end, spec.open?.end ?? FRAME_END);
+        if (b > a) {
+          const y0 = yOf(a);
+          const y1 = yOf(b);
+          const grad = g.createLinearGradient(0, y0, 0, y1);
+          grad.addColorStop(0, 'rgba(234,88,12,0)');
+          grad.addColorStop(0.2, 'rgba(234,88,12,0.08)');
+          grad.addColorStop(0.8, 'rgba(234,88,12,0.08)');
+          grad.addColorStop(1, 'rgba(234,88,12,0)');
+          g.fillStyle = grad;
+          g.fillRect(x0, y0, cw, y1 - y0);
+        }
+      }
+    }
     // header
     g.textBaseline = 'middle';
-    DAYS.forEach((d, i) => {
+    spec.days.slice(0, COUNT).forEach((d, i) => {
       const x = u(PAD + GUT + i * COL + 0.18);
       const y = u(PAD + HDR / 2);
+      const off = spec.work ? !spec.work[i] : false;
       g.font = `400 ${u(0.26)}px ${SANS}`;
-      g.fillStyle = MUTED;
+      g.fillStyle = off ? FAINT : MUTED;
       g.fillText(d.short, x, y);
-      const w = g.measureText(d.short + ' ').width;
-      g.font = `600 ${u(0.26)}px ${SANS}`;
-      g.fillStyle = INK;
-      g.fillText(String(d.num), x + w, y);
+      if (d.num != null) {
+        const w = g.measureText(d.short + ' ').width;
+        g.font = `600 ${u(0.26)}px ${SANS}`;
+        g.fillStyle = off ? FAINT : INK;
+        g.fillText(String(d.num), x + w, y);
+      }
     });
     // grid
     g.strokeStyle = LINE;
     g.lineWidth = 3;
-    const top = u(PAD + HDR);
-    const bottom = u(BD - PAD);
     g.beginPath();
     g.moveTo(u(PAD), top);
     g.lineTo(u(BW - PAD), top);
     g.stroke();
-    for (let i = 0; i <= DAYS.length; i++) {
+    for (let i = 0; i <= COUNT; i++) {
       const x = u(PAD + GUT + i * COL);
       g.beginPath();
       g.moveTo(x, u(PAD));
@@ -228,7 +324,7 @@ export async function mountBoard(
         g.lineTo(u(BW - PAD), y);
         g.stroke();
       }
-      g.fillText(clock(DAY_START + h * 60), u(PAD + GUT - 0.14), y + u(0.14));
+      g.fillText(clock(FRAME_START + h * 60), u(PAD + GUT - 0.14), y + u(0.14));
     }
     return c;
   }
@@ -472,9 +568,16 @@ export async function mountBoard(
     });
   };
 
+  const setFace = (next: BoardFace) => {
+    spec = next;
+    // a fresh canvas each time: repainting the old one in place can show stale pixels
+    faceTex.image = paintFace();
+    faceTex.needsUpdate = true;
+  };
+
   /* ── camera: fit the board into the visible part of the canvas ── */
   let view: BoardView = 'hero';
-  const cam = { el: window.innerWidth < 700 ? 62 : 52, dist: 20, x: 0 };
+  const cam = { el: opts.frame?.elevation ?? (window.innerWidth < 700 ? 62 : 52), dist: 20, x: 0 };
   let W = 1;
   let H = 1;
   function fitDist(el: number) {
@@ -483,9 +586,11 @@ export async function mountBoard(
     const vf = (camera.fov * Math.PI) / 360;
     const hf = Math.atan(Math.tan(vf) * aspect * visible);
     const narrow = W < 700;
-    const byW = (BW * (narrow ? 0.5 : 0.64)) / Math.tan(hf);
+    const fw = opts.frame?.fill ? 0.5 / opts.frame.fill.w : narrow ? 0.5 : 0.64;
+    const fh = opts.frame?.fill ? 0.5 / opts.frame.fill.h : narrow ? 0.52 : 0.6;
+    const byW = (BW * fw) / Math.tan(hf);
     const depth = BD * Math.sin((el * Math.PI) / 180) + 1.2 * Math.cos((el * Math.PI) / 180);
-    const byH = (depth * (narrow ? 0.52 : 0.6)) / Math.tan(vf);
+    const byH = (depth * fh) / Math.tan(vf);
     return Math.max(byW, byH);
   }
   function resize() {
@@ -528,10 +633,26 @@ export async function mountBoard(
   document.addEventListener('visibilitychange', onVis);
 
   const t0 = performance.now();
+  const samples: number[] = [];
+  let prev = 0;
+  let gaveUp = false;
   function frame() {
     raf = 0;
-    if (!visible || document.hidden) return;
-    const t = (performance.now() - t0) / 1000;
+    if (!visible || document.hidden || gaveUp) return;
+    const now = performance.now();
+    if (opts.perfGuard && prev && samples.length < 40) {
+      samples.push(now - prev);
+      if (samples.length === 40) {
+        const median = [...samples].sort((a, b) => a - b)[20];
+        if (median > 66) {
+          gaveUp = true;
+          opts.onFail();
+          return;
+        }
+      }
+    }
+    prev = now;
+    const t = (now - t0) / 1000;
     tilt.x += (tilt.tx - tilt.x) * 0.05;
     tilt.y += (tilt.ty - tilt.y) * 0.05;
     world.rotation.y = tilt.x * 0.07;
@@ -551,6 +672,8 @@ export async function mountBoard(
     raf = requestAnimationFrame(frame);
   }
   function start() {
+    // after a pause the first gap isn't a frame time
+    prev = 0;
     if (!raf) raf = requestAnimationFrame(frame);
   }
 
@@ -569,6 +692,7 @@ export async function mountBoard(
     setTiles,
     setMarks,
     setView,
+    setFace,
     dispose: () => {
       cancelAnimationFrame(raf);
       io.disconnect();
@@ -589,6 +713,7 @@ export async function mountBoard(
       marks.clear();
       gsap.killTweensOf(cam);
       disposables.forEach((d) => d.dispose());
+      faceTex.dispose();
       renderer.dispose();
       renderer.domElement.remove();
     },
