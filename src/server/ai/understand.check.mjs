@@ -318,6 +318,11 @@ assert.notEqual(say('I work hard every day').name, 'plan_settings');
 assert.deepEqual([say('travel takes 30 min').name, say('travel takes 30 min').args.minutes], ['set_travel', 30]);
 assert.equal(say('allow 20 minutes for travel').args.minutes, 20);
 assert.equal(say('no travel time').args.minutes, 0);
+assert.equal(say('remove travel time').args.minutes, 0);
+// A block called "Travel to work" is deleted, not the travel-time setting.
+for (const s of ['Delete travel to work', 'remove travel to work tomorrow', 'delete the travel to work block']) {
+  assert.deepEqual([say(s).name, say(s).args.match], ['delete_blocks', 'travel work'], s);
+}
 r = say('add travel time');
 assert.equal(r.name, 'ask_clarification');
 assert.equal(say('45 min', r.draft).args.minutes, 45);

@@ -1084,8 +1084,9 @@ function takeNotBefore(body: string, nowMs: number): { body: string; at: number 
   return { body: body.slice(0, m.index) + ' ' + body.slice(m.index + m[0].length), at };
 }
 
+// The whole sentence: "remove travel to work tomorrow" is deleting a block, not this setting.
 const TRAVEL_OFF =
-  /^\s*(?:please\s+)?(?:(?:no|turn\s+off|stop|remove|drop|disable)\s+(?:the\s+|my\s+|adding\s+)?travel(?:\s+time)?|(?:my\s+)?travel(?:\s+time)?\s+(?:off|none|0))\b/i;
+  /^\s*(?:please\s+)?(?:(?:no|turn\s+off|stop|remove|drop|disable)\s+(?:the\s+|my\s+|adding\s+)?travel(?:\s+time)?(?:\s+please)?|(?:my\s+)?travel(?:\s+time)?\s+(?:off|none|0))[\s.!]*$/i;
 const TRAVEL_SET =
   /^\s*(?:please\s+)?(?:(?:my\s+)?travel(?:\s+time)?\s*(?:takes|is|:|=|of|usually\s+takes)|(?:add|keep|leave|allow|plan|block|give\s+me|i\s+need)\s+(?:.+?\s+)?(?:for\s+)?travel(?:\s+time)?\b|(?:add|turn\s+on)\s+travel(?:\s+time)?)/i;
 const TRAVEL_OPTIONS = ['15 min', '30 min', '45 min', 'No travel time'];
