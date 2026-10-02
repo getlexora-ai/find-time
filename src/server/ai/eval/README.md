@@ -59,3 +59,60 @@ docs/ai-layer-plan.md §8.2. The sub-agents reported using only Read/Write
 
 To try another model: give it `extract-prompt.md` and a `runs/*-tasks.jsonl`
 file, save its JSON lines, and `score` them.
+
+## Nemotron — multi-turn calendar conversations
+
+[`nvidia/Nemotron-RL-agent-calendar_scheduling`](https://huggingface.co/datasets/nvidia/Nemotron-RL-agent-calendar_scheduling),
+NVIDIA, CC BY 4.0 — first 500 of 3,872 train rows (`nemotron/calendar-500.jsonl`). Each row is a
+conversation: the user adds 1–7 events one turn at a time, sets or changes
+conditions ("at 1pm", "ends by 11", "start at or after 12:15", "between 10am
+and 12pm"), and talks in between. Correct = the dataset's own check: every
+event present with the right length, inside 10:00–16:00, its latest condition
+met, no overlaps. There is no single golden calendar — any valid one passes.
+
+The reader sees **only the user's turns** (the dataset's assistant turns are
+another model's past outputs and may be wrong), and copies each event's
+latest length and condition as written (`nemotron/extract-prompt.md`). Code
+turns conditions into times and places the day: `findFreeSlots` in
+fixed-time-then-tightest-deadline order, and an exhaustive 15-minute search
+when that greedy pass can't fit everything.
+
+```sh
+node src/server/ai/eval/nemotron.mjs oracle            # placement with a perfect reading
+node src/server/ai/eval/nemotron.mjs batches 50        # task files for a reader
+node src/server/ai/eval/nemotron.mjs score nemotron/runs/b*-haiku.jsonl
+```
+
+### Results (2026-10-02, reader = Claude Haiku 4.5 sub-agents, 50 conversations each, no code)
+
+| Run | Conversations | Correct |
+|---|---|---|
+| Placement with a perfect reading (`oracle`) | 500 | **100 %** (greedy `findFreeSlots` alone: 462, 92.4 %) |
+| **Haiku, all** | **500** | **98.6 %** (493) |
+| 1 event | 122 | 100 % |
+| 2–3 events | 99 | 100 % |
+| 4–5 events | 142 | 98.6 % |
+| 6–7 events | 137 | 96.4 % |
+
+Instructions written once, before any run, and not tuned on these results.
+
+The 7 misses, checked against the conversations — the dataset is right in each:
+
+- **5 attribution slips** in long conversations: a condition or length put on
+  the neighbouring event, or an event left out (nemo-094, 225, 245, 275, 274/305
+  missed one condition each).
+- **1 garbled copy** of a one-phrase range, "2:30‑4:00 pm" (nemo-319).
+
+What these say for the AI layer:
+
+- **Greedy isn't always enough.** 38 of 500 days needed the search fallback
+  because the first-fit choice for one event blocked a later one. `plan-week`
+  is greedy too, with re-tries; a small search fallback for a single day is
+  cheap and exact.
+- **Next lever, not yet run:** move the "latest wins" bookkeeping to code —
+  the reader lists each turn's change (`{turn, eventId, durationMin?,
+  constraint?}`) and code keeps the latest per event; code also splits a
+  range written as one phrase. Test on rows 500–999 so it isn't tuned on
+  these misses.
+- Readings were done 50 conversations per context; one call per
+  conversation (as through the API) gives the model less to keep apart.

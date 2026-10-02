@@ -1,0 +1,50 @@
+{"id": "nemo-000", "events": [{"id": 0, "durationMin": 30, "constraint": null}]}
+{"id": "nemo-001", "events": [{"id": 0, "durationMin": 30, "constraint": null}]}
+{"id": "nemo-002", "events": [{"id": 0, "durationMin": 30, "constraint": ["before", "11:30 am"]}]}
+{"id": "nemo-003", "events": [{"id": 0, "durationMin": 30, "constraint": ["after", "10 am"]}]}
+{"id": "nemo-004", "events": [{"id": 0, "durationMin": 45, "constraint": ["before", "4 pm"]}]}
+{"id": "nemo-005", "events": [{"id": 0, "durationMin": 45, "constraint": ["after", "11 am"]}]}
+{"id": "nemo-006", "events": [{"id": 0, "durationMin": 30, "constraint": null}]}
+{"id": "nemo-007", "events": [{"id": 0, "durationMin": 45, "constraint": ["between", "10:15 am", "1:15 pm"]}]}
+{"id": "nemo-008", "events": [{"id": 0, "durationMin": 45, "constraint": ["between", "1:30 pm", "4 pm"]}]}
+{"id": "nemo-009", "events": [{"id": 0, "durationMin": 45, "constraint": ["before", "3 pm"]}]}
+{"id": "nemo-010", "events": [{"id": 0, "durationMin": 45, "constraint": ["after", "2pm"]}]}
+{"id": "nemo-011", "events": [{"id": 0, "durationMin": 60, "constraint": ["before", "1:15 pm"]}]}
+{"id": "nemo-012", "events": [{"id": 0, "durationMin": 45, "constraint": ["at", "12:15 pm"]}]}
+{"id": "nemo-013", "events": [{"id": 0, "durationMin": 45, "constraint": null}]}
+{"id": "nemo-014", "events": [{"id": 0, "durationMin": 75, "constraint": ["before", "3:15 pm"]}]}
+{"id": "nemo-015", "events": [{"id": 0, "durationMin": 90, "constraint": ["before", "1 pm"]}]}
+{"id": "nemo-016", "events": [{"id": 0, "durationMin": 30, "constraint": ["between", "10:45 am", "2 pm"]}]}
+{"id": "nemo-017", "events": [{"id": 0, "durationMin": 45, "constraint": ["before", "1 pm"]}]}
+{"id": "nemo-018", "events": [{"id": 0, "durationMin": 30, "constraint": ["between", "1:30 pm", "3:45 pm"]}]}
+{"id": "nemo-019", "events": [{"id": 0, "durationMin": 60, "constraint": ["between", "11:45am", "2:45pm"]}]}
+{"id": "nemo-020", "events": [{"id": 0, "durationMin": 75, "constraint": ["at", "2pm"]}]}
+{"id": "nemo-021", "events": [{"id": 0, "durationMin": 30, "constraint": ["after", "10 am"]}, {"id": 1, "durationMin": 30, "constraint": ["after", "10 am"]}]}
+{"id": "nemo-022", "events": [{"id": 0, "durationMin": 45, "constraint": ["between", "12pm", "3:15pm"]}, {"id": 1, "durationMin": 75, "constraint": null}]}
+{"id": "nemo-023", "events": [{"id": 0, "durationMin": 60, "constraint": null}]}
+{"id": "nemo-024", "events": [{"id": 0, "durationMin": 75, "constraint": ["before", "4 pm"]}, {"id": 1, "durationMin": 30, "constraint": ["after", "10 am"]}]}
+{"id": "nemo-025", "events": [{"id": 0, "durationMin": 30, "constraint": ["after", "2:45 pm"]}]}
+{"id": "nemo-026", "events": [{"id": 0, "durationMin": 30, "constraint": ["before", "2 pm"]}, {"id": 1, "durationMin": 30, "constraint": ["at", "3:30 pm"]}]}
+{"id": "nemo-027", "events": [{"id": 0, "durationMin": 45, "constraint": ["between", "1:30 pm", "4 pm"]}, {"id": 1, "durationMin": 90, "constraint": ["before", "1:45 pm"]}]}
+{"id": "nemo-028", "events": [{"id": 0, "durationMin": 60, "constraint": ["after", "10 am"]}, {"id": 1, "durationMin": 30, "constraint": ["at", "10 am"]}]}
+{"id": "nemo-029", "events": [{"id": 0, "durationMin": 30, "constraint": ["after", "10am"]}, {"id": 1, "durationMin": 75, "constraint": ["at", "12:45 pm"]}, {"id": 2, "durationMin": 45, "constraint": null}]}
+{"id": "nemo-030", "events": [{"id": 0, "durationMin": 30, "constraint": ["between", "11:30 am", "2:45 pm"]}, {"id": 1, "durationMin": 60, "constraint": ["after", "1 pm"]}]}
+{"id": "nemo-031", "events": [{"id": 0, "durationMin": 60, "constraint": ["at", "11:15am"]}, {"id": 1, "durationMin": 30, "constraint": null}]}
+{"id": "nemo-032", "events": [{"id": 0, "durationMin": 30, "constraint": ["at", "1 pm"]}, {"id": 1, "durationMin": 90, "constraint": null}]}
+{"id": "nemo-033", "events": [{"id": 0, "durationMin": 45, "constraint": ["after", "11:45 am"]}, {"id": 1, "durationMin": 30, "constraint": ["after", "12pm"]}]}
+{"id": "nemo-034", "events": [{"id": 0, "durationMin": 30, "constraint": ["before", "12:45pm"]}, {"id": 1, "durationMin": 30, "constraint": ["before", "12:30pm"]}]}
+{"id": "nemo-035", "events": [{"id": 0, "durationMin": 45, "constraint": ["at", "11:15am"]}, {"id": 1, "durationMin": 45, "constraint": ["before", "4 pm"]}, {"id": 2, "durationMin": 60, "constraint": ["before", "11:45 am"]}]}
+{"id": "nemo-036", "events": [{"id": 0, "durationMin": 60, "constraint": ["at", "11:15 am"]}, {"id": 1, "durationMin": 30, "constraint": ["before", "4 pm"]}]}
+{"id": "nemo-037", "events": [{"id": 0, "durationMin": 30, "constraint": ["at", "11:15am"]}, {"id": 1, "durationMin": 30, "constraint": null}, {"id": 2, "durationMin": 30, "constraint": null}, {"id": 3, "durationMin": 60, "constraint": null}]}
+{"id": "nemo-038", "events": [{"id": 0, "durationMin": 30, "constraint": ["at", "2:30pm"]}, {"id": 1, "durationMin": 75, "constraint": ["between", "10:15am", "2:45pm"]}, {"id": 2, "durationMin": 30, "constraint": null}]}
+{"id": "nemo-039", "events": [{"id": 0, "durationMin": 30, "constraint": null}]}
+{"id": "nemo-040", "events": [{"id": 0, "durationMin": 60, "constraint": ["at", "10:45am"]}, {"id": 1, "durationMin": 45, "constraint": null}, {"id": 2, "durationMin": 30, "constraint": ["between", "1:30 pm", "4 pm"]}]}
+{"id": "nemo-041", "events": [{"id": 0, "durationMin": 75, "constraint": ["between", "10:45 am", "1:45 pm"]}]}
+{"id": "nemo-042", "events": [{"id": 0, "durationMin": 30, "constraint": ["at", "3:30 pm"]}, {"id": 1, "durationMin": 45, "constraint": null}]}
+{"id": "nemo-043", "events": [{"id": 0, "durationMin": 90, "constraint": ["between", "12:30 pm", "3:30 pm"]}, {"id": 1, "durationMin": 30, "constraint": null}, {"id": 2, "durationMin": 45, "constraint": null}]}
+{"id": "nemo-044", "events": [{"id": 0, "durationMin": 30, "constraint": null}, {"id": 1, "durationMin": 60, "constraint": ["at", "10am"]}, {"id": 2, "durationMin": 60, "constraint": null}, {"id": 3, "durationMin": 30, "constraint": null}]}
+{"id": "nemo-045", "events": [{"id": 0, "durationMin": 30, "constraint": ["between", "11:30am", "2:30pm"]}, {"id": 1, "durationMin": 30, "constraint": ["between", "12:45 pm", "3:45 pm"]}, {"id": 2, "durationMin": 75, "constraint": ["between", "10:30am", "2:15pm"]}]}
+{"id": "nemo-046", "events": [{"id": 0, "durationMin": 45, "constraint": ["after", "11:30 am"]}, {"id": 1, "durationMin": 30, "constraint": null}, {"id": 2, "durationMin": 60, "constraint": ["after", "10 am"]}, {"id": 3, "durationMin": 45, "constraint": null}]}
+{"id": "nemo-047", "events": [{"id": 0, "durationMin": 30, "constraint": ["after", "2 pm"]}, {"id": 1, "durationMin": 30, "constraint": null}, {"id": 2, "durationMin": 60, "constraint": ["at", "1:45 pm"]}]}
+{"id": "nemo-048", "events": [{"id": 0, "durationMin": 75, "constraint": ["between", "10 am", "1:45 pm"]}, {"id": 1, "durationMin": 45, "constraint": null}, {"id": 2, "durationMin": 30, "constraint": null}, {"id": 3, "durationMin": 30, "constraint": ["before", "11:30am"]}]}
+{"id": "nemo-049", "events": [{"id": 0, "durationMin": 30, "constraint": ["after", "12:45 pm"]}]}
