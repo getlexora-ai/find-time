@@ -56,6 +56,8 @@ export const TOOL_POSTPONE = 'postpone_task';
 export const TOOL_ADD_HABIT = 'add_habit';
 export const TOOL_HABIT_UPDATE = 'update_habit';
 export const TOOL_TRAVEL = 'set_travel';
+/** Rule-read only: how hard work is laid out and the day's budget of it (plan-week.ts). */
+export const TOOL_PLAN_SETTINGS = 'plan_settings';
 
 const CATS = [...CATEGORIES];
 

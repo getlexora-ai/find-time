@@ -20,10 +20,11 @@ type Row = {
   category: string;
   duration_min: number;
   per_week: number;
+  min_per_week: number | null;
   preferred_window: string | null;
 };
 
-const COLS = `id, title, category, duration_min, per_week, preferred_window`;
+const COLS = `id, title, category, duration_min, per_week, min_per_week, preferred_window`;
 
 function toApi(r: Row): ApiHabit {
   return {
@@ -32,6 +33,7 @@ function toApi(r: Row): ApiHabit {
     category: r.category,
     durationMin: r.duration_min,
     perWeek: r.per_week,
+    minPerWeek: r.min_per_week,
     preferredWindow: (r.preferred_window as ApiHabit['preferredWindow']) ?? null,
   };
 }
@@ -54,14 +56,15 @@ export type HabitInput = {
   title: string;
   durationMin: number;
   perWeek: number;
+  minPerWeek?: number | null;
   category?: string;
   preferredWindow?: ApiHabit['preferredWindow'];
 };
 
 export async function createHabit(userId: string, input: HabitInput): Promise<ApiHabit> {
   const row = await queryOne<Row>(
-    `insert into habits (id, user_id, title, category, duration_min, per_week, preferred_window)
-     values ($1,$2,$3,$4,$5,$6,$7)
+    `insert into habits (id, user_id, title, category, duration_min, per_week, preferred_window, min_per_week)
+     values ($1,$2,$3,$4,$5,$6,$7,$8)
      returning ${COLS}`,
     [
       `hab_${randomUUID()}`,
@@ -71,6 +74,7 @@ export async function createHabit(userId: string, input: HabitInput): Promise<Ap
       input.durationMin,
       input.perWeek,
       input.preferredWindow ?? null,
+      input.minPerWeek ?? null,
     ],
   );
   return toApi(row!);
@@ -80,6 +84,7 @@ const PATCHABLE: Record<string, string> = {
   title: 'title',
   durationMin: 'duration_min',
   perWeek: 'per_week',
+  minPerWeek: 'min_per_week',
   category: 'category',
   preferredWindow: 'preferred_window',
 };

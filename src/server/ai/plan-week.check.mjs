@@ -332,6 +332,101 @@ const dayN = (b) => Number(b.startISO.slice(8, 10));
   assert.equal(ofH(p, 'g').filter((b) => b.startISO >= D(14, '00:00')).length, 2);
 }
 
+// ── the day's budget, effort and hard-work strategy (benchmark SC2, SC3, SC7) ─
+const dayOfB = (b) => b.startISO.slice(0, 10);
+{
+  // Three hard 2h tasks, empty week: never two on one day (2 × 2h × 1.5 = 6h > 4h budget).
+  const p = run({ tasks: ['a', 'b', 'c'].map((id) => task({ id, title: id, durationMin: 120, effort: 'hard', dueByISO: due(11) })) });
+  assert.equal(new Set(p.blocks.map(dayOfB)).size, 3, p.blocks.map(dayOfB).join());
+}
+{
+  // Two hard hours fit one day's budget. Spread (the default) puts them on different days…
+  const two = ['a', 'b'].map((id) => task({ id, title: id, durationMin: 60, effort: 'hard', dueByISO: due(11) }));
+  assert.equal(new Set(run({ tasks: two }).blocks.map(dayOfB)).size, 2);
+  // …cluster keeps them together.
+  const p = run({ tasks: two, profile: { ...profile, hardWork: 'cluster' } });
+  assert.equal(new Set(p.blocks.map(dayOfB)).size, 1);
+}
+{
+  // Light work barely uses the budget: two light 2h tasks due today both go today.
+  const p = run({ tasks: ['a', 'b'].map((id) => task({ id, title: id, durationMin: 120, effort: 'light', dueByISO: due(7) })) });
+  assert.equal(p.blocks.length, 2);
+}
+{
+  // The budget gives way to a deadline: 3h of hard work due today still goes today.
+  const p = run({ tasks: [task({ id: 'r', title: 'R', durationMin: 180, effort: 'hard', dueByISO: due(7) })] });
+  assert.equal(of(p, 'r')[0].startISO.slice(0, 10), '2026-09-07');
+  assert.equal(p.unplaced.length, 0);
+}
+
+// ── habit minimum before tasks, ideal after them (benchmark HC6 / SC5) ───────
+{
+  // Mon and Tue 9–11 free, nothing else; no buffer so the arithmetic is exact.
+  const tight = { ...profile, defaultBufferMin: 0 };
+  const busy = [
+    { start: D(7, '11:00'), end: D(8, '09:00') },
+    { start: D(8, '11:00'), end: D(14, '00:00') },
+  ];
+  const p = run({
+    profile: tight,
+    busy,
+    tasks: [task({ id: 'r', title: 'Report', durationMin: 180, splittable: true, dueByISO: due(8) })],
+    habits: [habit({ id: 'rd', title: 'Read', category: 'research', perWeek: 2, minPerWeek: 1 })],
+  });
+  assert.equal(ofH(p, 'rd').length, 1, 'the minimum is kept');
+  assert.equal(of(p, 'r').reduce((n, b) => n + mins(b), 0), 180, 'the task gets the rest, not the second session');
+  assert.equal(p.unplaced.length, 0);
+  assert.match(p.notes[0], /^Read: 1 session this week — your minimum; 2 didn't fit/);
+}
+
+// ── who gives way when the week is full (benchmark SC1) ─────────────────────
+{
+  // Low priority with no deadline goes last, and says why it was left out.
+  const busy = [7, 8, 9, 10, 11].map((d) => ({ start: D(d, d === 7 ? '10:00' : '09:00'), end: D(d + 1, '00:00') }));
+  const p = run({
+    busy: [...busy, ...[14, 15, 16, 17, 18].map((d) => ({ start: D(d, '00:00'), end: D(d + 1, '00:00') }))],
+    tasks: [task({ id: 'lo', title: 'Tidy notes', priority: 'low' }), task({ id: 'mid', title: 'Budget' })],
+  });
+  assert.equal(of(p, 'mid').length, 1);
+  assert.equal(p.unplaced[0].taskId, 'lo');
+  assert.equal(p.unplaced[0].optional, true);
+  assert.match(p.unplaced[0].reason, /low priority with no deadline, so it went last/);
+}
+{
+  // Only Monday 9–11 is free. EDF gives it to the low-priority task due Monday;
+  // the high-priority one due Tuesday then takes it over, and the miss says so.
+  const busy = [
+    { start: D(7, '11:00'), end: D(8, '00:00') },
+    { start: D(8, '00:00'), end: D(9, '00:00') },
+  ];
+  const p = run({
+    busy,
+    tasks: [
+      task({ id: 'lo', title: 'Expenses', priority: 'low', durationMin: 120, dueByISO: due(7) }),
+      task({ id: 'hi', title: 'Board deck', priority: 'high', durationMin: 120, dueByISO: due(8) }),
+    ],
+  });
+  assert.equal(of(p, 'hi').length, 1);
+  assert.equal(of(p, 'lo').length, 0);
+  assert.match(p.unplaced[0].reason, /gave way to Board deck, which matters more/);
+}
+{
+  // …but never for a task of the same priority: then the earlier deadline keeps it.
+  const busy = [
+    { start: D(7, '11:00'), end: D(8, '00:00') },
+    { start: D(8, '00:00'), end: D(9, '00:00') },
+  ];
+  const p = run({
+    busy,
+    tasks: [
+      task({ id: 'a', title: 'A', durationMin: 120, dueByISO: due(7) }),
+      task({ id: 'b', title: 'B', durationMin: 120, dueByISO: due(8) }),
+    ],
+  });
+  assert.equal(of(p, 'a').length, 1);
+  assert.equal(p.unplaced[0].taskId, 'b');
+}
+
 // ── travel ──────────────────────────────────────────────────────────────────
 {
   const meet = { start: D(8, '10:00'), end: D(8, '11:00') };

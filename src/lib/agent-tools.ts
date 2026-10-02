@@ -97,6 +97,7 @@ export const AGENT_TOOLS: ToolUi[] = [
   },
   { key: 'update_habit', label: 'Change a habit', running: 'Changing the habit', icon: 'pen', color: 'deep' },
   { key: 'set_travel', label: 'Travel time', running: 'Saving travel time', icon: 'clock', color: 'sync' },
+  { key: 'plan_settings', label: 'Planning settings', running: 'Saving how you like to work', icon: 'target', color: 'deep' },
   { key: 'ask_clarification', label: 'Ask you', running: 'Working out what to ask', icon: 'chat', color: 'admin' },
   { key: 'answer', label: 'Answer', running: 'Writing an answer', icon: 'chat', color: 'sync' },
 

@@ -134,6 +134,8 @@ export type AgentProfile = {
   maxDailyFocusMin: number;
   /** minutes kept free before and after an in-person event when planning; 0 = off */
   travelMin: number;
+  /** hard tasks on as few days as possible, or spread across the week */
+  hardWork: 'spread' | 'cluster';
   rules: HardRule[];
   learned: LearnedPref[];
 };
@@ -169,6 +171,7 @@ export function defaultProfile(): AgentProfile {
     minFocusBlockMin: 45,
     maxDailyFocusMin: 240,
     travelMin: 0,
+    hardWork: 'spread',
     rules: [],
     learned: [],
   };

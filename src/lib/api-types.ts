@@ -143,6 +143,8 @@ export type ApiTask = {
   /** inclusive instant: no session starts before it (a start date, or a postpone) */
   notBefore: string | null;
   priority: 'low' | 'medium' | 'high';
+  /** how draining it is: counts against the day's budget of demanding work */
+  effort: 'light' | 'normal' | 'hard';
   preferredWindow: 'morning' | 'afternoon' | 'evening' | null;
   splittable: boolean;
   minChunkMin: number;
@@ -156,8 +158,10 @@ export type ApiHabit = {
   title: string;
   category: string;
   durationMin: number;
-  /** sessions per calendar week, 1–7 */
+  /** sessions per calendar week, 1–7 — the ideal */
   perWeek: number;
+  /** the fewest that still count ("at least 2"); null = perWeek */
+  minPerWeek: number | null;
   preferredWindow: 'morning' | 'afternoon' | 'evening' | null;
 };
 

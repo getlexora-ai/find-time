@@ -35,6 +35,18 @@
  *     lower bound, like the deadline is an upper one. A block before it moves,
  *     pinned or not: the postpone is the newer instruction.
  *
+ * From the model of personalized-schedule-optimizer-benchmark (its solvers
+ * were measured against this and not adopted — docs/planning-agent-plan.md §8):
+ *
+ *   - Effort against a daily budget: a minute of hard work counts 1.5, light
+ *     0.5, against `maxDailyFocusMin`. A slot inside the budget always beats
+ *     one over it; going over is only for what can't fit otherwise.
+ *   - Hard tasks spread across the week or cluster (`profile.hardWork`), and
+ *     demanding work leans to the lighter day.
+ *   - Order: habit minimums → tasks (EDF) → priority bumps → habit extras →
+ *     optional tasks (low priority, no deadline). A task that missed may take
+ *     the new sessions of a lower-priority one, kept only if it then fits whole.
+ *
  * Pure: no DB, no clock. The route supplies busy time already filtered by
  * `blocksTime`, and `verifyPlan` checks any result against the hard rules
  * independently of how it was built.
@@ -57,6 +69,24 @@ export const MAX_SESSION_MIN = 120;
 const PREFER_BY_BONUS = 0.1;
 /** How much a habit session loses for sitting the day before or after another one. */
 const HABIT_ADJACENT_PENALTY = 0.15;
+/** How much a slot loses as its day fills toward the daily budget (0–1 scale, at a full day). */
+const LOAD_BALANCE_WEIGHT = 0.1;
+/** Hard tasks: how much a day that already has one is worth (cluster) or costs (spread). */
+const HARD_STRATEGY_WEIGHT = 0.1;
+/** At most this many lower-priority tasks are tried when making room for a higher one. */
+const MAX_BUMP_TRIES = 5;
+
+/**
+ * How much of the daily budget (`maxDailyFocusMin`) a minute of a task uses.
+ * After the benchmark's difficulty capacity (personalized-schedule-optimizer-benchmark):
+ * three hours of hard work fill a four-hour day; easy admin barely touches it.
+ */
+export const EFFORT_WEIGHT: Record<Effort, number> = { light: 0.5, normal: 1, hard: 1.5 };
+
+export type Effort = 'light' | 'normal' | 'hard';
+
+/** Low priority and no deadline: placed after everything else, and the first to give way. */
+export const isOptional = (t: PlanTask) => t.priority === 'low' && !t.dueByISO;
 
 export type Priority = 'low' | 'medium' | 'high';
 export type PreferredWindow = 'morning' | 'afternoon' | 'evening';
@@ -75,6 +105,8 @@ export type PlanTask = {
   /** inclusive instant: nothing may start before it ("not before", a postpone) */
   notBeforeISO?: string | null;
   priority: Priority;
+  /** how draining it is — counts against the day's budget (default 'normal') */
+  effort?: Effort;
   preferredWindow?: PreferredWindow | null;
   splittable: boolean;
   minChunkMin: number;
@@ -86,8 +118,10 @@ export type PlanHabit = {
   title: string;
   category: string;
   durationMin: number;
-  /** sessions wanted per calendar week, 1–7 */
+  /** sessions wanted per calendar week, 1–7 — the ideal */
   perWeek: number;
+  /** the fewest that still count ("at least 2, ideally 3"); placed before tasks. Default: perWeek */
+  minPerWeek?: number | null;
   preferredWindow?: PreferredWindow | null;
 };
 
@@ -134,6 +168,8 @@ export type Unplaced = {
   reason: string;
   /** what would make it fit, in words the user can say back */
   options: string[];
+  /** a low-priority task with no deadline, left out because the week was full */
+  optional?: boolean;
 };
 
 export type WeekPlan = {
@@ -143,6 +179,8 @@ export type WeekPlan = {
   order: string[];
   /** existing blocks that have to move (each has a replacement or is listed as unplaced) */
   moved: { eventId: string; taskId?: string; habitId?: string; why: string }[];
+  /** soft shortfalls worth saying: a habit at its minimum but under its ideal */
+  notes: string[];
 };
 
 export type PlanInput = {
@@ -309,12 +347,13 @@ export function planWeek(input: PlanInput): WeekPlan {
   const buf = effectiveBuffer(profile) * MIN;
   const tasks = new Map(input.tasks.map((t) => [t.id, t]));
   const habits = new Map((input.habits ?? []).map((h) => [h.id, h]));
+  /** the day's budget of demanding work, in effort-weighted minutes */
+  const cap = Math.max(60, profile.maxDailyFocusMin);
+  const strategy = profile.hardWork ?? 'spread';
 
   const toIv = (b: Busy) => ({ s: Date.parse(b.start), e: Date.parse(b.end) });
   const valid = (b: Iv) => Number.isFinite(b.s) && Number.isFinite(b.e) && b.e > b.s;
   const away: Iv[] = (input.away ?? []).map(toIv).filter(valid);
-  // Everything that already occupies time, as plain intervals.
-  const busy: Iv[] = [...input.busy.map(toIv).filter(valid), ...away];
 
   /** " (you're away Tue 6 Oct – Thu 8 Oct)" when time away falls inside [lo, hi). */
   const awayNote = (lo: number, hi: number) => {
@@ -323,27 +362,83 @@ export function planWeek(input: PlanInput): WeekPlan {
     return ` (you're away ${spanLabel(Math.min(...hit.map((a) => a.s)), Math.max(...hit.map((a) => a.e)))})`;
   };
 
-  const blocks: PlannedBlock[] = [];
+  // ── state ───────────────────────────────────────────────────────────────
+  // Everything placed goes through occupy/release, so a step can be undone
+  // (the priority bump tries a change and takes it back if it doesn't help).
+  type Held = Iv & { ref?: PlannedBlock };
+  let busy: Held[] = [...input.busy.map(toIv).filter(valid), ...away];
+  let blocks: PlannedBlock[] = [];
+  let credited = new Map<string, number>();
+  /** task id, or "h:" + habit id → day → sessions that day (past habit sessions included) */
+  let perDay = new Map<string, Map<number, number>>();
+  /** day → effort-weighted minutes of demanding work */
+  let load = new Map<number, number>();
+  /** day → minutes of hard tasks */
+  let hardLoad = new Map<number, number>();
+  /** task id, or "h:<habit>:<week>" → existing blocks a new one may take the place of */
+  let replaceable = new Map<string, string[]>();
   const moved: WeekPlan['moved'] = [];
-  const credited = new Map<string, number>();
-  const daysUsed = new Map<string, Set<number>>();
-  const replaceable = new Map<string, string[]>();
-  const credit = (taskId: string, s: number, e: number) => {
-    credited.set(taskId, (credited.get(taskId) ?? 0) + Math.round((e - s) / MIN));
-    if (!daysUsed.has(taskId)) daysUsed.set(taskId, new Set());
-    daysUsed.get(taskId)!.add(dayStart(s));
+
+  const keyOf = (b: { taskId?: string; habitId?: string }) => b.taskId ?? `h:${b.habitId}`;
+  const weightOf = (b: { taskId?: string; habitId?: string }) => {
+    if (b.taskId) return EFFORT_WEIGHT[tasks.get(b.taskId)?.effort ?? 'normal'];
+    // The gym is not a draw on the same budget as a hard report.
+    return habits.get(b.habitId!)?.category === 'personal' ? 0 : 1;
   };
+  const isHard = (b: { taskId?: string }) => !!b.taskId && tasks.get(b.taskId)?.effort === 'hard';
+  const bump = (m: Map<number, number>, d: number, by: number) => m.set(d, (m.get(d) ?? 0) + by);
+  const countDay = (key: string, d: number, by: number) => {
+    if (!perDay.has(key)) perDay.set(key, new Map());
+    bump(perDay.get(key)!, d, by);
+  };
+  const daysOf = (key: string) => new Set([...(perDay.get(key) ?? new Map<number, number>())].filter(([, n]) => n > 0).map(([d]) => d));
+  /** days in week `w` holding a session of habit `id` */
+  const habitDays = (id: string, w: number) => new Set([...daysOf(`h:${id}`)].filter((d) => weekStart(d) === w));
+  const replaceKey = (b: { taskId?: string; habitId?: string }, s: number) => b.taskId ?? `h:${b.habitId}:${weekStart(s)}`;
   const markReplaceable = (key: string, eventId: string) => {
     if (!replaceable.has(key)) replaceable.set(key, []);
     replaceable.get(key)!.push(eventId);
   };
-  /** habit id → week start → days holding a session (past, kept or new) */
-  const habitDays = new Map<string, Map<number, Set<number>>>();
-  const daysOf = (id: string, w: number) => {
-    if (!habitDays.has(id)) habitDays.set(id, new Map());
-    const weeks = habitDays.get(id)!;
-    if (!weeks.has(w)) weeks.set(w, new Set());
-    return weeks.get(w)!;
+
+  const occupy = (b: PlannedBlock) => {
+    const s = Date.parse(b.startISO);
+    const e = Date.parse(b.endISO);
+    const d = dayStart(s);
+    const min = Math.round((e - s) / MIN);
+    blocks.push(b);
+    busy.push({ s: s - buf, e: e + buf, ref: b });
+    countDay(keyOf(b), d, 1);
+    bump(load, d, min * weightOf(b));
+    if (isHard(b)) bump(hardLoad, d, min);
+    if (b.taskId) credited.set(b.taskId, (credited.get(b.taskId) ?? 0) + min);
+  };
+  const release = (b: PlannedBlock) => {
+    const s = Date.parse(b.startISO);
+    const e = Date.parse(b.endISO);
+    const d = dayStart(s);
+    const min = Math.round((e - s) / MIN);
+    blocks = blocks.filter((x) => x !== b);
+    busy = busy.filter((x) => x.ref !== b);
+    countDay(keyOf(b), d, -1);
+    bump(load, d, -min * weightOf(b));
+    if (isHard(b)) bump(hardLoad, d, -min);
+    if (b.taskId) credited.set(b.taskId, (credited.get(b.taskId) ?? 0) - min);
+    if (b.replacesEventId) {
+      const k = replaceKey(b, s);
+      replaceable.set(k, [b.replacesEventId, ...(replaceable.get(k) ?? [])]);
+    }
+  };
+  const snapshot = () => ({
+    busy: [...busy],
+    blocks: [...blocks],
+    credited: new Map(credited),
+    perDay: new Map([...perDay].map(([k, m]) => [k, new Map(m)])),
+    load: new Map(load),
+    hardLoad: new Map(hardLoad),
+    replaceable: new Map([...replaceable].map(([k, a]) => [k, [...a]])),
+  });
+  const restore = (x: ReturnType<typeof snapshot>) => {
+    ({ busy, blocks, credited, perDay, load, hardLoad, replaceable } = x);
   };
 
   // ── 1. what is already on the calendar ──────────────────────────────────
@@ -354,14 +449,22 @@ export function planWeek(input: PlanInput): WeekPlan {
     const e = Date.parse(x.endISO);
     if (!Number.isFinite(s) || !Number.isFinite(e)) continue;
     const iv = { s, e };
+    const keptFields = {
+      startISO: x.startISO,
+      endISO: x.endISO,
+      status: x.pinned ? ('pinned' as const) : ('kept' as const),
+      eventId: x.eventId,
+      score: 0,
+      reason: x.pinned ? 'you fixed this one in place' : 'already on your calendar',
+    };
 
     if (x.habitId) {
       const h = habits.get(x.habitId);
       if (!h) continue;
-      const days = daysOf(h.id, weekStart(s));
+      const days = habitDays(h.id, weekStart(s));
       // A habit is a rhythm: this week's past sessions still count toward it.
       if (e <= nowMs) {
-        days.add(dayStart(s));
+        countDay(`h:${h.id}`, dayStart(s), 1);
         continue;
       }
       let why: string | null = null;
@@ -376,19 +479,7 @@ export function planWeek(input: PlanInput): WeekPlan {
         markReplaceable(`h:${h.id}:${weekStart(s)}`, x.eventId);
         continue;
       }
-      blocks.push({
-        habitId: h.id,
-        title: h.title,
-        category: h.category,
-        startISO: x.startISO,
-        endISO: x.endISO,
-        status: x.pinned ? 'pinned' : 'kept',
-        eventId: x.eventId,
-        score: 0,
-        reason: x.pinned ? 'you fixed this one in place' : 'already on your calendar',
-      });
-      busy.push({ s: s - buf, e: e + buf });
-      days.add(dayStart(s));
+      occupy({ habitId: h.id, title: h.title, category: h.category, ...keptFields });
       continue;
     }
 
@@ -412,22 +503,9 @@ export function planWeek(input: PlanInput): WeekPlan {
       markReplaceable(t.id, x.eventId);
       continue;
     }
-    blocks.push({
-      taskId: t.id,
-      title: t.title,
-      category: t.category,
-      startISO: x.startISO,
-      endISO: x.endISO,
-      status: x.pinned ? 'pinned' : 'kept',
-      eventId: x.eventId,
-      score: 0,
-      reason: x.pinned ? 'you fixed this one in place' : 'already on your calendar',
-    });
-    busy.push({ s: s - buf, e: e + buf });
-    credit(t.id, s, e);
+    occupy({ taskId: t.id, title: t.title, category: t.category, ...keptFields });
   }
 
-  const unplaced: Unplaced[] = [];
   const gridUp = (ms: number) => Math.ceil(ms / (15 * MIN)) * 15 * MIN;
 
   /**
@@ -470,26 +548,45 @@ export function planWeek(input: PlanInput): WeekPlan {
     );
   };
 
-  // ── 2. habits, into their weeks ─────────────────────────────────────────
+  /**
+   * The day's shape on top of the slot's own score: demanding work leans to
+   * the lighter day, and hard tasks spread out or cluster as the user prefers.
+   */
+  const shaped = (r: RankedSlot, weight: number, hard: boolean): number => {
+    const d = dayStart(Date.parse(r.startISO));
+    let score = r.score;
+    if (hard && strategy === 'cluster') {
+      if ((hardLoad.get(d) ?? 0) > 0) score += HARD_STRATEGY_WEIGHT;
+    } else {
+      if (weight > 0) score -= LOAD_BALANCE_WEIGHT * Math.min(1, (load.get(d) ?? 0) / cap);
+      if (hard && (hardLoad.get(d) ?? 0) > 0) score -= HARD_STRATEGY_WEIGHT;
+    }
+    return score;
+  };
+  const underCap = (r: RankedSlot, size: number, weight: number) =>
+    weight === 0 || (load.get(dayStart(Date.parse(r.startISO))) ?? 0) + size * weight <= cap;
+
+  // ── habits ──────────────────────────────────────────────────────────────
   const habitList = [...habits.values()].sort((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
-  for (const w of habitWeeks(nowMs)) {
+  const minOf = (h: PlanHabit) => Math.min(h.perWeek, Math.max(1, h.minPerWeek ?? h.perWeek));
+
+  /** Add sessions of `h` in week `w` until it has `upTo`. */
+  const placeHabit = (h: PlanHabit, w: number, upTo: number) => {
     const lo = Math.max(nowMs, w);
     const hi = w + 7 * DAY;
-    for (const h of habitList) {
-      const days = daysOf(h.id, w);
-      const need = h.perWeek - days.size;
-      if (need <= 0) continue;
-      const replaces = replaceable.get(`h:${h.id}:${w}`) ?? [];
-      let placed = 0;
-      for (let i = 0; i < need; i++) {
-        let pick: RankedSlot | null = null;
+    const weight = weightOf({ habitId: h.id });
+    while (habitDays(h.id, w).size < upTo) {
+      const days = habitDays(h.id, w);
+      let pick: RankedSlot | null = null;
+      for (const capped of [true, false]) {
         for (const ranked of slotsIn(h.category, h.durationMin, lo, hi, h.preferredWindow, !skipsWeekends(h))) {
           // One a day, and not the day either side of another session if the week allows.
           const scored = ranked
-            .filter((r) => !days.has(dayStart(Date.parse(r.startISO))))
+            .filter((r) => !days.has(dayStart(Date.parse(r.startISO))) && (!capped || underCap(r, h.durationMin, weight)))
             .map((r) => {
               const d = dayStart(Date.parse(r.startISO));
-              return days.has(d - DAY) || days.has(d + DAY) ? { ...r, score: r.score - HABIT_ADJACENT_PENALTY } : r;
+              const near = days.has(d - DAY) || days.has(d + DAY) ? HABIT_ADJACENT_PENALTY : 0;
+              return { ...r, score: shaped(r, weight, false) - near };
             })
             .sort((a, b) => b.score - a.score || Date.parse(a.startISO) - Date.parse(b.startISO));
           if (scored.length) {
@@ -497,46 +594,125 @@ export function planWeek(input: PlanInput): WeekPlan {
             break;
           }
         }
-        if (!pick) break;
-        const s = Date.parse(pick.startISO);
-        const e = Date.parse(pick.endISO);
-        blocks.push({
-          habitId: h.id,
-          title: h.title,
-          category: h.category,
-          startISO: pick.startISO,
-          endISO: pick.endISO,
-          status: 'new',
-          ...(replaces.length ? { replacesEventId: replaces.shift()! } : {}),
-          score: pick.score,
-          features: pick.features,
-          reason: pick.reason,
-        });
-        busy.push({ s: s - buf, e: e + buf });
-        days.add(dayStart(s));
-        placed++;
+        if (pick) break;
       }
-      const short = need - placed;
-      if (short > 0) {
-        const have = h.perWeek - short;
-        const which = w === weekStart(nowMs) ? 'this week' : 'next week';
-        const options: string[] = [];
-        if (have >= 1) options.push(`${h.title} ${have}x a week`);
-        if (h.durationMin > 30) options.push(`${h.title} takes ${hours(h.durationMin - 30)}`);
-        unplaced.push({
-          habitId: h.id,
-          title: h.title,
-          neededMin: short * h.durationMin,
-          placedMin: have * h.durationMin,
-          reason: `only ${have} of ${h.perWeek} sessions fit ${which}${awayNote(lo, hi)}`,
-          options,
-        });
-      }
+      if (!pick) return;
+      const replaces = replaceable.get(`h:${h.id}:${w}`) ?? [];
+      occupy({
+        habitId: h.id,
+        title: h.title,
+        category: h.category,
+        startISO: pick.startISO,
+        endISO: pick.endISO,
+        status: 'new',
+        ...(replaces.length ? { replacesEventId: replaces.shift()! } : {}),
+        score: pick.score,
+        features: pick.features,
+        reason: pick.reason,
+      });
     }
-  }
+  };
 
-  // ── 3. order ────────────────────────────────────────────────────────────
+  // ── tasks ───────────────────────────────────────────────────────────────
   const remaining = (t: PlanTask) => Math.max(0, t.durationMin - (credited.get(t.id) ?? 0));
+
+  /** The legal slots for a session of `t`, best first, from the first part of the day that has any. */
+  const candidatesFor = (t: PlanTask, size: number, avoidDays: Set<number> | null, capped: boolean): RankedSlot[] => {
+    const preferBy = t.preferByISO ? Date.parse(t.preferByISO) : NaN;
+    const weight = EFFORT_WEIGHT[t.effort ?? 'normal'];
+    const hard = t.effort === 'hard';
+    for (const ranked of slotsIn(t.category, size, earliestFor(t, nowMs), latestFor(t, nowMs), t.preferredWindow, !skipsWeekends(t))) {
+      const pick = ranked
+        .filter((r) => !avoidDays || !avoidDays.has(dayStart(Date.parse(r.startISO))))
+        .filter((r) => !capped || underCap(r, size, weight))
+        .map((r) => ({
+          ...r,
+          score: shaped(r, weight, hard) + (Number.isFinite(preferBy) && Date.parse(r.endISO) <= preferBy ? PREFER_BY_BONUS : 0),
+        }))
+        .sort((a, b) => b.score - a.score || Date.parse(a.startISO) - Date.parse(b.startISO));
+      if (pick.length) return pick;
+    }
+    return [];
+  };
+  const bestFor = (t: PlanTask, size: number, avoidDays: Set<number> | null, capped: boolean): RankedSlot | null =>
+    candidatesFor(t, size, avoidDays, capped)[0] ?? null;
+  /**
+   * Inside the day's budget first, then over it. Within each, a splittable
+   * task tries a day it has no session on yet before doubling up.
+   */
+  const best = (t: PlanTask, size: number): RankedSlot | null => {
+    const used = daysOf(t.id);
+    for (const capped of [true, false]) {
+      const slot = (t.splittable ? bestFor(t, size, used, capped) : null) ?? bestFor(t, size, null, capped);
+      if (slot) return slot;
+    }
+    return null;
+  };
+
+  type Miss = { need: number; left: number; size: number; free: { total: number; longest: number }; gaveWayTo?: string };
+  const misses = new Map<string, Miss | Unplaced>();
+
+  /** Place what `t` still needs. A miss is recorded against the time free when its turn came. */
+  const placeTask = (t: PlanTask) => {
+    let left = remaining(t);
+    if (left <= 0) return;
+    if (t.dueByISO && Date.parse(t.dueByISO) <= nowMs) {
+      misses.set(t.id, {
+        taskId: t.id,
+        title: t.title,
+        neededMin: left,
+        placedMin: credited.get(t.id) ?? 0,
+        reason: `it was due ${dueLabel(t.dueByISO)}, which has passed`,
+        options: [`${t.title} due next week`, `done with ${t.title}`],
+      });
+      return;
+    }
+    if (t.dueByISO && earliestFor(t, nowMs) >= Date.parse(t.dueByISO)) {
+      misses.set(t.id, {
+        taskId: t.id,
+        title: t.title,
+        neededMin: left,
+        placedMin: credited.get(t.id) ?? 0,
+        reason: `it can't start before ${startLabel(earliestFor(t, nowMs))}, after its ${dueLabel(t.dueByISO)} deadline`,
+        options: [`${t.title} due next week`],
+      });
+      return;
+    }
+    const need = left;
+    const free = freeMinutes(t, profile, busy, nowMs);
+    const replaces = replaceable.get(t.id) ?? [];
+    let lastSize = 0;
+    while (left > 0) {
+      let size = sessionSize(left, t);
+      let slot = best(t, size);
+      // A splittable task shrinks its session before giving up on it.
+      while (!slot && t.splittable && size - 15 >= Math.max(15, t.minChunkMin)) {
+        size -= 15;
+        slot = best(t, size);
+      }
+      if (!slot) {
+        lastSize = size;
+        break;
+      }
+      occupy({
+        taskId: t.id,
+        title: t.title,
+        category: t.category,
+        startISO: slot.startISO,
+        endISO: slot.endISO,
+        status: 'new',
+        ...(replaces.length ? { replacesEventId: replaces.shift()! } : {}),
+        score: slot.score,
+        features: slot.features,
+        reason: slot.reason,
+      });
+      left -= size;
+    }
+    if (left > 0) misses.set(t.id, { need, left, size: lastSize, free });
+    else misses.delete(t.id);
+  };
+
+  // ── order ───────────────────────────────────────────────────────────────
   const slack = new Map(input.tasks.map((t) => [t.id, freeMinutes(t, profile, busy, nowMs).total - remaining(t)]));
   const dueOf = (t: PlanTask) => (t.dueByISO ? Date.parse(t.dueByISO) : Infinity);
   const preferOf = (t: PlanTask) => (t.preferByISO ? Date.parse(t.preferByISO) : Infinity);
@@ -549,97 +725,103 @@ export function planWeek(input: PlanInput): WeekPlan {
       a.title.localeCompare(b.title) ||
       a.id.localeCompare(b.id),
   );
+  const required = ordered.filter((t) => !isOptional(t));
+  const optional = ordered.filter(isOptional);
 
-  // ── 4. place ────────────────────────────────────────────────────────────
-  const best = (t: PlanTask, size: number, avoidDays: Set<number> | null): RankedSlot | null => {
-    const preferBy = t.preferByISO ? Date.parse(t.preferByISO) : NaN;
-    for (const ranked of slotsIn(t.category, size, earliestFor(t, nowMs), latestFor(t, nowMs), t.preferredWindow, !skipsWeekends(t))) {
-      const pick = ranked
-        .filter((r) => !avoidDays || !avoidDays.has(dayStart(Date.parse(r.startISO))))
-        .map((r) =>
-          Number.isFinite(preferBy) && Date.parse(r.endISO) <= preferBy ? { ...r, score: r.score + PREFER_BY_BONUS } : r,
-        )
-        .sort((a, b) => b.score - a.score || Date.parse(a.startISO) - Date.parse(b.startISO));
-      if (pick.length) return pick[0];
-    }
-    return null;
-  };
+  // ── place: habit minimums → tasks → priority bumps → habit extras → optional tasks
+  const weeks = habitWeeks(nowMs);
+  for (const w of weeks) for (const h of habitList) placeHabit(h, w, minOf(h));
 
-  for (const t of ordered) {
-    let left = remaining(t);
-    if (left <= 0) continue;
+  for (const t of required) placeTask(t);
 
-    if (t.dueByISO && Date.parse(t.dueByISO) <= nowMs) {
-      unplaced.push({
-        taskId: t.id,
-        title: t.title,
-        neededMin: left,
-        placedMin: credited.get(t.id) ?? 0,
-        reason: `it was due ${dueLabel(t.dueByISO)}, which has passed`,
-        options: [`${t.title} due next week`, `done with ${t.title}`],
-      });
-      continue;
-    }
-    if (t.dueByISO && earliestFor(t, nowMs) >= Date.parse(t.dueByISO)) {
-      unplaced.push({
-        taskId: t.id,
-        title: t.title,
-        neededMin: left,
-        placedMin: credited.get(t.id) ?? 0,
-        reason: `it can't start before ${startLabel(earliestFor(t, nowMs))}, after its ${dueLabel(t.dueByISO)} deadline`,
-        options: [`${t.title} due next week`],
-      });
-      continue;
-    }
-
-    const need = left;
-    // Measured before this task takes anything, so a partial fit can say what was free.
-    const freeBefore = freeMinutes(t, profile, busy, nowMs);
-    const used = daysUsed.get(t.id) ?? new Set<number>();
-    const replaces = replaceable.get(t.id) ?? [];
-    let lastSize = 0;
-    while (left > 0) {
-      let size = sessionSize(left, t);
-      // One session a day where the week allows it; doubling up only when it doesn't.
-      let slot = best(t, size, t.splittable ? used : null) ?? (t.splittable ? best(t, size, null) : null);
-      // A splittable task shrinks its session before giving up on it.
-      while (!slot && t.splittable && size - 15 >= Math.max(15, t.minChunkMin)) {
-        size -= 15;
-        slot = best(t, size, used) ?? best(t, size, null);
-      }
-      if (!slot) {
-        lastSize = size;
+  // A task that didn't fit may take the place of new sessions of a task that
+  // matters less — kept only when it then fits whole.
+  for (const t of required) {
+    const m = misses.get(t.id);
+    if (!m || !('need' in m)) continue;
+    const lo = earliestFor(t, nowMs);
+    const hi = latestFor(t, nowMs);
+    const victims = [
+      ...new Set(
+        blocks
+          .filter((b) => b.status === 'new' && b.taskId && Date.parse(b.endISO) > lo && Date.parse(b.startISO) < hi)
+          .map((b) => b.taskId!)
+          .filter((id) => PRIORITY_RANK[tasks.get(id)!.priority] > PRIORITY_RANK[t.priority]),
+      ),
+    ].sort(
+      (a, b) =>
+        PRIORITY_RANK[tasks.get(b)!.priority] - PRIORITY_RANK[tasks.get(a)!.priority] ||
+        dueOf(tasks.get(b)!) - dueOf(tasks.get(a)!) ||
+        a.localeCompare(b),
+    );
+    for (const vid of victims.slice(0, MAX_BUMP_TRIES)) {
+      const before = snapshot();
+      const beforeMisses = new Map(misses);
+      for (const b of blocks.filter((x) => x.status === 'new' && x.taskId === vid)) release(b);
+      placeTask(t);
+      if (!misses.has(t.id)) {
+        const v = tasks.get(vid)!;
+        placeTask(v);
+        const vm = misses.get(vid);
+        if (vm && 'need' in vm) vm.gaveWayTo = t.title;
         break;
       }
-      const s = Date.parse(slot.startISO);
-      const e = Date.parse(slot.endISO);
-      blocks.push({
-        taskId: t.id,
-        title: t.title,
-        category: t.category,
-        startISO: slot.startISO,
-        endISO: slot.endISO,
-        status: 'new',
-        ...(replaces.length ? { replacesEventId: replaces.shift()! } : {}),
-        score: slot.score,
-        features: slot.features,
-        reason: slot.reason,
-      });
-      busy.push({ s: s - buf, e: e + buf });
-      used.add(dayStart(s));
-      credited.set(t.id, (credited.get(t.id) ?? 0) + size);
-      left -= size;
+      restore(before);
+      misses.clear();
+      for (const [k, v] of beforeMisses) misses.set(k, v);
     }
+  }
 
-    if (left > 0) {
-      const miss = explainMiss(t, { need, left, size: lastSize, placedMin: credited.get(t.id) ?? 0, free: freeBefore });
-      miss.reason += awayNote(earliestFor(t, nowMs), latestFor(t, nowMs));
-      unplaced.push(miss);
+  for (const w of weeks) for (const h of habitList) placeHabit(h, w, h.perWeek);
+  for (const t of optional) placeTask(t);
+
+  // ── what didn't fit, and what fell short of ideal ───────────────────────
+  const unplaced: Unplaced[] = [];
+  const notes: string[] = [];
+  for (const t of ordered) {
+    const m = misses.get(t.id);
+    if (!m) continue;
+    if (!('need' in m)) {
+      unplaced.push(m);
+      continue;
+    }
+    const miss = explainMiss(t, { need: m.need, left: m.left, size: m.size, placedMin: credited.get(t.id) ?? 0, free: m.free });
+    if (m.gaveWayTo) miss.reason += ` — it gave way to ${m.gaveWayTo}, which matters more`;
+    miss.reason += awayNote(earliestFor(t, nowMs), latestFor(t, nowMs));
+    if (isOptional(t)) {
+      miss.optional = true;
+      miss.reason += ' (it is low priority with no deadline, so it went last)';
+    }
+    unplaced.push(miss);
+  }
+  for (const w of weeks) {
+    const lo = Math.max(nowMs, w);
+    const hi = w + 7 * DAY;
+    const which = w === weekStart(nowMs) ? 'this week' : 'next week';
+    for (const h of habitList) {
+      const have = habitDays(h.id, w).size;
+      const min = minOf(h);
+      if (have >= h.perWeek) continue;
+      if (have >= min) {
+        notes.push(`${h.title}: ${have} session${have === 1 ? '' : 's'} ${which} — your minimum; ${h.perWeek} didn't fit${awayNote(lo, hi)}.`);
+        continue;
+      }
+      const options: string[] = [];
+      if (have >= 1) options.push(`${h.title} ${have}x a week`);
+      if (h.durationMin > 30) options.push(`${h.title} takes ${hours(h.durationMin - 30)}`);
+      unplaced.push({
+        habitId: h.id,
+        title: h.title,
+        neededMin: (min - have) * h.durationMin,
+        placedMin: have * h.durationMin,
+        reason: `only ${have} of ${min === h.perWeek ? h.perWeek : `at least ${min}`} sessions fit ${which}${awayNote(lo, hi)}`,
+        options,
+      });
     }
   }
 
   blocks.sort((a, b) => Date.parse(a.startISO) - Date.parse(b.startISO));
-  return { blocks, unplaced, order: ordered.map((t) => t.id), moved };
+  return { blocks, unplaced, order: [...required, ...optional].map((t) => t.id), moved, notes };
 }
 
 /** Why a task did not fit, against the time that was free when its turn came. */

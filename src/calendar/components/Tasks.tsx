@@ -57,7 +57,7 @@ export function Tasks({ actions, toast }: { actions: CalActions; toast: (msg: st
           {/* On a phone the top bar already says Tasks. */}
           {!isPhone && <Txt style={styles.title}>Tasks</Txt>}
           <Txt style={styles.lede}>
-            Plan my week places these by deadline and fits your habits in first. A block you move by hand stays where you put it.
+            Plan my week places these by deadline, keeps each day’s hard work within a budget, and fits your habits in. A block you move by hand stays where you put it.
           </Txt>
         </View>
         <View style={styles.headActions}>
@@ -232,14 +232,17 @@ export function taskLine(t: ApiTask): string {
     bits.push(`on hold until ${dayOf(nb)}${nb % 86_400_000 ? ` ${new Date(nb).toISOString().slice(11, 16)}` : ''}`);
   }
   if (t.priority !== 'medium') bits.push(`${t.priority} priority`);
+  if (t.effort === 'hard') bits.push('hard');
+  if (t.effort === 'light') bits.push('light');
   if (t.splittable && t.durationMin > 120) bits.push('in sessions');
   bits.push(t.status === 'scheduled' || t.status === 'in-progress' ? 'on your calendar' : 'not planned yet');
   return bits.join(' · ');
 }
 
-/** "3x a week · 1h · mornings" */
+/** "2–3x a week · 1h · mornings" */
 export function habitLine(h: ApiHabit): string {
-  return [`${h.perWeek}x a week`, hours(h.durationMin), h.preferredWindow ? `${h.preferredWindow}s` : ''].filter(Boolean).join(' · ');
+  const often = h.minPerWeek && h.minPerWeek < h.perWeek ? `${h.minPerWeek}–${h.perWeek}x a week` : `${h.perWeek}x a week`;
+  return [often, hours(h.durationMin), h.preferredWindow ? `${h.preferredWindow}s` : ''].filter(Boolean).join(' · ');
 }
 
 function Section({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {

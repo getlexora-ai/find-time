@@ -41,6 +41,7 @@ type ProfileRow = {
   min_focus_block_min: number;
   max_daily_focus_min: number;
   travel_min: number | null;
+  hard_work: string | null;
 };
 
 type ConstraintRow = {
@@ -104,7 +105,7 @@ export async function loadProfile(userId: string): Promise<AgentProfile> {
   const [prof, constraints, learned] = await Promise.all([
     queryOne<ProfileRow>(
       `select timezone, work_hours, weights, energy_curve, duration_bias,
-              default_buffer_min, min_focus_block_min, max_daily_focus_min, travel_min
+              default_buffer_min, min_focus_block_min, max_daily_focus_min, travel_min, hard_work
          from scheduler_profiles where user_id = $1`,
       [userId],
     ),
@@ -134,6 +135,7 @@ export async function loadProfile(userId: string): Promise<AgentProfile> {
     base.minFocusBlockMin = prof.min_focus_block_min ?? base.minFocusBlockMin;
     base.maxDailyFocusMin = prof.max_daily_focus_min ?? base.maxDailyFocusMin;
     base.travelMin = prof.travel_min ?? base.travelMin;
+    if (prof.hard_work === 'cluster' || prof.hard_work === 'spread') base.hardWork = prof.hard_work;
   }
 
   base.rules = constraints.map(
@@ -174,6 +176,24 @@ export async function saveWeights(
        set weights = excluded.weights,
            learning = coalesce(scheduler_profiles.learning, '{}'::jsonb) || excluded.learning`,
     [userId, JSON.stringify(weights), evidence],
+  );
+}
+
+/**
+ * How hard work is laid out, and the day's budget of demanding work in
+ * effort-weighted minutes (`max_daily_focus_min`). Either may be left out.
+ */
+export async function savePlanSettings(
+  userId: string,
+  s: { hardWork?: AgentProfile['hardWork']; dailyBudgetMin?: number },
+): Promise<void> {
+  await query(
+    `insert into scheduler_profiles (user_id, hard_work, max_daily_focus_min)
+       values ($1, coalesce($2, 'spread'), coalesce($3, 240))
+     on conflict (user_id) do update
+       set hard_work = coalesce($2, scheduler_profiles.hard_work),
+           max_daily_focus_min = coalesce($3, scheduler_profiles.max_daily_focus_min)`,
+    [userId, s.hardWork ?? null, s.dailyBudgetMin ?? null],
   );
 }
 

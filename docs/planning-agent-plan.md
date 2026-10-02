@@ -376,8 +376,41 @@ every plan independently and the route refuses to show one that fails. In chat:
 - *Tasks page* (Planner · Tasks · Insights; `K` on web): open tasks with done
   and postpone, habits with stop. Adding and changing stay in Plan with AI.
 
-**Not yet:** the repair pass (§8 step 4), trade-off options beyond one
-suggestion, habits on chosen weekdays ("Mon/Wed/Fri"), travel time per place.
+**Added 2026-10-02, from the benchmark (db/021):** the model of
+[personalized-schedule-optimizer-benchmark](https://github.com/C-Coretex/personalized-schedule-optimizer-benchmark)
+(OR-Tools CP-SAT, Timefold and a simulated-annealing solver over one problem
+definition). Its solvers were not taken: separate .NET/JVM services with a
+5–15 s budget, no licence on the repo, and no splitting, not-before or
+minimal-move re-planning. Its *model* was:
+- *Effort and a daily budget* (its difficulty capacity, SC2): `tasks.effort`
+  light/normal/hard counts 0.5/1/1.5 per minute against `max_daily_focus_min`
+  (default 4h). Placement stays inside the budget while it can, and goes over
+  only for a deadline. "add task: …, it's a hard one", "the report is hard",
+  "no more than 4 hours of deep work a day".
+- *Hard work spread or clustered* (its SC3): `scheduler_profiles.hard_work`.
+  Demanding work also leans to the lighter day (its SC7). "spread out my hard
+  work", "batch hard tasks together".
+- *Habit minimum and ideal* (its HC6/SC5): `habits.min_per_week`. Minimums
+  are placed before tasks, extras after, so a habit's extra session never
+  costs a task its time. "gym 2–3x a week", "at least 2, ideally 4".
+- *Who gives way* (its SC1): low priority with no deadline is optional and
+  goes last; a task that still doesn't fit may take over the new sessions of
+  a lower-priority one, kept only if it then fits whole ("it gave way to …").
+
+Measured on the benchmark's own inputs (sample week, light and heavy month,
+plus heavy ×2 and sample ×3 overloads), before → after: 0 hard-rule
+violations either way; days over the budget 1/3/4 → 0; busiest day in
+sample ×3 458 → 240 weighted minutes, its load spread 105 → 21; heavy ×2 went
+from one high-priority task missed to none (priority points 171 → 176);
+mean slot score 0.73 → 0.71 (less stacking in peak hours, by design); runtime
+unchanged at 50–120 ms. A re-insertion **repair pass** (§8 step 4, after the
+benchmark's SA) was built and measured: no gain on any metric and 2–3× the
+runtime (to ~300 ms), so it was removed. Revisit only if a scenario shows
+greedy placement leaving clear gains.
+
+**Not yet:** trade-off options beyond one suggestion, habits on chosen weekdays
+("Mon/Wed/Fri"), travel time per place, per-weekday task-type preferences
+(the benchmark's SC4).
 
 **Prior art:** [fluidcalendar-lessons.md](fluidcalendar-lessons.md) — what an
 open-source Motion clone got right (task model, pin-on-drag) and 20 traps to

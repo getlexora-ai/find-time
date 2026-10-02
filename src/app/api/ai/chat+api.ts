@@ -25,6 +25,7 @@ import {
   TOOL_ADD_HABIT,
   TOOL_HABIT_UPDATE,
   TOOL_TRAVEL,
+  TOOL_PLAN_SETTINGS,
   asString,
   clampInt,
 } from '@/server/ai/chat';
@@ -52,6 +53,7 @@ import {
   listMessages,
   loadProfile,
   saveProposals,
+  savePlanSettings,
   saveTravelMin,
   sessionExists,
   addRule,
@@ -123,15 +125,17 @@ function toPlanTask(t: ApiTask): PlanTask {
     preferByISO: t.preferBy,
     notBeforeISO: t.notBefore,
     priority: t.priority,
+    effort: t.effort,
     preferredWindow: t.preferredWindow,
     splittable: t.splittable,
     minChunkMin: t.minChunkMin,
   };
 }
 
-/** "3x a week, 1h, mornings" */
+/** "2–3x a week, 1h, mornings" */
 function habitText(h: ApiHabit): string {
-  return [`${h.perWeek}x a week`, hoursText(h.durationMin), h.preferredWindow ? `${h.preferredWindow}s` : ''].filter(Boolean).join(', ');
+  const often = h.minPerWeek && h.minPerWeek < h.perWeek ? `${h.minPerWeek}–${h.perWeek}x a week` : `${h.perWeek}x a week`;
+  return [often, hoursText(h.durationMin), h.preferredWindow ? `${h.preferredWindow}s` : ''].filter(Boolean).join(', ');
 }
 
 /** The structured preference card shown to the model — never any event text. */
@@ -374,6 +378,7 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
     [TOOL_ADD_HABIT]: 'answer',
     [TOOL_HABIT_UPDATE]: 'answer',
     [TOOL_TRAVEL]: 'record_rule',
+    [TOOL_PLAN_SETTINGS]: 'record_rule',
   };
   // Logged before the action is carried out, so a turn that fails downstream
   // still leaves a record of what the model decided to do.
@@ -793,6 +798,7 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
         dueBy: dueByISO,
         notBefore,
         priority,
+        effort: args.effort === 'hard' || args.effort === 'light' ? args.effort : 'normal',
         preferredWindow,
         splittable: args.splittable === true,
         category: (CATEGORIES as readonly string[]).includes(categoryArg) ? categoryArg : 'deep-work',
@@ -818,7 +824,9 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
           hoursText(t.durationMin),
           t.dueBy ? `due ${dueLabel(t.dueBy)}` : '',
           t.notBefore && Date.parse(t.notBefore) > now.getTime() ? `not before ${startLabel(Date.parse(t.notBefore))}` : '',
-          t.priority !== 'medium' ? `${t.priority} priority` : '']
+          t.priority !== 'medium' ? `${t.priority} priority` : '',
+          t.effort !== 'normal' ? t.effort : '',
+        ]
           .filter(Boolean)
           .join(', ');
         return `• ${t.title} — ${bits}`;
@@ -848,6 +856,7 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
       if (typeof args.dueByISO === 'string' && Number.isFinite(Date.parse(args.dueByISO))) patch.dueBy = args.dueByISO;
       if (typeof args.durationMin === 'number') patch.durationMin = clampInt(args.durationMin, 15, 40 * 60, t.durationMin);
       if (args.splittable === true) patch.splittable = true;
+      if (args.effort === 'hard' || args.effort === 'light') patch.effort = args.effort;
       try {
         const u = await updateTask(userId, t.id, patch);
         if (!u) throw new Error('no change');
@@ -855,6 +864,7 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
           patch.dueBy ? `due ${dueLabel(patch.dueBy)}` : '',
           patch.durationMin ? hoursText(patch.durationMin) : '',
           patch.splittable ? 'can be split across days' : '',
+          patch.effort ? `${patch.effort} — it counts ${patch.effort === 'hard' ? 'more' : 'less'} toward a full day` : '',
         ].filter(Boolean);
         step({ tool: TOOL_TASK_UPDATE, label: doneLabel(TOOL_TASK_UPDATE, 'Changed a task'), detail: `${u.title} · ${what.join(', ')}` });
         reply = `Updated "${u.title}": ${what.join(', ')}. Say "replan" to fit it in again.`;
@@ -888,6 +898,7 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
   } else if (choice.name === TOOL_ADD_HABIT) {
     const title = asString(args.title, '').slice(0, 120);
     const perWeek = clampInt(args.perWeek, 1, 7, 3);
+    const minPerWeek = typeof args.minPerWeek === 'number' ? clampInt(args.minPerWeek, 1, perWeek, perWeek) : null;
     const durationMin = clampInt(args.durationMin, 5, 480, 60);
     const preferredWindow = (['morning', 'afternoon', 'evening'] as const).find((w) => w === args.preferredWindow) ?? null;
     const categoryArg = asString(args.category, 'personal');
@@ -895,6 +906,7 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
       const h = await createHabit(userId, {
         title,
         perWeek,
+        minPerWeek: minPerWeek && minPerWeek < perWeek ? minPerWeek : null,
         durationMin,
         preferredWindow,
         category: (CATEGORIES as readonly string[]).includes(categoryArg) ? categoryArg : 'personal',
@@ -922,7 +934,11 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
       }
     } else {
       const patch: Parameters<typeof updateHabit>[2] = {};
-      if (typeof args.perWeek === 'number') patch.perWeek = clampInt(args.perWeek, 1, 7, h.perWeek);
+      if (typeof args.perWeek === 'number') {
+        patch.perWeek = clampInt(args.perWeek, 1, 7, h.perWeek);
+        const min = typeof args.minPerWeek === 'number' ? clampInt(args.minPerWeek, 1, patch.perWeek, patch.perWeek) : null;
+        patch.minPerWeek = min && min < patch.perWeek ? min : null;
+      }
       if (typeof args.durationMin === 'number') patch.durationMin = clampInt(args.durationMin, 5, 480, h.durationMin);
       try {
         const u = await updateHabit(userId, h.id, patch);
@@ -933,6 +949,22 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
         console.error('ai/chat updateHabit', err);
         reply = "I couldn't change that habit just now. Try again in a moment.";
       }
+    }
+  } else if (choice.name === TOOL_PLAN_SETTINGS) {
+    const hardWork = args.hardWork === 'cluster' || args.hardWork === 'spread' ? args.hardWork : undefined;
+    const dailyBudgetMin = typeof args.dailyBudgetMin === 'number' ? clampInt(args.dailyBudgetMin, 60, 12 * 60, 240) : undefined;
+    try {
+      await savePlanSettings(userId, { hardWork, dailyBudgetMin });
+      step({ tool: TOOL_PLAN_SETTINGS, label: doneLabel(TOOL_PLAN_SETTINGS, 'Planning settings'), detail: choice.summary });
+      const bits = [
+        hardWork === 'cluster' ? "I'll keep hard tasks together on the same days" : '',
+        hardWork === 'spread' ? "I'll spread hard tasks across the week" : '',
+        dailyBudgetMin ? `I'll keep demanding work under ${hoursText(dailyBudgetMin)} a day where the deadlines allow` : '',
+      ].filter(Boolean);
+      reply = `Got it — ${bits.join(', and ')}. Say "replan" to apply it.`;
+    } catch (err) {
+      console.error('ai/chat planSettings', err);
+      reply = "I couldn't save that just now. Try again in a moment.";
     }
   } else if (choice.name === TOOL_TRAVEL) {
     const minutes = clampInt(args.minutes, 0, 180, 0);
@@ -974,7 +1006,11 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
         nowISO,
         profile,
         tasks: openTasks.map(toPlanTask),
-        habits: habits.map((h) => ({ ...h, category: (CATEGORIES as readonly string[]).includes(h.category) ? h.category : 'personal' })),
+        habits: habits.map((h) => ({
+          ...h,
+          minPerWeek: h.minPerWeek,
+          category: (CATEGORIES as readonly string[]).includes(h.category) ? h.category : 'personal',
+        })),
         busy: [
           ...others.map((e) => ({ start: e.start, end: e.end })),
           // Travel either side of in-person events (off unless the user set it).
@@ -1070,11 +1106,18 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
         if (profile.travelMin > 0 && input.busy.length > others.length) {
           lines.push(`I kept ${hoursText(profile.travelMin)} free either side of in-person meetings for travel.`);
         }
-        for (const u of plan.unplaced.slice(0, 4)) {
+        const needed = plan.unplaced.filter((u) => !u.optional);
+        const leftOut = plan.unplaced.filter((u) => u.optional);
+        for (const u of needed.slice(0, 4)) {
           const tip = u.options[0] ? ` Try "${u.options[0]}".` : '';
           lines.push(`Couldn't fit ${u.title}: ${u.reason}.${tip}`);
         }
-        if (plan.unplaced.length > 4) lines.push(`…and ${plan.unplaced.length - 4} more that don't fit.`);
+        if (needed.length > 4) lines.push(`…and ${needed.length - 4} more that don't fit.`);
+        // Low priority, no deadline: said once, as a group — not as failures.
+        if (leftOut.length) {
+          lines.push(`Left out for now (low priority, no deadline): ${leftOut.map((u) => u.title).join(', ')}.`);
+        }
+        for (const n of plan.notes.slice(0, 3)) lines.push(n);
         reply = lines.join('\n');
       }
     }

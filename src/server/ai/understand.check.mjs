@@ -291,6 +291,29 @@ assert.equal(sayH('stop gym').args.stop, true);
 assert.equal(sayH('delete gym tomorrow').name, 'delete_blocks');
 assert.equal(sayH('my habits').name, 'list_tasks');
 
+// ── effort, habit ranges, how hard work is laid out ──
+r = say("add task: board deck, 3h, due Friday, it's a hard one");
+assert.deepEqual([r.args.title, r.args.effort], ['Board deck', 'hard']);
+assert.equal(say('add task: expenses, 30 min, easy').args.effort, 'light');
+r = say('add task: back up the hard drive, 1h');
+assert.deepEqual([r.args.title, r.args.effort], ['Back up the hard drive', undefined], '"hard drive" is a title');
+r = understand('the report is hard', { nowISO, previous: null, lastProposals: [], taskTitles: ['Report'] });
+assert.deepEqual([r.name, r.args.effort], ['update_task', 'hard']);
+r = understand('tax forms are easy', { nowISO, previous: null, lastProposals: [], taskTitles: titles });
+assert.deepEqual([r.name, r.args.match, r.args.effort], ['update_task', 'Tax forms', 'light']);
+r = say('habit: gym 2-3x a week, 1h');
+assert.deepEqual([r.args.perWeek, r.args.minPerWeek], [3, 2]);
+r = say('I want to run at least 2 times a week, ideally 4, 45 min');
+assert.deepEqual([r.args.title, r.args.perWeek, r.args.minPerWeek, r.args.durationMin], ['Run', 4, 2, 45]);
+r = sayH('gym 2 or 3 times a week');
+assert.deepEqual([r.name, r.args.perWeek, r.args.minPerWeek], ['update_habit', 3, 2]);
+assert.equal(sayH('gym 4x a week').args.minPerWeek, null, 'a plain count clears an old minimum');
+assert.deepEqual(say('spread out my hard work').args, { reply: '', hardWork: 'spread' });
+assert.equal(say('batch hard tasks together').args.hardWork, 'cluster');
+assert.equal(say('no more than 4 hours of deep work a day').args.dailyBudgetMin, 240);
+assert.equal(say('find 2 hours of deep work tomorrow').name, 'propose_blocks', 'asking for time is not a setting');
+assert.notEqual(say('I work hard every day').name, 'plan_settings');
+
 // ── travel time ──
 assert.deepEqual([say('travel takes 30 min').name, say('travel takes 30 min').args.minutes], ['set_travel', 30]);
 assert.equal(say('allow 20 minutes for travel').args.minutes, 20);

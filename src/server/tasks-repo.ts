@@ -21,6 +21,7 @@ type Row = {
   prefer_by: Date | null;
   not_before: Date | null;
   priority: string;
+  effort: string;
   preferred_window: string | null;
   splittable: boolean;
   min_chunk_min: number;
@@ -28,7 +29,7 @@ type Row = {
   completed_at: Date | null;
 };
 
-const COLS = `id, title, status, duration_min, due_by, prefer_by, not_before, priority, preferred_window,
+const COLS = `id, title, status, duration_min, due_by, prefer_by, not_before, priority, effort, preferred_window,
               splittable, min_chunk_min, category, completed_at`;
 
 /** Statuses still waiting for time. */
@@ -44,6 +45,7 @@ function toApi(r: Row): ApiTask {
     preferBy: r.prefer_by ? r.prefer_by.toISOString() : null,
     notBefore: r.not_before ? r.not_before.toISOString() : null,
     priority: r.priority as ApiTask['priority'],
+    effort: (r.effort as ApiTask['effort']) ?? 'normal',
     preferredWindow: (r.preferred_window as ApiTask['preferredWindow']) ?? null,
     splittable: r.splittable,
     minChunkMin: r.min_chunk_min,
@@ -75,6 +77,7 @@ export type TaskInput = {
   preferBy?: string | null;
   notBefore?: string | null;
   priority?: ApiTask['priority'];
+  effort?: ApiTask['effort'];
   preferredWindow?: ApiTask['preferredWindow'];
   splittable?: boolean;
   minChunkMin?: number;
@@ -85,8 +88,8 @@ export async function createTask(userId: string, input: TaskInput): Promise<ApiT
   const row = await queryOne<Row>(
     `insert into tasks
        (id, user_id, title, duration_min, due_by, prefer_by, priority, preferred_window,
-        splittable, min_chunk_min, category, not_before)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        splittable, min_chunk_min, category, not_before, effort)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
      returning ${COLS}`,
     [
       `tsk_${randomUUID()}`,
@@ -101,6 +104,7 @@ export async function createTask(userId: string, input: TaskInput): Promise<ApiT
       input.minChunkMin ?? 30,
       input.category ?? 'deep-work',
       input.notBefore ?? null,
+      input.effort ?? 'normal',
     ],
   );
   return toApi(row!);
@@ -113,6 +117,7 @@ const PATCHABLE: Record<string, string> = {
   preferBy: 'prefer_by',
   notBefore: 'not_before',
   priority: 'priority',
+  effort: 'effort',
   preferredWindow: 'preferred_window',
   splittable: 'splittable',
   minChunkMin: 'min_chunk_min',

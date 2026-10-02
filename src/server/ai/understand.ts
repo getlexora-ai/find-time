@@ -42,12 +42,13 @@ import {
   TOOL_HABIT_UPDATE,
   TOOL_POSTPONE,
   TOOL_TRAVEL,
+  TOOL_PLAN_SETTINGS,
 } from './chat.ts';
 import { durationOptions } from './clarify.ts';
 import { ambiguousTime } from './place-at.ts';
 
 /** Stamped on every logged turn in place of the old prompt version. Bump on any behaviour change. */
-export const PARSER_VERSION = 'r3';
+export const PARSER_VERSION = 'r4';
 /** What `ai_turns.model_id` records for a turn read by this module. */
 export const PARSER_ID = 'rules';
 
@@ -66,6 +67,7 @@ export type TaskDraft = {
   preferredWindow?: 'morning' | 'afternoon' | 'evening';
   /** inclusive: no session before this instant */
   notBeforeISO?: string;
+  effort?: 'light' | 'hard';
 };
 
 export type Draft = {
@@ -750,6 +752,13 @@ const TASK_DONE =
 const TASK_SPLIT = /^\s*(?:you\s+can\s+|it's\s+ok\s+to\s+|ok\s+to\s+)?split\s+(?:up\s+)?(?:the\s+|my\s+)?(.+?)\s*[.!]*$/i;
 const TASK_DUE = /^\s*(?:move\s+|make\s+)?(?:the\s+|my\s+)?(.+?)\s+(?:is\s+)?(?:now\s+)?due\s+(.+?)\s*[.!]*$/i;
 const TASK_TAKES = /^\s*(?:the\s+|my\s+)?(.+?)\s+(?:takes|will\s+take|needs)\s+(.+?)\s*[.!]*$/i;
+/** How draining a task is. Only unmistakable phrasings: "hard drive backup" stays a title. */
+const IT_IS = "(?:(?:it'?s|it\\s+is|this\\s+is|that'?s)\\s+)?(?:(?:a|an|really|quite|pretty|very|super)\\s+)*";
+const HARD_WORDS = new RegExp(`\\b${IT_IS}(?:difficult|demanding|draining|intense|tough\\s+one|hard\\s+(?:one|task)|heavy\\s+lifting|needs?\\s+(?:deep|full)\\s+focus)\\b`, 'i');
+const LIGHT_WORDS = new RegExp(`\\b${IT_IS}(?:easy\\s+(?:one|task)|easy|light\\s+(?:one|task|work)|low[- ]effort|no[- ]brainer|mindless)\\b`, 'i');
+/** "the report is hard", "tax forms are easy" — about a task they have. */
+const TASK_EFFORT =
+  /^\s*(?:the\s+|my\s+)?(.+?)\s+(?:is|are|will\s+be|is\s+going\s+to\s+be)\s+(?:a\s+|an\s+|really\s+|quite\s+|pretty\s+|very\s+|super\s+)*(hard|difficult|demanding|draining|intense|tough|heavy|easy|light|simple|quick|mindless)(?:\s+(?:one|task|work))?\s*[.!]*$/i;
 const TASK_CANCEL = /^\s*(?:no|nope|cancel|never\s*mind|forget\s+it|stop)\b[\s.!]*$/i;
 
 /** The open task a phrase names: exact title first, then one containing the other. */
@@ -783,7 +792,7 @@ function addTask(t: TaskDraft, durationMin: number, today: number): Understood {
     name: TOOL_ADD_TASK,
     args: { ...t, durationMin, splittable, reply: '' },
     draft: null,
-    summary: [t.title, hoursLabel(durationMin), due, from, t.priority !== 'medium' ? `${t.priority} priority` : '', splittable ? 'can split' : '']
+    summary: [t.title, hoursLabel(durationMin), due, from, t.effort ?? '', t.priority !== 'medium' ? `${t.priority} priority` : '', splittable ? 'can split' : '']
       .filter(Boolean)
       .join(' · '),
   };
@@ -803,6 +812,10 @@ function readAddTask(body: string, nowMs: number, today: number): Understood {
   else if (take(/\b(?:low[- ]priority|whenever|someday|no\s+rush)\b/i)) priority = 'low';
   else take(/\b(?:medium|normal)[- ]priority\b/i);
 
+  let effort: TaskDraft['effort'];
+  if (take(HARD_WORDS)) effort = 'hard';
+  else if (take(LIGHT_WORDS)) effort = 'light';
+
   let splittable: boolean | undefined;
   if (take(/\b(?:in\s+one\s+(?:go|sitting|block)|(?:don't|do\s+not)\s+split(?:\s+it)?|no\s+splitting|all\s+at\s+once)\b/i)) splittable = false;
   else if (take(/\b(?:(?:can\s+be\s+)?split(?:\s+(?:it|up))?|in\s+(?:chunks|pieces|sessions)|across\s+(?:a\s+few\s+|several\s+)?days)\b/i)) splittable = true;
@@ -818,6 +831,7 @@ function readAddTask(body: string, nowMs: number, today: number): Understood {
   const t: TaskDraft = { title, category, priority };
   if (f.when) t.dueByISO = iso(f.when.to);
   if (nb.at !== null) t.notBeforeISO = iso(nb.at);
+  if (effort) t.effort = effort;
   if (splittable !== undefined) t.splittable = splittable;
   if (f.part) t.preferredWindow = f.part.from < 12 ? 'morning' : f.part.from < 17 ? 'afternoon' : 'evening';
 
@@ -870,6 +884,12 @@ function readTaskTurn(raw: string, ctx: UnderstandContext, nowMs: number, today:
       };
     }
   }
+  const eff = TASK_EFFORT.exec(raw);
+  const effTitle = eff && matchTask(eff[1], titles);
+  if (eff && effTitle) {
+    const effort = /^(?:easy|light|simple|quick|mindless)$/i.test(eff[2]) ? 'light' : 'hard';
+    return { name: TOOL_TASK_UPDATE, args: { match: effTitle, effort, reply: '' }, draft: null, summary: `${effTitle} · ${effort}` };
+  }
   const takes = TASK_TAKES.exec(raw);
   const takesTitle = takes && matchTask(takes[1], titles);
   if (takes && takesTitle) {
@@ -895,17 +915,44 @@ const PER_WEEK =
 const EVERY_DAY = /\b(?:every\s*day|daily|each\s+day)\b/i;
 const EVERY_WEEKDAY = /\b(?:every\s+(?:week|work)\s*day|each\s+(?:week|work)\s*day|on\s+weekdays|weekdays)\b/i;
 
-function perWeekOf(s: string, prefixed: boolean): { n: number; hit: RegExp } | null {
-  const m = PER_WEEK.exec(s);
-  if (m) {
-    const w = (m[1] ?? m[2]).toLowerCase();
-    return { n: TIMES[w] ?? Number(w), hit: PER_WEEK };
+const N = '[1-7]|one|two|three|four|five|six|seven|once|twice|thrice';
+const TIMES_WORD = '(?:\\s*(?:x|×|times?))?';
+const A_WEEK = '\\s*(?:a|per|each|every|in\\s+a)\\s+week\\b';
+/** "2-3x a week", "2 to 3 times a week", "2 or 3 times a week" */
+const RANGE = new RegExp(`\\b(${N})\\s*(?:-|–|to|or)\\s*(${N})${TIMES_WORD}${A_WEEK}`, 'i');
+/** "at least 2" / "ideally 3" (with or without "times a week") */
+const AT_LEAST = new RegExp(`\\b(?:at\\s+least|minimum(?:\\s+of)?|no\\s+fewer\\s+than)\\s+(${N})${TIMES_WORD}(?:${A_WEEK})?`, 'i');
+const IDEALLY = new RegExp(`\\b(?:ideally|preferably|up\\s+to|at\\s+most|aiming\\s+for|hopefully)\\s+(${N})${TIMES_WORD}(?:${A_WEEK})?`, 'i');
+const timesNum = (w: string) => TIMES[w.toLowerCase()] ?? Number(w);
+
+/**
+ * How often, as an ideal and the fewest that still count — the benchmark's
+ * min/opt repetition counts. `strip` blanks what was read, so the rest is the title.
+ */
+type PerWeek = { n: number; min?: number; strip: (s: string) => string };
+function perWeekOf(s: string, prefixed: boolean): PerWeek | null {
+  const blank = (...res: RegExp[]) => (x: string) => res.reduce((acc, re) => acc.replace(re, ' '), x);
+  const range = RANGE.exec(s);
+  if (range) {
+    const [a, b] = [timesNum(range[1]), timesNum(range[2])];
+    return { n: Math.max(a, b), min: Math.min(a, b), strip: blank(RANGE) };
   }
+  const least = AT_LEAST.exec(s);
+  const ideal = IDEALLY.exec(s);
+  const m = PER_WEEK.exec(s);
+  const base = m ? timesNum(m[1] ?? m[2]) : undefined;
+  if (least || ideal) {
+    const min = least ? timesNum(least[1]) : undefined;
+    const n = ideal ? timesNum(ideal[1]) : base ?? min!;
+    return { n: Math.max(n, min ?? 1), min: min !== undefined && min < n ? min : undefined, strip: blank(AT_LEAST, IDEALLY, PER_WEEK) };
+  }
+  if (m) return { n: base!, strip: blank(PER_WEEK) };
   // Only a "habit:" line reads "every day" as a target; elsewhere it is a routine.
-  if (prefixed && EVERY_WEEKDAY.test(s)) return { n: 5, hit: EVERY_WEEKDAY };
-  if (prefixed && EVERY_DAY.test(s)) return { n: 7, hit: EVERY_DAY };
+  if (prefixed && EVERY_WEEKDAY.test(s)) return { n: 5, strip: blank(EVERY_WEEKDAY) };
+  if (prefixed && EVERY_DAY.test(s)) return { n: 7, strip: blank(EVERY_DAY) };
   return null;
 }
+const perText = (n: number, min?: number) => (min ? `${min}–${n}x a week` : `${n}x a week`);
 
 const ADD_HABIT = /^\s*(?:please\s+)?(?:(?:add|new|create|start|set\s+up)\s+(?:a\s+)?habit\b|habit\s*:)\s*[:\-–]?\s*(.*)$/i;
 /** "I want to go to the gym 3 times a week" — the lead-in is not part of the title. */
@@ -920,6 +967,8 @@ export type HabitDraft = {
   title: string;
   category: string;
   perWeek?: number;
+  /** the fewest that still count, when it differs from perWeek */
+  minPerWeek?: number;
   durationMin?: number;
   preferredWindow?: 'morning' | 'afternoon' | 'evening';
 };
@@ -937,19 +986,20 @@ function habitTurn(h: HabitDraft): Understood {
     name: TOOL_ADD_HABIT,
     args: { ...h, reply: '' },
     draft: null,
-    summary: [h.title, `${h.perWeek}x a week`, hoursLabel(h.durationMin), h.preferredWindow ?? ''].filter(Boolean).join(' · '),
+    summary: [h.title, perText(h.perWeek, h.minPerWeek), hoursLabel(h.durationMin), h.preferredWindow ?? ''].filter(Boolean).join(' · '),
   };
 }
 
 /** "gym 3x a week, 1h, mornings" → a habit, asking for whatever is missing. */
 function readHabit(body: string, nowMs: number, prefixed: boolean): Understood {
   const per = perWeekOf(body, prefixed);
-  const s = per ? body.replace(per.hit, ' ') : body;
+  const s = per ? per.strip(body) : body;
   const f = readFacets(s.replace(HABIT_LEAD, ''), nowMs);
   const title = titleFrom(f.rest);
   if (!title) return answer('What\'s the habit? For example: "Habit: gym 3x a week, 1h, mornings".', null);
   const h: HabitDraft = { title, category: categoryOf(title.toLowerCase()) };
   if (per) h.perWeek = per.n;
+  if (per?.min) h.minPerWeek = per.min;
   if (f.durationMin) h.durationMin = f.durationMin;
   if (f.part) h.preferredWindow = WINDOW_OF(f.part.from);
   return habitTurn(h);
@@ -1047,6 +1097,28 @@ function travelTurn(minutes: number): Understood {
   };
 }
 
+const HARD_THINGS = '(?:hard|difficult|demanding|deep|heavy|focus(?:ed)?|intense)\\s+(?:work|tasks|stuff|things|blocks)';
+const SPREAD = new RegExp(`\\b(?:spread|space|split)\\s+(?:out\\s+)?(?:my\\s+|the\\s+)?${HARD_THINGS}(?:\\s+out)?(?:\\s+(?:across|over)\\s+the\\s+week)?\\b|\\bone\\s+${HARD_THINGS.replace('tasks', 'task')}\\s+a\\s+day\\b`, 'i');
+const CLUSTER = new RegExp(`\\b(?:batch|cluster|group|bundle|stack|keep|put)\\s+(?:all\\s+)?(?:my\\s+|the\\s+)?${HARD_THINGS}\\s*(?:together|on\\s+the\\s+same\\s+days?|in\\s+one\\s+go)?\\b`, 'i');
+/** "no more than 4 hours of deep work a day" */
+const BUDGET = /\b(?:no\s+more\s+than|not\s+more\s+than|max(?:imum)?(?:\s+of)?|at\s+most|up\s+to|cap\s+(?:it\s+|me\s+)?at|limit\s+(?:it\s+|me\s+)?to)\s+(.+?)\s+of\s+(?:hard|deep|focus(?:ed)?|demanding|heavy|intense)\s+(?:work\s+|time\s+)?(?:a|per|each)\s+day\b/i;
+
+function planSettingTurn(raw: string, nowMs: number): Understood | null {
+  const budget = BUDGET.exec(raw);
+  const minutes = budget ? readFacets(budget[1], nowMs).durationMin : undefined;
+  const hardWork = CLUSTER.test(raw) ? 'cluster' : SPREAD.test(raw) ? 'spread' : undefined;
+  if (!hardWork && !(minutes && minutes >= 60 && minutes <= 12 * 60)) return null;
+  const args: Record<string, unknown> = { reply: '' };
+  if (hardWork) args.hardWork = hardWork;
+  if (minutes && minutes >= 60 && minutes <= 12 * 60) args.dailyBudgetMin = minutes;
+  return {
+    name: TOOL_PLAN_SETTINGS,
+    args,
+    draft: null,
+    summary: [hardWork ? `hard work · ${hardWork}` : '', args.dailyBudgetMin ? `budget · ${hoursLabel(minutes!)} a day` : ''].filter(Boolean).join(' · '),
+  };
+}
+
 /** Habits, postponing, travel time — or null when the sentence is about something else. */
 function readPlanTurn(raw: string, ctx: UnderstandContext, nowMs: number, today: number): Understood | null {
   const prev = ctx.previous;
@@ -1057,9 +1129,13 @@ function readPlanTurn(raw: string, ctx: UnderstandContext, nowMs: number, today:
   if (prev?.tool === TOOL_ADD_HABIT && prev.habit) {
     if (/^\s*(?:no|nope|cancel|never\s*mind|forget\s+it|stop)\b[\s.!]*$/i.test(raw)) return answer('Okay — no habit added.', null);
     const per = perWeekOf(raw, true);
-    const f = readFacets(per ? raw.replace(per.hit, ' ') : raw, nowMs);
+    const f = readFacets(per ? per.strip(raw) : raw, nowMs);
     if ((per || f.durationMin) && !titleFrom(f.rest).replace(/^(?:A|Week|Times?)$/i, '')) {
-      return habitTurn({ ...prev.habit, ...(per ? { perWeek: per.n } : {}), ...(f.durationMin ? { durationMin: f.durationMin } : {}) });
+      return habitTurn({
+        ...prev.habit,
+        ...(per ? { perWeek: per.n, ...(per.min ? { minPerWeek: per.min } : {}) } : {}),
+        ...(f.durationMin ? { durationMin: f.durationMin } : {}),
+      });
     }
   }
   if (prev?.tool === TOOL_POSTPONE && prev.match) {
@@ -1071,6 +1147,9 @@ function readPlanTurn(raw: string, ctx: UnderstandContext, nowMs: number, today:
     const f = readFacets(raw, nowMs);
     if (f.durationMin && f.durationMin <= 180) return travelTurn(f.durationMin);
   }
+
+  const setting = planSettingTurn(raw, nowMs);
+  if (setting) return setting;
 
   // ── travel ──
   if (TRAVEL_OFF.test(raw)) return travelTurn(0);
@@ -1095,14 +1174,15 @@ function readPlanTurn(raw: string, ctx: UnderstandContext, nowMs: number, today:
   const per = perWeekOf(raw, false);
   if (per) {
     // "gym 2x a week" about a habit they already have is a change, not a new one.
-    const f = readFacets(raw.replace(per.hit, ' ').replace(HABIT_LEAD, ''), nowMs);
+    const f = readFacets(per.strip(raw).replace(HABIT_LEAD, ''), nowMs);
     const named = matchHabit(titleFrom(f.rest), habitTitles);
     if (named) {
       return {
         name: TOOL_HABIT_UPDATE,
-        args: { match: named, perWeek: per.n, ...(f.durationMin ? { durationMin: f.durationMin } : {}), reply: '' },
+        // A plain "2x a week" sets both: the old minimum would otherwise outlive the new target.
+        args: { match: named, perWeek: per.n, minPerWeek: per.min ?? null, ...(f.durationMin ? { durationMin: f.durationMin } : {}), reply: '' },
         draft: null,
-        summary: `${named} · ${per.n}x a week`,
+        summary: `${named} · ${perText(per.n, per.min)}`,
       };
     }
     return readHabit(raw, nowMs, false);
