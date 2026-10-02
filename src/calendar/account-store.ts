@@ -148,7 +148,9 @@ export async function setCalRead(calendarId: string, readEnabled: boolean): Prom
       body: JSON.stringify({ readEnabled }),
     });
     if (!res.ok) throw new Error(String(res.status));
-    await refreshEvents();
+    // Back on: its events were hidden, so fetch them from Google now (syncNow refreshes events).
+    if (readEnabled) await syncNow(true);
+    else await refreshEvents();
   } catch {
     await refreshAccounts(); // revert to server truth
   }

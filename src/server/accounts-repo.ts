@@ -102,13 +102,20 @@ export async function setCalendarReadEnabled(
     [calendarId, userId, enabled],
   );
   if (!row) return false;
-  // Hide/show its events immediately; a re-sync brings them back if re-enabled.
+  // Hide its events immediately. On re-enable, drop the sync token so the next
+  // sync is a full one — an incremental sync only returns changed events, so the
+  // hidden ones would never come back.
   if (!enabled) {
     await queryOne(
       `update calendar_events set deleted_at = now()
         where calendar_id = $1 and deleted_at is null returning id`,
       [calendarId],
     ).catch(() => {});
+  } else {
+    await queryOne(
+      `update calendar_sync_state set sync_token = null where calendar_id = $1 returning calendar_id`,
+      [calendarId],
+    );
   }
   return true;
 }
