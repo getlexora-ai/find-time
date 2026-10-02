@@ -84,7 +84,8 @@ export type ApiAccount = {
 
 export type AccountsResponse = {
   signedIn: boolean;
-  user: { id: string; name: string; email: string } | null;
+  /** Name and email live in Clerk only; read them with Clerk's useUser. */
+  user: { id: string } | null;
   accounts: ApiAccount[];
 };
 

@@ -95,9 +95,7 @@ export async function enforceRateLimit(
 
     if (verdict.ok) return null;
 
-    query(`insert into rate_limit_blocks (route, bucket_key) values ($1, $2)`, [route, bucket]).catch(
-      () => {},
-    );
+    console.warn(`[rate-limit] blocked ${route}`);
     return Response.json(
       { error: 'rate_limited', retry_after: verdict.retryAfter },
       { status: 429, headers: { 'Retry-After': String(verdict.retryAfter) } },

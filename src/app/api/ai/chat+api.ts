@@ -29,20 +29,9 @@ import {
   asString,
   clampInt,
 } from '@/server/ai/chat';
-import { type Draft, PARSER_ID, PARSER_VERSION, understand } from '@/server/ai/understand';
-import {
-  candidatesFrom,
-  captureProfile,
-  latestOccasionInSession,
-  linkTurnMessage,
-  recordCorrection,
-  recordOccasion,
-  recordTurn,
-  reportedMessageIds,
-  shouldExplore,
-} from '@/server/ai/capture';
-import { blocksTime, buildScoreContext, rankFreeSlots, selectSlots, type RankedSlot } from '@/server/ai/find-time';
-import { SCORER_VERSION, slotNotes, ZERO_FEATURES } from '@/server/ai/scoring';
+import { type Draft, understand } from '@/server/ai/understand';
+import { blocksTime, rankFreeSlots, selectSlots } from '@/server/ai/find-time';
+import { ZERO_FEATURES } from '@/server/ai/scoring';
 import { ambiguousTime, checkPlaceAt, clashNote, freeNear, overlapList, overlapping } from '@/server/ai/place-at';
 import { describeClaim } from '@/server/ai/learn';
 import { adjustDuration, CATEGORIES, effectiveBuffer, type AgentProfile } from '@/server/ai/preferences';
@@ -163,10 +152,7 @@ export async function GET(request: Request): Promise<Response> {
     return Response.json({ sessionId: null, messages: [] } satisfies ChatHistoryResponse);
   }
 
-  const [stored, reported] = await Promise.all([
-    listMessages(sessionId, MAX_TURNS * 2),
-    reportedMessageIds(userId, sessionId),
-  ]);
+  const stored = await listMessages(sessionId, MAX_TURNS * 2);
   const messages: ChatMessage[] = stored.map((m) => {
     // The draft is the planner's working state, not part of the reply.
     const { draft: _draft, ...parsed } = (m.parsed ?? {}) as Partial<ChatMessage> & { draft?: unknown };
@@ -176,7 +162,6 @@ export async function GET(request: Request): Promise<Response> {
       text: m.content,
       createdAt: m.createdAt,
       ...parsed,
-      ...(reported.has(m.id) ? { reported: true } : {}),
     };
   });
   return Response.json({ sessionId, messages } satisfies ChatHistoryResponse);
@@ -330,24 +315,6 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
   const lastReply = [...history].reverse().find((m) => m.role === 'assistant');
   const lastParsed = (lastReply?.parsed ?? {}) as { draft?: Draft; proposals?: ChatProposal[] };
 
-  /**
-   * What the reader was given, replayable later. Busy blocks are BOUNDS ONLY —
-   * event titles are other people's text and never enter the log at any
-   * capture profile (docs/ai-learning.md §8). The user's own message rides
-   * along at 'full' and is dropped at 'anon' with the rest of track B.
-   */
-  const modelInput: Record<string, unknown> = {
-    nowISO,
-    horizonISO,
-    horizonDays: HORIZON_DAYS,
-    learned: card.learned,
-    rules: card.rules,
-    busy: busy.map((b) => ({ start: b.start, end: b.end })),
-    turns: history.length,
-    draft: lastParsed.draft ?? null,
-    ...(captureProfile() === 'full' ? { userText: text } : {}),
-  };
-
   begin(STEP.model);
   const readT0 = Date.now();
   const choice = understand(text, {
@@ -373,44 +340,6 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
   // "gym at 6" — never placed on a guess between 06:00 and 18:00.
   const ampm = choice.name === TOOL_PLACE_AT ? ambiguousTime(text) : null;
 
-  const ACTION_BY_TOOL: Record<string, 'propose' | 'ask' | 'record_rule' | 'time_off' | 'answer'> = {
-    [TOOL_PROPOSE]: 'propose',
-    [TOOL_PLACE_AT]: 'propose',
-    [TOOL_ASK]: 'ask',
-    [TOOL_RULE]: 'record_rule',
-    [TOOL_TIME_OFF]: 'time_off',
-    [TOOL_ANSWER]: 'answer',
-    // The backlog tools reuse the logged actions ai_turns already allows (db/018).
-    [TOOL_PLAN_WEEK]: 'propose',
-    [TOOL_ADD_TASK]: 'answer',
-    [TOOL_LIST_TASKS]: 'answer',
-    [TOOL_TASK_DONE]: 'answer',
-    [TOOL_TASK_UPDATE]: 'answer',
-    [TOOL_POSTPONE]: 'answer',
-    [TOOL_ADD_HABIT]: 'answer',
-    [TOOL_HABIT_UPDATE]: 'answer',
-    [TOOL_TRAVEL]: 'record_rule',
-    [TOOL_PLAN_SETTINGS]: 'record_rule',
-  };
-  // Logged before the action is carried out, so a turn that fails downstream
-  // still leaves a record of what the model decided to do.
-  const turnId = await recordTurn({
-    userId,
-    sessionId,
-    // Deleting has no action of its own in ai_turns' CHECK: the list is a question, the yes an answer.
-    action:
-      missing || ampm
-        ? 'ask'
-        : choice.name === TOOL_DELETE
-          ? args.confirm === true ? 'answer' : 'ask'
-          : ACTION_BY_TOOL[choice.name] ?? 'answer',
-    modelId: PARSER_ID,
-    promptVersion: PARSER_VERSION,
-    scorerVersion: SCORER_VERSION,
-    input: modelInput,
-    toolArgs: args,
-    latencyMs: readMs,
-  });
   let reply = asString(args.reply);
   let proposals: ChatProposal[] | undefined;
   let question: ChatMessage['question'];
@@ -487,22 +416,12 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
       category,
     }, profile).filter((r) => !excluded.has(r.startISO.slice(0, 10)));
 
-    /**
-     * A slice of occasions offers a wider band of runners-up instead of the
-     * top tier. Without it every observation is a choice among slots this
-     * scorer already liked, so its own bias is baked into the evidence and
-     * "afternoons don't work" cannot be told apart from "we never offered an
-     * afternoon". The flip is recorded on the occasion so analysis can lean on
-     * exactly these rows; it cannot be added to history afterwards, which is
-     * why it ships with the capture rather than after it.
-     */
-    const explore = shouldExplore();
     const { chosen, alternatives } = selectSlots(ranked, {
       count,
       maxPerDay: args.oneBlockPerDay !== false ? 1 : undefined,
       bufferMin: effectiveBuffer(profile),
-      alternatives: explore ? 4 : 2,
-      strategy: explore ? 'spread' : 'top',
+      alternatives: 2,
+      strategy: 'top',
     });
 
     step({
@@ -545,76 +464,6 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
       } catch (err) {
         console.error('ai/chat saveProposals', err);
         return Response.json({ sessionId, error: 'Could not save that plan. Try again.' }, { status: 500 });
-      }
-
-      /**
-       * One occasion per block placed, each carrying the whole ranked field it
-       * was chosen from. The slots that lost are the point: a correction on
-       * its own cannot say whether `fragmentation` mattered once `hourFit` is
-       * controlled for, because it never sees what was passed over.
-       *
-       * `offered` marks what the user could actually act on — this block plus
-       * the runners-up shown beside it. Under 'spread' a low-ranked slot can
-       * be offered, and those are the rows worth the most.
-       */
-      const ctx = buildScoreContext(busy, {
-        durationMin,
-        count,
-        earliestISO,
-        latestISO,
-        dayStartHour: clampInt(args.dayStartHour, 0, 23, win.start),
-        dayEndHour: clampInt(args.dayEndHour, 1, 24, win.end),
-        bufferMin: effectiveBuffer(profile),
-        skipWeekends,
-        category,
-      });
-      const notesFor = (r: RankedSlot) =>
-        slotNotes(profile, ctx, Date.parse(r.startISO), Date.parse(r.endISO));
-      const busyMinutes = ctx.busy.reduce((n, b) => n + (b.e - b.s) / 60_000, 0);
-
-      // Resolved BEFORE the new occasions are written: this lookup takes the
-      // most recent occasion in the session, and a moment from now that will
-      // be one of the rows about to be inserted.
-      const previousOccasion =
-        args.revisesPrevious === true ? await latestOccasionInSession(userId, sessionId) : null;
-
-      const occasionIds: string[] = [];
-      for (let i = 0; i < stored.length; i++) {
-        const occId = await recordOccasion({
-          userId,
-          turnId,
-          suggestionId: stored[i].id,
-          category,
-          requestedMinutes: durationMin,
-          randomised: explore,
-          strategy: explore ? 'spread' : 'top',
-          modelId: PARSER_ID,
-          promptVersion: PARSER_VERSION,
-          scorerVersion: SCORER_VERSION,
-          weekBusyMinutes: Math.round(busyMinutes),
-          contextNote: `${ranked.length}cand·${count}blk${explore ? '·expl' : ''}`,
-          candidates: candidatesFrom(ranked, [chosen[i], ...alternatives], notesFor),
-        });
-        if (occId) occasionIds.push(occId);
-      }
-
-      /**
-       * A correction made in words, labelled by the model that just read both
-       * turns. `revisesPrevious` is the model's own claim and lands unreviewed
-       * like everything else — it is a suggestion for the review queue, never
-       * a verdict.
-       */
-      if (previousOccasion) {
-        await recordCorrection({
-          userId,
-          occasionId: previousOccasion,
-          turnId,
-          source: 'chat',
-          kind: asString(args.correctionKind, 'other'),
-          before: { occasionId: previousOccasion },
-          after: { occasionIds, durationMin, count, category, earliestISO, latestISO },
-          reasonNote: text,
-        });
       }
 
       proposals = stored.map((p) => ({
@@ -1181,8 +1030,6 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
     kind,
     parsed: { ...extras, ...(draft ? { draft } : {}) },
   });
-  // So a reported reply leads back to the turn behind it.
-  await linkTurnMessage(turnId, messageId);
 
   const message: ChatMessage = {
     id: messageId,

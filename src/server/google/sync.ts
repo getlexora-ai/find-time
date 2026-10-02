@@ -61,7 +61,6 @@ async function upsertCalendars(
   const remote = (await listCalendars(token)).filter((c) => READ_ROLES.has(c.accessRole));
   const rows: CalRow[] = [];
   for (const c of remote) {
-    const name = c.summaryOverride || c.summary || c.id;
     const existing = await queryOne<{ id: string; read_enabled: boolean }>(
       `select id, read_enabled from calendars
         where connected_account_id = $1 and provider_calendar_id = $2`,
@@ -70,12 +69,12 @@ async function upsertCalendars(
     const id = existing?.id ?? `cal_${randomUUID()}`;
     await queryOne(
       `insert into calendars
-         (id, user_id, connected_account_id, provider_calendar_id, name, is_primary, color)
-       values ($1, $2, $3, $4, $5, $6, $7)
+         (id, user_id, connected_account_id, provider_calendar_id, is_primary, color)
+       values ($1, $2, $3, $4, $5, $6)
        on conflict (connected_account_id, provider_calendar_id) do update set
-         name = excluded.name, is_primary = excluded.is_primary
+         is_primary = excluded.is_primary
        returning id`,
-      [id, userId, accountId, c.id, name, Boolean(c.primary), c.backgroundColor ?? 'lime'],
+      [id, userId, accountId, c.id, Boolean(c.primary), c.backgroundColor ?? 'lime'],
     );
     rows.push({ id, providerCalendarId: c.id, readEnabled: existing?.read_enabled ?? true });
   }

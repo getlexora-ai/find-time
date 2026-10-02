@@ -1,33 +1,31 @@
 import type { ApiAccount } from '@/lib/api-types';
 
 import { query, queryOne, tx } from './db';
-import { revokeAccount } from './google/oauth';
+import { listCalendars } from './google/calendar';
+import { getValidAccessToken, revokeAccount, userInfo } from './google/oauth';
 
 /**
  * Reads/writes for the "Calendars" section of the sidebar: connected Google
  * accounts, their calendars, and the read-enabled toggle. Server-only.
  */
 
-export async function getUserProfile(
+/**
+ * The account's email and calendar names are not stored; with `live` they are
+ * read from Google for this response (the settings screen). Without it — the
+ * sync route only needs ids — they come back empty.
+ */
+export async function listAccountsWithCalendars(
   userId: string,
-): Promise<{ id: string; name: string; email: string } | null> {
-  return queryOne<{ id: string; name: string; email: string }>(
-    `select id, name, email from users where id = $1`,
-    [userId],
-  );
-}
-
-export async function listAccountsWithCalendars(userId: string): Promise<ApiAccount[]> {
+  opts: { live?: boolean } = {},
+): Promise<ApiAccount[]> {
   const accounts = await query<{
     id: string;
-    email: string;
-    display_name: string;
     accent_color: string;
     sync_status: string;
     sync_error: string | null;
     last_sync_at: Date | null;
   }>(
-    `select id, email, display_name, accent_color, sync_status, sync_error, last_sync_at
+    `select id, accent_color, sync_status, sync_error, last_sync_at
        from connected_accounts
       where user_id = $1 and provider = 'google'
       order by "order", created_at`,
@@ -39,22 +37,25 @@ export async function listAccountsWithCalendars(userId: string): Promise<ApiAcco
     id: string;
     connected_account_id: string;
     provider_calendar_id: string;
-    name: string;
     color: string;
     is_primary: boolean;
     read_enabled: boolean;
   }>(
-    `select id, connected_account_id, provider_calendar_id, name, color, is_primary, read_enabled
+    `select id, connected_account_id, provider_calendar_id, color, is_primary, read_enabled
        from calendars
       where user_id = $1
-      order by is_primary desc, name`,
+      order by is_primary desc, created_at`,
     [userId],
+  );
+
+  const live = new Map(
+    await Promise.all(accounts.map(async (a) => [a.id, opts.live ? await liveAccount(a.id) : null] as const)),
   );
 
   return accounts.map((a) => ({
     id: a.id,
-    email: a.email,
-    displayName: a.display_name,
+    email: live.get(a.id)?.email ?? 'Google account',
+    displayName: live.get(a.id)?.name ?? '',
     accentColor: a.accent_color,
     syncStatus: a.sync_status,
     syncError: a.sync_error,
@@ -64,12 +65,30 @@ export async function listAccountsWithCalendars(userId: string): Promise<ApiAcco
       .map((c) => ({
         id: c.id,
         providerCalendarId: c.provider_calendar_id,
-        name: c.name,
+        name: live.get(a.id)?.calendars.get(c.provider_calendar_id) ?? 'Calendar',
         color: c.color,
         isPrimary: c.is_primary,
         readEnabled: c.read_enabled,
       })),
   }));
+}
+
+/** Email, name and calendar names straight from Google; null when Google can't answer. */
+async function liveAccount(
+  accountId: string,
+): Promise<{ email: string; name: string; calendars: Map<string, string> } | null> {
+  try {
+    const token = await getValidAccessToken(accountId);
+    const [me, cals] = await Promise.all([userInfo(token), listCalendars(token)]);
+    return {
+      email: me.email,
+      name: me.name,
+      calendars: new Map(cals.map((c) => [c.id, c.summaryOverride || c.summary || c.id])),
+    };
+  } catch (err) {
+    console.warn(`[accounts] live info for ${accountId}:`, err instanceof Error ? err.message : err);
+    return null;
+  }
 }
 
 export async function accountBelongsTo(userId: string, accountId: string): Promise<boolean> {

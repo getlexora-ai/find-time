@@ -31,27 +31,10 @@ function bearer(req: Request): string | null {
 // One DB round trip per user per process, not per request.
 const ensured = new Set<string>();
 
+/** The `users` row is the Clerk id and nothing else: name and email stay in Clerk. */
 async function ensureUser(userId: string): Promise<void> {
   if (ensured.has(userId)) return;
-  let email = '';
-  let name = '';
-  try {
-    const u = await clerkClient.users.getUser(userId);
-    email =
-      u.emailAddresses.find((e) => e.id === u.primaryEmailAddressId)?.emailAddress ??
-      u.emailAddresses[0]?.emailAddress ??
-      '';
-    name = [u.firstName, u.lastName].filter(Boolean).join(' ');
-  } catch (err) {
-    // A network blip talking to Clerk shouldn't 500 the whole request — the row
-    // just gets an empty email/name and is corrected on the next call.
-    console.error('ensureUser: clerk getUser failed', err);
-  }
-  await query(
-    `insert into users (id, email, name) values ($1, $2, $3)
-     on conflict (id) do update set email = excluded.email, name = excluded.name`,
-    [userId, email, name],
-  );
+  await query(`insert into users (id) values ($1) on conflict (id) do nothing`, [userId]);
   ensured.add(userId);
 }
 

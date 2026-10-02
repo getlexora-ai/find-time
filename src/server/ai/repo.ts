@@ -422,25 +422,18 @@ export async function saveProposals(
   horizon: { startISO: string; endISO: string },
   proposals: ProposalInput[],
 ): Promise<StoredProposal[]> {
-  const draftId = id('drf');
   const stored: StoredProposal[] = proposals.map((p) => ({ ...p, id: id('sug') }));
 
   await tx(async (c) => {
-    await c.query(
-      `insert into plan_drafts (id, user_id, session_id, horizon_start, horizon_end, change_count)
-       values ($1,$2,$3,$4,$5,$6)`,
-      [draftId, userId, sessionId, horizon.startISO, horizon.endISO, stored.length],
-    );
     for (let i = 0; i < stored.length; i++) {
       const p = stored[i];
       await c.query(
         `insert into ai_suggestions
-           (id, draft_id, user_id, "index", kind, title, category, proposed_start, proposed_end,
+           (id, user_id, "index", kind, title, category, proposed_start, proposed_end,
             rationale, confidence, score, features, alternatives, task_id, event_id, habit_id)
-         values ($1,$2,$3,$4,'create',$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13::jsonb,$14,$15,$16)`,
+         values ($1,$2,$3,'create',$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12::jsonb,$13,$14,$15)`,
         [
           p.id,
-          draftId,
           userId,
           i,
           p.title,
@@ -458,7 +451,6 @@ export async function saveProposals(
         ],
       );
     }
-    await c.query(`update ai_sessions set active_draft_batch_id = $2 where id = $1`, [sessionId, draftId]);
   });
 
   return stored;

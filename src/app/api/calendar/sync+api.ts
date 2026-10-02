@@ -33,7 +33,7 @@ export async function POST(request: Request): Promise<Response> {
       deleted += r.deleted;
       synced++;
     } catch (err) {
-      errors.push({ account: a.email, error: err instanceof Error ? err.message : String(err) });
+      errors.push({ account: a.id, error: err instanceof Error ? err.message : String(err) });
     }
   }
 

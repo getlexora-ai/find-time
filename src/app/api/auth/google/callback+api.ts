@@ -32,31 +32,31 @@ export async function GET(request: Request): Promise<Response> {
   try {
     const tokens = await exchangeCode(code);
     if (!tokens.id_token) throw new Error('no id_token in token response');
-    const { email, name } = decodeIdToken(tokens.id_token);
+    // Google's opaque account id, not the email: no address is stored.
+    const { sub } = decodeIdToken(tokens.id_token);
 
     const accountId = await tx(async (c) => {
       // The mirror row is normally already there (requireUserId in /start). This
       // is just an FK backstop; it never overwrites the Clerk-sourced identity.
-      await c.query(
-        `insert into users (id, email, name) values ($1, $2, $3)
-         on conflict (id) do nothing`,
-        [ownerId, email, name],
-      );
+      await c.query(`insert into users (id) values ($1) on conflict (id) do nothing`, [ownerId]);
+      // ponytail: a row from before db/024 has no subject yet; the first
+      // reconnect adopts it. Assumes one Google account per user, true today.
       const existing = await c.query<{ id: string }>(
         `select id from connected_accounts
-           where user_id = $1 and provider = 'google' and lower(email) = lower($2)`,
-        [ownerId, email],
+           where user_id = $1 and provider = 'google' and (provider_subject = $2 or provider_subject is null)
+           order by provider_subject nulls last limit 1`,
+        [ownerId, sub],
       );
       const id = existing.rows[0]?.id ?? `acct_${randomUUID()}`;
       await c.query(
         `insert into connected_accounts
-           (id, user_id, provider, kind, auth_type, email, display_name, scopes, sync_status)
-         values ($1, $2, 'google', 'calendar', 'oauth', $3, $4, $5, 'idle')
+           (id, user_id, provider, kind, auth_type, provider_subject, scopes, sync_status)
+         values ($1, $2, 'google', 'calendar', 'oauth', $3, $4, 'idle')
          on conflict (id) do update set
-           display_name = excluded.display_name,
+           provider_subject = excluded.provider_subject,
            scopes = excluded.scopes,
            sync_error = null`,
-        [id, ownerId, email, name, tokens.scope?.split(' ') ?? SCOPES],
+        [id, ownerId, sub, tokens.scope?.split(' ') ?? SCOPES],
       );
       return id;
     });

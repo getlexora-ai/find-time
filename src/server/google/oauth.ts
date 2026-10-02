@@ -118,7 +118,7 @@ function refresh(refreshToken: string): Promise<TokenResponse> {
  * authenticated with our client secret, so the payload is trusted without a
  * signature check (the standard carve-out for the direct code-exchange flow).
  */
-export function decodeIdToken(jwt: string): { sub: string; email: string; name: string } {
+export function decodeIdToken(jwt: string): { sub: string } {
   const [, payload] = jwt.split('.');
   if (!payload) throw new Error('malformed id_token');
   const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as {
@@ -127,8 +127,18 @@ export function decodeIdToken(jwt: string): { sub: string; email: string; name: 
     name?: string;
     given_name?: string;
   };
-  if (!claims.sub || !claims.email) throw new Error('id_token missing sub/email');
-  return { sub: claims.sub, email: claims.email, name: claims.name ?? claims.given_name ?? '' };
+  if (!claims.sub) throw new Error('id_token missing sub');
+  return { sub: claims.sub };
+}
+
+/** The account's email and name, read live — never stored (accounts-repo.ts). */
+export async function userInfo(accessToken: string): Promise<{ email: string; name: string }> {
+  const res = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error(`userinfo ${res.status}`);
+  const u = (await res.json()) as { email?: string; name?: string; given_name?: string };
+  return { email: u.email ?? '', name: u.name ?? u.given_name ?? '' };
 }
 
 export async function storeTokens(
