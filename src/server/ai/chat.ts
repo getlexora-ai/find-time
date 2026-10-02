@@ -50,6 +50,12 @@ export const TOOL_PLAN_WEEK = 'plan_week';
 export const TOOL_LIST_TASKS = 'list_tasks';
 export const TOOL_TASK_DONE = 'task_done';
 export const TOOL_TASK_UPDATE = 'update_task';
+/** Rule-read only: a task may not start before a date ("postpone the report a week"). */
+export const TOOL_POSTPONE = 'postpone_task';
+/** Rule-read only: habits ("gym 3× a week") and travel time, planned by plan-week.ts. */
+export const TOOL_ADD_HABIT = 'add_habit';
+export const TOOL_HABIT_UPDATE = 'update_habit';
+export const TOOL_TRAVEL = 'set_travel';
 
 const CATS = [...CATEGORIES];
 

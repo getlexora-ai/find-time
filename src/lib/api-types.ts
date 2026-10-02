@@ -39,6 +39,8 @@ export type ApiEvent = {
   seriesId?: string | null;
   /** the task this block is a session of ("plan my week") */
   taskId?: string | null;
+  /** the habit this block is a session of ("gym 3× a week") */
+  habitId?: string | null;
 };
 
 export type EventInput = {
@@ -124,6 +126,8 @@ export type ChatProposal = {
   alternatives: { startISO: string; endISO: string }[];
   /** "plan my week": the task this block is a session of */
   taskId?: string;
+  /** "plan my week": the habit this block is a session of */
+  habitId?: string;
 };
 
 /** A backlog task (db/002 `tasks`) — what "plan my week" places. */
@@ -136,6 +140,8 @@ export type ApiTask = {
   /** exclusive instant: midnight after the due day */
   dueBy: string | null;
   preferBy: string | null;
+  /** inclusive instant: no session starts before it (a start date, or a postpone) */
+  notBefore: string | null;
   priority: 'low' | 'medium' | 'high';
   preferredWindow: 'morning' | 'afternoon' | 'evening' | null;
   splittable: boolean;
@@ -143,6 +149,30 @@ export type ApiTask = {
   category: string;
   completedAt: string | null;
 };
+
+/** A weekly rhythm (db/020 `habits`) — "gym 3× a week", planned ahead per week. */
+export type ApiHabit = {
+  id: string;
+  title: string;
+  category: string;
+  durationMin: number;
+  /** sessions per calendar week, 1–7 */
+  perWeek: number;
+  preferredWindow: 'morning' | 'afternoon' | 'evening' | null;
+};
+
+/** GET /api/tasks — the open backlog and the habits, for the Tasks screen. */
+export type TasksResponse = { tasks: ApiTask[]; habits: ApiHabit[] };
+
+/** PATCH /api/tasks/[id] — one action per request. */
+export type TaskPatch =
+  | { done: true }
+  | { postpone: '1h' | '3h' | 'tomorrow' | 'next-week' }
+  /** null clears a not-before: "start any time" */
+  | { notBefore: string | null };
+
+/** PATCH /api/tasks/[id] and /api/habits/[id] — what changed, and how many blocks came off the calendar. */
+export type TaskActionResponse = { task?: ApiTask | null; cleared: number };
 
 /** Why a proposal was turned down. An unlabelled rejection teaches nothing. */
 export type RejectReason =

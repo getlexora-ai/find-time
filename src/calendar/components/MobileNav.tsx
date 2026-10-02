@@ -13,13 +13,14 @@ const BLUR = Platform.select({
   default: undefined,
 });
 
-/** Phone bottom bar: the two views, New, Ask, and Insights. "Show" is in the top bar. */
+/** Phone bottom bar: the two views, New, Ask, Tasks and Insights. "Show" is in the top bar. */
 export function MobileNav({
   view,
   page,
   onSetView,
   onCompose,
   onOpenAI,
+  onTasks,
   onInsights,
 }: {
   view: ViewKind;
@@ -27,6 +28,7 @@ export function MobileNav({
   onSetView: (v: ViewKind) => void;
   onCompose: () => void;
   onOpenAI: () => void;
+  onTasks: () => void;
   onInsights: () => void;
 }) {
   const planner = page === 'planner';
@@ -57,7 +59,8 @@ export function MobileNav({
           </View>
         </Press>
         {item('Ask', 'magic', onOpenAI)}
-        {item('Insights', 'chart', onInsights, !planner, 'tab')}
+        {item('Tasks', 'check', onTasks, page === 'tasks', 'tab')}
+        {item('Insights', 'chart', onInsights, page === 'insights', 'tab')}
       </View>
     </View>
   );

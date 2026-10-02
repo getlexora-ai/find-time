@@ -13,6 +13,7 @@ import { EventDetail } from './components/EventDetail';
 import { EventList } from './components/EventList';
 import { FilterSheet } from './components/FilterSheet';
 import { Insights } from './components/Insights';
+import { Tasks } from './components/Tasks';
 import { MobileNav, NAV_H } from './components/MobileNav';
 import { PickerSheet } from './components/PickerSheet';
 import { QuickCreate } from './components/QuickCreate';
@@ -223,7 +224,10 @@ export function CalendarScreen() {
     () => events.filter((e) => e.kind === 'ai' && days.includes(e.date)),
     [events, days],
   );
-  const [page, setPage] = useState<Page>(() => (urlParam('page') === 'insights' ? 'insights' : 'planner'));
+  const [page, setPage] = useState<Page>(() => {
+    const p = urlParam('page');
+    return p === 'insights' || p === 'tasks' ? p : 'planner';
+  });
 
   /* ── web keyboard ── */
   // The docked AI panel is part of the page on desktop: arrows and T still work beside it.
@@ -256,6 +260,7 @@ export function CalendarScreen() {
         actions.setView('day');
       }
       if (k === 'i') setPage((p) => (p === 'insights' ? 'planner' : 'insights'));
+      if (k === 'k') setPage((p) => (p === 'tasks' ? 'planner' : 'tasks'));
       if (k === 't') actions.goToday();
       if (k === 'n') {
         e.preventDefault();
@@ -336,7 +341,9 @@ export function CalendarScreen() {
                 </Press>
               </View>
             )}
-            {page === 'insights' ? (
+            {page === 'tasks' ? (
+              <Tasks actions={actions} toast={toast} />
+            ) : page === 'insights' ? (
               <Insights
                 k={kpis}
                 events={events}
@@ -384,6 +391,7 @@ export function CalendarScreen() {
           }}
           onCompose={() => actions.openCompose(null)}
           onOpenAI={() => actions.openAI()}
+          onTasks={() => setPage('tasks')}
           onInsights={() => setPage('insights')}
         />
       )}

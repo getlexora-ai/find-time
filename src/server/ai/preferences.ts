@@ -132,6 +132,8 @@ export type AgentProfile = {
   defaultBufferMin: number;
   minFocusBlockMin: number;
   maxDailyFocusMin: number;
+  /** minutes kept free before and after an in-person event when planning; 0 = off */
+  travelMin: number;
   rules: HardRule[];
   learned: LearnedPref[];
 };
@@ -166,6 +168,7 @@ export function defaultProfile(): AgentProfile {
     defaultBufferMin: 10,
     minFocusBlockMin: 45,
     maxDailyFocusMin: 240,
+    travelMin: 0,
     rules: [],
     learned: [],
   };

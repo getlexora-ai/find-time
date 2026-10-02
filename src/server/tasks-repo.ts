@@ -19,6 +19,7 @@ type Row = {
   duration_min: number;
   due_by: Date | null;
   prefer_by: Date | null;
+  not_before: Date | null;
   priority: string;
   preferred_window: string | null;
   splittable: boolean;
@@ -27,7 +28,7 @@ type Row = {
   completed_at: Date | null;
 };
 
-const COLS = `id, title, status, duration_min, due_by, prefer_by, priority, preferred_window,
+const COLS = `id, title, status, duration_min, due_by, prefer_by, not_before, priority, preferred_window,
               splittable, min_chunk_min, category, completed_at`;
 
 /** Statuses still waiting for time. */
@@ -41,6 +42,7 @@ function toApi(r: Row): ApiTask {
     durationMin: r.duration_min,
     dueBy: r.due_by ? r.due_by.toISOString() : null,
     preferBy: r.prefer_by ? r.prefer_by.toISOString() : null,
+    notBefore: r.not_before ? r.not_before.toISOString() : null,
     priority: r.priority as ApiTask['priority'],
     preferredWindow: (r.preferred_window as ApiTask['preferredWindow']) ?? null,
     splittable: r.splittable,
@@ -60,11 +62,18 @@ export async function listOpenTasks(userId: string): Promise<ApiTask[]> {
   return rows.map(toApi);
 }
 
+/** One task by id, any status, or null. */
+export async function getTask(userId: string, id: string): Promise<ApiTask | null> {
+  const row = await queryOne<Row>(`select ${COLS} from tasks where id = $1 and user_id = $2`, [id, userId]);
+  return row ? toApi(row) : null;
+}
+
 export type TaskInput = {
   title: string;
   durationMin: number;
   dueBy?: string | null;
   preferBy?: string | null;
+  notBefore?: string | null;
   priority?: ApiTask['priority'];
   preferredWindow?: ApiTask['preferredWindow'];
   splittable?: boolean;
@@ -76,8 +85,8 @@ export async function createTask(userId: string, input: TaskInput): Promise<ApiT
   const row = await queryOne<Row>(
     `insert into tasks
        (id, user_id, title, duration_min, due_by, prefer_by, priority, preferred_window,
-        splittable, min_chunk_min, category)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+        splittable, min_chunk_min, category, not_before)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
      returning ${COLS}`,
     [
       `tsk_${randomUUID()}`,
@@ -91,6 +100,7 @@ export async function createTask(userId: string, input: TaskInput): Promise<ApiT
       input.splittable ?? false,
       input.minChunkMin ?? 30,
       input.category ?? 'deep-work',
+      input.notBefore ?? null,
     ],
   );
   return toApi(row!);
@@ -101,6 +111,7 @@ const PATCHABLE: Record<string, string> = {
   durationMin: 'duration_min',
   dueBy: 'due_by',
   preferBy: 'prefer_by',
+  notBefore: 'not_before',
   priority: 'priority',
   preferredWindow: 'preferred_window',
   splittable: 'splittable',
@@ -180,12 +191,16 @@ export async function linkBlockToTask(
   return row.id;
 }
 
-/** Future, undone blocks of a task — what to clear when the task is finished. */
-export async function futureBlockIds(userId: string, taskId: string, nowISO: string): Promise<string[]> {
+/**
+ * Future, undone blocks of a task — what to clear when the task is finished,
+ * or (with `beforeISO`) the ones a postpone leaves too early.
+ */
+export async function futureBlockIds(userId: string, taskId: string, nowISO: string, beforeISO?: string): Promise<string[]> {
   const rows = await query<{ id: string }>(
     `select id from calendar_events
-      where user_id = $1 and task_id = $2 and deleted_at is null and start_at >= $3 and origin = 'ai'`,
-    [userId, taskId, nowISO],
+      where user_id = $1 and task_id = $2 and deleted_at is null and start_at >= $3 and origin = 'ai'
+        and ($4::timestamptz is null or start_at < $4)`,
+    [userId, taskId, nowISO, beforeISO ?? null],
   );
   return rows.map((r) => r.id);
 }

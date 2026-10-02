@@ -22,6 +22,8 @@ Calendar-specific design: [../docs/db/calendar-schema.md](../docs/db/calendar-sc
 | `016_training_capture.sql` | `ai_turns`, `ai_choice_occasions`, `ai_choice_candidates`, `ai_corrections`. Records every model call and every placement decision as a choice set, so the factors behind a correction can be measured — see [../docs/training-capture.md](../docs/training-capture.md) |
 | `017_reported_replies.sql` | allows `ai_corrections.source = 'report'` — a user flagging an agent reply from the chat panel (`/api/ai/report`). See [../docs/training-capture.md](../docs/training-capture.md) §5 |
 | `018_time_off_turns.sql` | allows `ai_turns.action = 'time_off'` — the chat agent blocking out time away (`block_time_off`) |
+| `019_calendar_v2.sql` | free/busy, RSVP, video link, guests, done on `calendar_events`; series → instances sync; calendar settings on `scheduler_profiles` |
+| `020_planning_v2.sql` | `tasks.not_before`; `habits`; `habit_id` on `calendar_events` and `ai_suggestions`; `item_type = 'away'`; `scheduler_profiles.travel_min`. "Plan my week" v2 — see [../docs/planning-agent-plan.md](../docs/planning-agent-plan.md) §8 |
 | `schema.sql` | **generated** — `001`–`007` + `001_waitlist` (incl. the `014` columns) concatenated; what a fresh DB gets. **Run `010` and `013` after it.** |
 
 Each file is idempotent (`create table if not exists`, `do $$ … exception when duplicate_object`), so re-running one is safe.

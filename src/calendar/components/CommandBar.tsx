@@ -28,6 +28,7 @@ function underTarget(e: GestureResponderEvent, alignRight?: number) {
 
 const PAGES: { key: Page; label: string }[] = [
   { key: 'planner', label: 'Planner' },
+  { key: 'tasks', label: 'Tasks' },
   { key: 'insights', label: 'Insights' },
 ];
 
@@ -39,11 +40,12 @@ const VIEWS: { key: ViewKind; label: string }[] = [
 /**
  * Two rows, each with one job (quiet calendar, 2026-10-01).
  *
- *   app bar   mark · Planner | Insights ·········· Plan with AI · account
+ *   app bar   mark · Planner | Tasks | Insights ·· Plan with AI · account
  *   toolbar   October 2026 ‹ › Today ············· Week | Day · New · Show
  *
  * The numbers live on Insights, not over the grid. On a phone it is one row:
- * mark, the period (opens the date picker), ‹ ›, Show, account.
+ * mark, the period (opens the date picker), ‹ ›, Show, account. Tasks is not
+ * about a date, so it has no toolbar and, on a phone, just its name.
  */
 export function CommandBar({
   state,
@@ -74,6 +76,21 @@ export function CommandBar({
   const failed = accounts.some((a) => a.syncStatus === 'error');
   const prevLabel = state.view === 'week' ? 'Previous week' : 'Previous day';
   const nextLabel = state.view === 'week' ? 'Next week' : 'Next day';
+
+  if (!isDesktop && page === 'tasks') {
+    return (
+      <View style={[styles.bar, styles.barPhone]}>
+        <View style={[styles.mark, SHADOW.sm]}>
+          <Logo size={16} color={N.onInk} />
+        </View>
+        <Txt style={[styles.period, styles.periodPhone, styles.phoneName]} numberOfLines={1}>
+          Tasks
+        </Txt>
+        <View style={styles.spacer} />
+        <AccountButton />
+      </View>
+    );
+  }
 
   if (!isDesktop) {
     return (
@@ -199,11 +216,11 @@ export function CommandBar({
   );
 
   if (part === 'app') return appBar;
-  if (part === 'tools') return toolbar;
+  if (part === 'tools') return page === 'tasks' ? null : toolbar;
   return (
     <View>
       {appBar}
-      {toolbar}
+      {page !== 'tasks' && toolbar}
     </View>
   );
 }
@@ -237,6 +254,7 @@ const styles = StyleSheet.create({
   periodBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 6, height: 36, borderRadius: R.md, minWidth: 0, flexShrink: 1 },
   period: { fontFamily: SANS, ...T.period, color: N.ink },
   periodPhone: { fontSize: 17, lineHeight: 22 },
+  phoneName: { paddingHorizontal: 6 },
   navGroup: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   navBtn: { width: 34, height: 34 },
   today: { height: 32, marginLeft: 6 },

@@ -7,7 +7,8 @@ import { startPreviewChat } from '@/calendar/agent-store';
 import { startPreview } from '@/calendar/cal-store';
 import { CalendarScreen } from '@/calendar/CalendarScreen';
 import { ToastProvider } from '@/calendar/components/Toast';
-import { previewAccounts, previewChat, previewEvents } from '@/calendar/preview/fixture';
+import { previewAccounts, previewChat, previewEvents, previewTaskData } from '@/calendar/preview/fixture';
+import { previewTasks } from '@/calendar/tasks-store';
 import { useMounted } from '@/design/useMounted';
 
 /**
@@ -24,6 +25,8 @@ export default function Preview() {
     startPreview(previewEvents());
     setPreviewAccounts(previewAccounts());
     startPreviewChat(previewChat());
+    const t = previewTaskData();
+    previewTasks(t.tasks, t.habits);
     return true;
   });
 

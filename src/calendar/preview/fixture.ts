@@ -1,5 +1,5 @@
 import { AGENT_TOOLS } from '@/lib/agent-tools';
-import type { ApiAccount, ChatMessage, ToolUi } from '@/lib/api-types';
+import type { ApiAccount, ApiHabit, ApiTask, ChatMessage, ToolUi } from '@/lib/api-types';
 
 import { addDays, iso, startOfWeek, today } from '../cal-date';
 import type { CalEvent } from '../types';
@@ -169,5 +169,22 @@ export function previewChat(): { history: ChatMessage[]; reply: (text: string) =
         { tool: 'ask', label: 'Needs a length first', detail: 'I never guess a time' },
       ],
     }),
+  };
+}
+
+/** The Tasks page: a backlog with a deadline, one on hold, one already planned, and two habits. */
+export function previewTaskData(): { tasks: ApiTask[]; habits: ApiHabit[] } {
+  const day = (n: number) => `${iso(addDays(today(), n))}T00:00:00.000Z`;
+  const base = { preferBy: null, notBefore: null, priority: 'medium', preferredWindow: null, splittable: false, minChunkMin: 30, category: 'deep-work', completedAt: null } as const;
+  return {
+    tasks: [
+      { ...base, id: 't1', title: 'Write the quarterly report', status: 'scheduled', durationMin: 300, dueBy: day(3), splittable: true },
+      { ...base, id: 't2', title: 'Tax return', status: 'backlog', durationMin: 180, dueBy: day(20), notBefore: day(7), category: 'admin' },
+      { ...base, id: 't3', title: 'Review the onboarding flow', status: 'backlog', durationMin: 90, dueBy: null, priority: 'high', category: 'design' },
+    ],
+    habits: [
+      { id: 'h1', title: 'Gym', category: 'personal', durationMin: 60, perWeek: 3, preferredWindow: 'morning' },
+      { id: 'h2', title: 'Read papers', category: 'research', durationMin: 45, perWeek: 2, preferredWindow: null },
+    ],
   };
 }

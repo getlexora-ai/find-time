@@ -38,12 +38,16 @@ import {
   TOOL_TASK_DONE,
   TOOL_TASK_UPDATE,
   TOOL_TIME_OFF,
+  TOOL_ADD_HABIT,
+  TOOL_HABIT_UPDATE,
+  TOOL_POSTPONE,
+  TOOL_TRAVEL,
 } from './chat.ts';
 import { durationOptions } from './clarify.ts';
 import { ambiguousTime } from './place-at.ts';
 
 /** Stamped on every logged turn in place of the old prompt version. Bump on any behaviour change. */
-export const PARSER_VERSION = 'r2';
+export const PARSER_VERSION = 'r3';
 /** What `ai_turns.model_id` records for a turn read by this module. */
 export const PARSER_ID = 'rules';
 
@@ -60,13 +64,25 @@ export type TaskDraft = {
   priority: 'low' | 'medium' | 'high';
   splittable?: boolean;
   preferredWindow?: 'morning' | 'afternoon' | 'evening';
+  /** inclusive: no session before this instant */
+  notBeforeISO?: string;
 };
 
 export type Draft = {
-  tool: typeof TOOL_PROPOSE | typeof TOOL_PLACE_AT | typeof TOOL_TIME_OFF | typeof TOOL_DELETE | typeof TOOL_ADD_TASK;
+  tool:
+    | typeof TOOL_PROPOSE
+    | typeof TOOL_PLACE_AT
+    | typeof TOOL_TIME_OFF
+    | typeof TOOL_DELETE
+    | typeof TOOL_ADD_TASK
+    | typeof TOOL_ADD_HABIT
+    | typeof TOOL_POSTPONE
+    | typeof TOOL_TRAVEL;
   /** add_task: the task so far */
   task?: TaskDraft;
-  /** delete: the title words to match ('' = every block in the range) */
+  /** add_habit: the habit so far */
+  habit?: HabitDraft;
+  /** delete: the title words to match ('' = every block in the range); postpone: the task's title */
   match?: string;
   /** delete: the exact blocks listed in the question, set by the route; a yes deletes these and only these */
   deleteIds?: string[];
@@ -112,6 +128,8 @@ export type UnderstandContext = {
   lastProposals: { startISO: string; reason?: string }[];
   /** titles of the user's open tasks, so "report due Monday" is read as a task change */
   taskTitles?: string[];
+  /** titles of the user's habits, so "gym 2x a week" changes the one they have */
+  habitTitles?: string[];
 };
 
 /* ───────────────────────── vocabulary ───────────────────────── */
@@ -303,7 +321,7 @@ class Scan {
 
 const rx = (src: string) => new RegExp(src, 'i');
 
-function readFacets(text: string, nowMs: number): Facets {
+export function readFacets(text: string, nowMs: number): Facets {
   const today = dayStart(nowMs);
   const sc = new Scan(text);
   const f: Facets = { exclude: [], rest: '' };
@@ -760,18 +778,21 @@ function dueFrom(phrase: string, nowMs: number): number | null {
 function addTask(t: TaskDraft, durationMin: number, today: number): Understood {
   const splittable = t.splittable ?? durationMin > 120;
   const due = t.dueByISO ? `due ${dayLabel(Date.parse(t.dueByISO) - DAY, today)}` : 'no due date';
+  const from = t.notBeforeISO ? `not before ${dayLabel(dayStart(Date.parse(t.notBeforeISO)), today)}` : '';
   return {
     name: TOOL_ADD_TASK,
     args: { ...t, durationMin, splittable, reply: '' },
     draft: null,
-    summary: [t.title, hoursLabel(durationMin), due, t.priority !== 'medium' ? `${t.priority} priority` : '', splittable ? 'can split' : '']
+    summary: [t.title, hoursLabel(durationMin), due, from, t.priority !== 'medium' ? `${t.priority} priority` : '', splittable ? 'can split' : '']
       .filter(Boolean)
       .join(' · '),
   };
 }
 
 function readAddTask(body: string, nowMs: number, today: number): Understood {
-  let s = body;
+  // "not before the 20th" first, so its date is not read as the due date.
+  const nb = takeNotBefore(body, nowMs);
+  let s = nb.body;
   const take = (re: RegExp) => {
     const hit = re.test(s);
     if (hit) s = s.replace(re, ' ');
@@ -796,6 +817,7 @@ function readAddTask(body: string, nowMs: number, today: number): Understood {
   const category = categoryOf(title.toLowerCase());
   const t: TaskDraft = { title, category, priority };
   if (f.when) t.dueByISO = iso(f.when.to);
+  if (nb.at !== null) t.notBeforeISO = iso(nb.at);
   if (splittable !== undefined) t.splittable = splittable;
   if (f.part) t.preferredWindow = f.part.from < 12 ? 'morning' : f.part.from < 17 ? 'afternoon' : 'evening';
 
@@ -864,6 +886,268 @@ function readTaskTurn(raw: string, ctx: UnderstandContext, nowMs: number, today:
   return null;
 }
 
+/* ─────────────────── habits, postpone, travel ─────────────────── */
+
+const TIMES: Record<string, number> = { once: 1, one: 1, twice: 2, two: 2, thrice: 3, three: 3, four: 4, five: 5, six: 6, seven: 7 };
+/** "3x a week", "three times per week", "twice a week" — and, after "habit:", "every day" / "every weekday". */
+const PER_WEEK =
+  /\b(?:(once|twice|thrice)|([1-7]|one|two|three|four|five|six|seven)\s*(?:x|×|times?))\s*(?:a|per|each|every|in\s+a)\s+week\b/i;
+const EVERY_DAY = /\b(?:every\s*day|daily|each\s+day)\b/i;
+const EVERY_WEEKDAY = /\b(?:every\s+(?:week|work)\s*day|each\s+(?:week|work)\s*day|on\s+weekdays|weekdays)\b/i;
+
+function perWeekOf(s: string, prefixed: boolean): { n: number; hit: RegExp } | null {
+  const m = PER_WEEK.exec(s);
+  if (m) {
+    const w = (m[1] ?? m[2]).toLowerCase();
+    return { n: TIMES[w] ?? Number(w), hit: PER_WEEK };
+  }
+  // Only a "habit:" line reads "every day" as a target; elsewhere it is a routine.
+  if (prefixed && EVERY_WEEKDAY.test(s)) return { n: 5, hit: EVERY_WEEKDAY };
+  if (prefixed && EVERY_DAY.test(s)) return { n: 7, hit: EVERY_DAY };
+  return null;
+}
+
+const ADD_HABIT = /^\s*(?:please\s+)?(?:(?:add|new|create|start|set\s+up)\s+(?:a\s+)?habit\b|habit\s*:)\s*[:\-–]?\s*(.*)$/i;
+/** "I want to go to the gym 3 times a week" — the lead-in is not part of the title. */
+const HABIT_LEAD =
+  /^\s*(?:i\s+(?:want|would\s+like|'d\s+like|need|have|plan|try|aim|like)\s+to\s+|i\s+(?:should|must)\s+|let\s+me\s+|help\s+me\s+|(?:find|make|block)\s+(?:time|room)\s+(?:for|to)\s+|(?:put|plan|schedule|book)\s+(?:in\s+)?)?(?:go\s+(?:to\s+(?:the\s+)?)?|do\s+(?:some\s+)?|get\s+(?:in\s+)?(?:a\s+|some\s+)?|hit\s+the\s+)?/i;
+/** "stop the gym habit", "drop gym", "no more running". Delete/remove/cancel only with the word habit — "delete gym tomorrow" is about blocks. */
+const HABIT_STOP =
+  /^\s*(?:please\s+)?(?:(?:stop|drop|quit|pause|end|no\s+more)\s+(?:the\s+|my\s+)?(?:habit\s*:?\s*)?(.+?)(?:\s+habit)?|(?:delete|remove|cancel)\s+(?:the\s+|my\s+)?(?:habit\s*:?\s*(.+?)|(.+?)\s+habit))\s*[.!]*$/i;
+const HABITS_LIST = /^\s*(?:(?:show|list|what\s+are)\s+)?(?:me\s+)?(?:my\s+|the\s+)?habits\s*[?.!]*$/i;
+
+export type HabitDraft = {
+  title: string;
+  category: string;
+  perWeek?: number;
+  durationMin?: number;
+  preferredWindow?: 'morning' | 'afternoon' | 'evening';
+};
+
+const WINDOW_OF = (from: number) => (from < 12 ? 'morning' : from < 17 ? 'afternoon' : 'evening') as HabitDraft['preferredWindow'];
+
+function habitTurn(h: HabitDraft): Understood {
+  if (!h.perWeek) {
+    return ask(`How many times a week for ${h.title}?`, ['2x a week', '3x a week', '4x a week', 'Every weekday'], { tool: TOOL_ADD_HABIT, habit: h }, `habit · ${h.title} · how often missing`);
+  }
+  if (!h.durationMin) {
+    return ask(`How long is each ${h.title} session?`, durationOptions(h.category), { tool: TOOL_ADD_HABIT, habit: h }, `habit · ${h.title} · length missing`);
+  }
+  return {
+    name: TOOL_ADD_HABIT,
+    args: { ...h, reply: '' },
+    draft: null,
+    summary: [h.title, `${h.perWeek}x a week`, hoursLabel(h.durationMin), h.preferredWindow ?? ''].filter(Boolean).join(' · '),
+  };
+}
+
+/** "gym 3x a week, 1h, mornings" → a habit, asking for whatever is missing. */
+function readHabit(body: string, nowMs: number, prefixed: boolean): Understood {
+  const per = perWeekOf(body, prefixed);
+  const s = per ? body.replace(per.hit, ' ') : body;
+  const f = readFacets(s.replace(HABIT_LEAD, ''), nowMs);
+  const title = titleFrom(f.rest);
+  if (!title) return answer('What\'s the habit? For example: "Habit: gym 3x a week, 1h, mornings".', null);
+  const h: HabitDraft = { title, category: categoryOf(title.toLowerCase()) };
+  if (per) h.perWeek = per.n;
+  if (f.durationMin) h.durationMin = f.durationMin;
+  if (f.part) h.preferredWindow = WINDOW_OF(f.part.from);
+  return habitTurn(h);
+}
+
+/** The habit a phrase names, like matchTask. */
+const matchHabit = matchTask;
+
+/** "until Monday", "a week", "3 hours", "next week" → the instant work may resume. Null when unreadable. */
+function notBeforeFrom(phrase: string, nowMs: number): number | null {
+  const p = phrase.trim().toLowerCase().replace(/[.!?]+$/, '');
+  if (!p) return null;
+  const n = (w: string) => (/^an?$|^one$/.test(w) ? 1 : TIMES[w] ?? Number(w));
+  const rel = /^(?:by\s+|for\s+|another\s+)?(an?|one|two|three|four|five|six|seven|\d+)\s*(h|hrs?|hours?|d|days?|w|wks?|weeks?)$/.exec(p);
+  if (rel) {
+    const k = n(rel[1]);
+    if (!Number.isFinite(k) || k <= 0) return null;
+    if (rel[2].startsWith('h')) return Math.ceil((nowMs + k * 60 * MIN) / (15 * MIN)) * 15 * MIN;
+    const days = rel[2].startsWith('w') ? 7 * k : k;
+    return dayStart(nowMs) + days * DAY;
+  }
+  const after = /^after\s+/.test(p);
+  const day = p.replace(/^(?:until|till|'?til|to|for|on|from|after|starting|start)\s+/, '');
+  // "until October": a month on its own starts on its first day ("after October": the first of the next).
+  const month = new RegExp(`^(?:the\\s+)?(?:start\\s+of\\s+|beginning\\s+of\\s+)?(${MON})\\w*$`, 'i').exec(day);
+  if (month) {
+    const mo = MONTHS.indexOf(month[1].toLowerCase().slice(0, 3));
+    const y = new Date(nowMs).getUTCFullYear();
+    // A month already over means next year's.
+    const year = Date.UTC(y, mo + 1, 1) <= nowMs ? y + 1 : y;
+    return after ? Date.UTC(year, mo + 1, 1) : Math.max(Date.UTC(year, mo, 1), dayStart(nowMs));
+  }
+  const f = readFacets(`on ${day}`, nowMs);
+  if (!f.when || f.rest.replace(/\bon\b/, '').trim()) return null;
+  return after ? f.when.to : f.when.from;
+}
+
+/** Split "the report a week" into the task it names and what follows. */
+function splitOnTitle(rest: string, titles: string[]): { title: string; tail: string } | null {
+  const low = rest.toLowerCase().replace(/^(?:the|my)\s+/, '');
+  const byLength = [...titles].sort((a, b) => b.length - a.length);
+  for (const t of byLength) {
+    if (low.startsWith(t.toLowerCase())) return { title: t, tail: low.slice(t.length).trim() };
+  }
+  // "quarterly report a week" for "Write the quarterly report": the longest prefix that names a task.
+  const words = low.split(/\s+/);
+  for (let i = words.length; i >= 1; i--) {
+    const hit = matchTask(words.slice(0, i).join(' '), titles);
+    if (hit) return { title: hit, tail: words.slice(i).join(' ') };
+  }
+  return null;
+}
+
+const POSTPONE = /^\s*(?:please\s+|can\s+you\s+|could\s+you\s+)?(?:postpone|push\s+back|push|snooze|defer|delay|put\s+off|bump)\s+(.+?)\s*[.!?]*$/i;
+const NOT_BEFORE =
+  /^\s*(?:the\s+|my\s+)?(.+?)\s+(?:can(?:'t|not)\s+start|shouldn't\s+start|(?:is\s+)?not|no\s+earlier)\s+(?:before|until|than)\s+(.+?)\s*[.!]*$/i;
+const DONT_START = /^\s*(?:don't|do\s+not)\s+start\s+(?:on\s+)?(?:the\s+|my\s+)?(.+?)\s+(?:until|before)\s+(.+?)\s*[.!]*$/i;
+const START_ON = /^\s*start\s+(?:on\s+)?(?:the\s+|my\s+)?(.+?)\s+((?:on|from|after)\s+.+?)\s*[.!]*$/i;
+const POSTPONE_OPTIONS = ['1 hour', '3 hours', 'Tomorrow', 'Next week'];
+
+function postponeTo(title: string, at: number, today: number): Understood {
+  const label = at % DAY === 0 ? dayLabel(at, today) : `${dayLabel(dayStart(at), today)} ${hhmm((at % DAY) / MIN)}`;
+  return {
+    name: TOOL_POSTPONE,
+    args: { match: title, notBeforeISO: iso(at), label, reply: '' },
+    draft: null,
+    summary: `${title} · not before ${label}`,
+  };
+}
+
+/** "Not before Monday" inside an add-task line, taken out so the date is not read as the due date. */
+const NB_PHRASE =
+  /\b(not\s+before|no\s+earlier\s+than|not\s+until|starting(?:\s+on|\s+from)?|start(?:ing)?\s+(?:on|from|after)|after)\s+([^,;]+?)(?=\s*(?:[,;]|$|\bdue\b|\bby\b))/i;
+
+function takeNotBefore(body: string, nowMs: number): { body: string; at: number | null } {
+  const m = NB_PHRASE.exec(body);
+  if (!m) return { body, at: null };
+  const at = notBeforeFrom(`${/^after/i.test(m[1]) ? 'after ' : ''}${m[2]}`, nowMs);
+  if (at === null || at <= nowMs) return { body, at: null };
+  return { body: body.slice(0, m.index) + ' ' + body.slice(m.index + m[0].length), at };
+}
+
+const TRAVEL_OFF =
+  /^\s*(?:please\s+)?(?:(?:no|turn\s+off|stop|remove|drop|disable)\s+(?:the\s+|my\s+|adding\s+)?travel(?:\s+time)?|(?:my\s+)?travel(?:\s+time)?\s+(?:off|none|0))\b/i;
+const TRAVEL_SET =
+  /^\s*(?:please\s+)?(?:(?:my\s+)?travel(?:\s+time)?\s*(?:takes|is|:|=|of|usually\s+takes)|(?:add|keep|leave|allow|plan|block|give\s+me|i\s+need)\s+(?:.+?\s+)?(?:for\s+)?travel(?:\s+time)?\b|(?:add|turn\s+on)\s+travel(?:\s+time)?)/i;
+const TRAVEL_OPTIONS = ['15 min', '30 min', '45 min', 'No travel time'];
+
+function travelTurn(minutes: number): Understood {
+  return {
+    name: TOOL_TRAVEL,
+    args: { minutes, reply: '' },
+    draft: null,
+    summary: minutes ? `travel · ${hoursLabel(minutes)} each way` : 'travel · off',
+  };
+}
+
+/** Habits, postponing, travel time — or null when the sentence is about something else. */
+function readPlanTurn(raw: string, ctx: UnderstandContext, nowMs: number, today: number): Understood | null {
+  const prev = ctx.previous;
+  const titles = ctx.taskTitles ?? [];
+  const habitTitles = ctx.habitTitles ?? [];
+
+  // Answers to this module's own questions.
+  if (prev?.tool === TOOL_ADD_HABIT && prev.habit) {
+    if (/^\s*(?:no|nope|cancel|never\s*mind|forget\s+it|stop)\b[\s.!]*$/i.test(raw)) return answer('Okay — no habit added.', null);
+    const per = perWeekOf(raw, true);
+    const f = readFacets(per ? raw.replace(per.hit, ' ') : raw, nowMs);
+    if ((per || f.durationMin) && !titleFrom(f.rest).replace(/^(?:A|Week|Times?)$/i, '')) {
+      return habitTurn({ ...prev.habit, ...(per ? { perWeek: per.n } : {}), ...(f.durationMin ? { durationMin: f.durationMin } : {}) });
+    }
+  }
+  if (prev?.tool === TOOL_POSTPONE && prev.match) {
+    const at = notBeforeFrom(raw, nowMs);
+    if (at !== null && at > nowMs) return postponeTo(prev.match, at, today);
+  }
+  if (prev?.tool === TOOL_TRAVEL) {
+    if (/^\s*(?:no(?:\s+travel(?:\s+time)?)?|none|off|0)\s*[.!]*$/i.test(raw)) return travelTurn(0);
+    const f = readFacets(raw, nowMs);
+    if (f.durationMin && f.durationMin <= 180) return travelTurn(f.durationMin);
+  }
+
+  // ── travel ──
+  if (TRAVEL_OFF.test(raw)) return travelTurn(0);
+  if (TRAVEL_SET.test(raw)) {
+    const f = readFacets(raw, nowMs);
+    if (f.durationMin && f.durationMin <= 180) return travelTurn(f.durationMin);
+    return ask('How long should I keep free before and after an in-person meeting?', TRAVEL_OPTIONS, { tool: TOOL_TRAVEL }, 'travel · minutes missing');
+  }
+
+  // ── habits ──
+  const addHabit = ADD_HABIT.exec(raw);
+  if (addHabit) return readHabit(addHabit[1], nowMs, true);
+  if (HABITS_LIST.test(raw)) return { name: TOOL_LIST_TASKS, args: { reply: '' }, draft: null, summary: 'list tasks and habits' };
+
+  const stop = HABIT_STOP.exec(raw);
+  const stopPhrase = stop ? (stop[1] ?? stop[2] ?? stop[3]).toLowerCase().trim() : '';
+  // Exactly the habit's name: "stop gym" yes, "stop gym on Friday" is something else.
+  const stopTitle = stop && habitTitles.find((t) => t.toLowerCase() === stopPhrase);
+  if (stopTitle) {
+    return { name: TOOL_HABIT_UPDATE, args: { match: stopTitle, stop: true, reply: '' }, draft: null, summary: `${stopTitle} · stop` };
+  }
+  const per = perWeekOf(raw, false);
+  if (per) {
+    // "gym 2x a week" about a habit they already have is a change, not a new one.
+    const f = readFacets(raw.replace(per.hit, ' ').replace(HABIT_LEAD, ''), nowMs);
+    const named = matchHabit(titleFrom(f.rest), habitTitles);
+    if (named) {
+      return {
+        name: TOOL_HABIT_UPDATE,
+        args: { match: named, perWeek: per.n, ...(f.durationMin ? { durationMin: f.durationMin } : {}), reply: '' },
+        draft: null,
+        summary: `${named} · ${per.n}x a week`,
+      };
+    }
+    return readHabit(raw, nowMs, false);
+  }
+  const takes = TASK_TAKES.exec(raw);
+  const takesHabit = takes && !matchTask(takes[1], titles) && matchHabit(takes[1], habitTitles);
+  if (takes && takesHabit) {
+    const f = readFacets(takes[2], nowMs);
+    if (f.durationMin) {
+      return {
+        name: TOOL_HABIT_UPDATE,
+        args: { match: takesHabit, durationMin: f.durationMin, reply: '' },
+        draft: null,
+        summary: `${takesHabit} · ${hoursLabel(f.durationMin)}`,
+      };
+    }
+  }
+
+  // ── postpone / not before ──
+  const pp = POSTPONE.exec(raw);
+  if (pp) {
+    const split = splitOnTitle(pp[1], titles);
+    if (split) {
+      if (!split.tail) {
+        return ask(`Until when should I hold off on ${split.title}?`, POSTPONE_OPTIONS, { tool: TOOL_POSTPONE, match: split.title }, `postpone · ${split.title} · until when missing`);
+      }
+      const at = notBeforeFrom(split.tail, nowMs);
+      if (at !== null && at > nowMs) return postponeTo(split.title, at, today);
+      return ask(`Until when should I hold off on ${split.title}?`, POSTPONE_OPTIONS, { tool: TOOL_POSTPONE, match: split.title }, `postpone · ${split.title} · "${split.tail}" unclear`);
+    }
+    if (/^\s*(?:please\s+)?postpone\b/i.test(raw)) {
+      return answer(`I can't find an open task in "${pp[1]}". Say "my tasks" to see them.`, null);
+    }
+  }
+  for (const re of [NOT_BEFORE, DONT_START, START_ON]) {
+    const m = re.exec(raw);
+    const title = m && matchTask(m[1], titles);
+    if (m && title) {
+      const at = notBeforeFrom(m[2], nowMs);
+      if (at !== null && at > nowMs) return postponeTo(title, at, today);
+    }
+  }
+  return null;
+}
+
 /* ───────────────────────── the turn ───────────────────────── */
 
 const HELP =
@@ -925,7 +1209,7 @@ export function understand(text: string, ctx: UnderstandContext): Understood {
   if (GREETING.test(raw)) return answer(HELP, prev);
   if (THANKS.test(raw)) return answer('Glad that works. Tap Add on anything you want to keep.', prev);
   // The backlog before anything else: "add task: work out why…" is not a "why?".
-  const taskTurn = readTaskTurn(raw, ctx, nowMs, today);
+  const taskTurn = readTaskTurn(raw, ctx, nowMs, today) ?? readPlanTurn(raw, ctx, nowMs, today);
   if (taskTurn) return taskTurn;
   if (/\bwhy\b/.test(low)) return answer(why(ctx.lastProposals, today), prev);
 

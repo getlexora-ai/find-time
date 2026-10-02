@@ -349,9 +349,35 @@ meeting or a moved deadline broke (the replacement retires the old block on
 accept), and treats past sessions as history, not progress. `verifyPlan` checks
 every plan independently and the route refuses to show one that fails. In chat:
 "add task: …", "plan my week" / "replan", "my tasks", "done with …", "split …",
-"… due …", "… takes …". **Not yet:** habits, travel, time away as its own
-entity, the repair pass (§8 step 4), trade-off options beyond one suggestion,
-a tasks screen in the app.
+"… due …", "… takes …".
+
+**Added 2026-10-02 (db/020):**
+- *Not before / postpone.* `tasks.not_before` is a hard lower bound, like the
+  deadline is an upper one. "Postpone the report a week", "push tax forms to
+  next week", "snooze X 3 hours", "X can't start before Monday", "don't start X
+  until November", and "…, not before 20 Oct" on a new task. A postpone clears
+  the task's earlier sessions at once and moves even pinned ones on re-plan
+  (it is the newer instruction). No "until when" → asked: 1 hour · 3 hours ·
+  Tomorrow · Next week.
+- *Habits* (`habits` table, `calendar_events.habit_id`): "Habit: gym 3x a week,
+  1h, mornings", "I want to go running twice a week for 45 minutes"; missing
+  how-often or length is asked. Placed before tasks, per Monday–Sunday week
+  (this week; next week too from Friday), one a day, avoiding the day either
+  side of another session. Past sessions this week count toward the target.
+  "gym 2x a week", "gym takes 45 min", "stop gym".
+- *Time away* is its own item type (`item_type = 'away'`, written by "I'm away
+  …"); imported all-day busy events count too. Hard busy time, and a miss it
+  caused says "(you're away Mon 7 Sep – Wed 9 Sep)".
+- *Travel*: `scheduler_profiles.travel_min` (0 = off) kept free before and after
+  every event with a location that isn't a video call (`travelPadding`).
+  "travel takes 30 min", "no travel time".
+- *Pin on move*: moving a task or habit block by hand (drag or edit) sets it
+  `fixed` server-side (`events-repo.updateEvent`), so re-planning leaves it.
+- *Tasks page* (Planner · Tasks · Insights; `K` on web): open tasks with done
+  and postpone, habits with stop. Adding and changing stay in Plan with AI.
+
+**Not yet:** the repair pass (§8 step 4), trade-off options beyond one
+suggestion, habits on chosen weekdays ("Mon/Wed/Fri"), travel time per place.
 
 **Prior art:** [fluidcalendar-lessons.md](fluidcalendar-lessons.md) — what an
 open-source Motion clone got right (task model, pin-on-drag) and 20 traps to

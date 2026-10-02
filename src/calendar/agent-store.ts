@@ -27,6 +27,7 @@ import type {
 import { apiFetch, currentUserId, onTokenGetter } from '@/lib/api';
 
 import { createAgentBlock, refresh } from './cal-store';
+import { refreshTasks, TASK_TOOLS } from './tasks-store';
 
 /** Per user: two accounts on one browser must not reopen each other's thread. */
 const sessionKey = () => `ft.agent.session:${currentUserId() ?? 'anon'}`;
@@ -202,6 +203,8 @@ export async function sendMessage(text: string, onEvent?: (e: TurnEvent) => void
   }
   // Time off and deletions are written server-side, so the calendar has not seen them yet.
   if (data.message.timeOff || data.message.deleted) void refresh();
+  // A task or habit was added, changed or finished: the Tasks page re-reads.
+  if (data.message.trace?.some((t) => TASK_TOOLS.has(t.tool))) void refreshTasks();
   return data.message;
 }
 
@@ -260,8 +263,11 @@ export async function acceptProposal(p: ChatProposal): Promise<AcceptResult> {
     return { ok: false, notes: [] };
   }
   const notes = await reportFeedback({ suggestionId: p.id, outcome: 'accepted' });
-  // A planned task session may replace an older one server-side: show that.
-  if (p.taskId) void refresh();
+  // A planned task or habit session may replace an older one server-side: show that.
+  if (p.taskId || p.habitId) {
+    void refresh();
+    void refreshTasks();
+  }
   return { ok: true, notes };
 }
 
@@ -292,7 +298,10 @@ export async function acceptAlternative(
     finalStartISO: alt.startISO,
     finalEndISO: alt.endISO,
   });
-  if (p.taskId) void refresh();
+  if (p.taskId || p.habitId) {
+    void refresh();
+    void refreshTasks();
+  }
   return { ok: true, notes };
 }
 

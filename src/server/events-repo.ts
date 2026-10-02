@@ -30,12 +30,13 @@ type Row = {
   exdates: Date[] | null;
   recurrence_parent_id: string | null;
   task_id: string | null;
+  habit_id: string | null;
 };
 
 const COLS = `id, title, start_at, end_at, category, item_type, flexibility,
               origin, is_draft, rrule, project_label, description,
               calendar_id, all_day, location, transparency, response_status,
-              conference_url, attendee_count, done_at, exdates, recurrence_parent_id, task_id`;
+              conference_url, attendee_count, done_at, exdates, recurrence_parent_id, task_id, habit_id`;
 
 function toApi(r: Row): ApiEvent {
   return {
@@ -63,6 +64,7 @@ function toApi(r: Row): ApiEvent {
     exdates: (r.exdates ?? []).map((d) => d.toISOString().slice(0, 10)),
     seriesId: r.recurrence_parent_id,
     taskId: r.task_id,
+    habitId: r.habit_id,
   };
 }
 
@@ -154,11 +156,28 @@ export async function updateEvent(
 ): Promise<ApiEvent | null> {
   const sets: string[] = [];
   const params: unknown[] = [id, userId];
+  /** the placeholder each patched field went into */
+  const ref: Record<string, string> = {};
   for (const [key, col] of Object.entries(PATCHABLE)) {
     if (key in patch) {
       params.push((patch as Record<string, unknown>)[key]);
-      sets.push(`${col} = $${params.length}`);
+      ref[key] = `$${params.length}`;
+      sets.push(`${col} = ${ref[key]}`);
     }
+  }
+  // Moving a task or habit session by hand pins it: "plan my week" keeps a
+  // block the user put somewhere themselves (docs/fluidcalendar-lessons.md,
+  // pin-on-drag). Only when the time really changed, and only when the patch
+  // doesn't set flexibility itself. Postgres reads the old row on the right of
+  // SET, so the comparison is against where the block was.
+  if (('start' in patch || 'end' in patch) && !('flexibility' in patch)) {
+    const startRef = ref.start ? `${ref.start}::timestamptz` : 'start_at';
+    const endRef = ref.end ? `${ref.end}::timestamptz` : 'end_at';
+    sets.push(
+      `flexibility = case when (task_id is not null or habit_id is not null) and origin = 'ai'
+                           and (start_at is distinct from ${startRef} or end_at is distinct from ${endRef})
+                          then 'fixed' else flexibility end`,
+    );
   }
   // Not plain columns: `done` is a timestamp, `exdates` an instant array.
   if ('done' in patch) sets.push(patch.done ? 'done_at = coalesce(done_at, now())' : 'done_at = null');

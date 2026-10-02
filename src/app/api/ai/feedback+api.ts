@@ -20,6 +20,7 @@ import {
   recordCorrection,
 } from '@/server/ai/capture';
 import { isConfigured } from '@/server/db';
+import { linkBlockToHabit, retireReplacedHabitBlock } from '@/server/habits-repo';
 import { linkBlockToTask, retireReplacedBlock } from '@/server/tasks-repo';
 import { listEvents } from '@/server/events-repo';
 
@@ -102,6 +103,17 @@ export async function POST(request: Request): Promise<Response> {
       if (suggestion.event_id) await retireReplacedBlock(userId, suggestion.event_id, suggestion.task_id);
     } catch (err) {
       console.error('ai/feedback task link', err);
+    }
+  }
+  if (suggestion.habit_id && (outcome === 'accepted' || outcome === 'edited')) {
+    try {
+      await linkBlockToHabit(userId, suggestion.habit_id, {
+        title: suggestion.title,
+        startISO: (outcome === 'edited' && finalStart) || suggestion.proposed_start.toISOString(),
+      });
+      if (suggestion.event_id) await retireReplacedHabitBlock(userId, suggestion.event_id, suggestion.habit_id);
+    } catch (err) {
+      console.error('ai/feedback habit link', err);
     }
   }
 

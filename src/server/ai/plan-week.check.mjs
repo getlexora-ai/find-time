@@ -7,7 +7,7 @@
  */
 import assert from 'node:assert/strict';
 
-const { planWeek, verifyPlan, sessionSize, dueLabel, MAX_SESSION_MIN } = await import('./plan-week.ts');
+const { planWeek, verifyPlan, sessionSize, dueLabel, startLabel, travelPadding, MAX_SESSION_MIN } = await import('./plan-week.ts');
 const { defaultProfile } = await import('./preferences.ts');
 
 // Monday 7 Sep 2026, 08:07 — work hours 9–18 Mon–Fri, 10-min buffer.
@@ -211,6 +211,146 @@ assert.equal(sessionSize(300, { splittable: false, minChunkMin: 30 }), 300);
   assert.ok(of(p, 'r')[0].startISO.startsWith('2026-09-08'));
 }
 
+// ── not before / postpone [12] ──────────────────────────────────────────────
+{
+  // "Not before Wednesday": nothing lands on Monday or Tuesday, however empty they are.
+  const p = run({ tasks: [task({ id: 'r', title: 'Report', notBeforeISO: D(9, '00:00'), dueByISO: due(11) })] });
+  assert.ok(of(p, 'r')[0].startISO >= D(9, '00:00'));
+}
+{
+  // A postpone moves a block that was pinned before it: the postpone is newer.
+  const existing = [{ eventId: 'e1', taskId: 'r', startISO: D(8, '10:00'), endISO: D(8, '11:00'), pinned: true }];
+  const p = run({ existing, tasks: [task({ id: 'r', title: 'Report', notBeforeISO: D(10, '00:00'), dueByISO: due(11) })] });
+  assert.equal(p.moved[0].eventId, 'e1');
+  assert.match(p.moved[0].why, /can't start before Thu 10 Sep/);
+  assert.equal(of(p, 'r')[0].replacesEventId, 'e1');
+  assert.ok(of(p, 'r')[0].startISO >= D(10, '00:00'));
+}
+{
+  // Postponed past its own deadline: said, never placed.
+  const p = run({ tasks: [task({ id: 'r', title: 'Report', notBeforeISO: D(14, '00:00'), dueByISO: due(11) })] });
+  assert.equal(p.blocks.length, 0);
+  assert.match(p.unplaced[0].reason, /can't start before Mon 14 Sep, after its Fri 11 Sep deadline/);
+  assert.deepEqual(p.unplaced[0].options, ['Report due next week']);
+}
+
+{
+  // Snoozed until 13:30 today: the label is today at 13:30, not tomorrow.
+  const existing = [{ eventId: 'e1', taskId: 'r', startISO: D(7, '10:00'), endISO: D(7, '11:00'), pinned: false }];
+  const p = run({ existing, tasks: [task({ id: 'r', title: 'Report', notBeforeISO: D(7, '13:30'), dueByISO: due(11) })] });
+  assert.equal(p.moved[0].why, "it can't start before Mon 7 Sep 13:30");
+  assert.ok(of(p, 'r')[0].startISO >= D(7, '13:30'));
+  assert.equal(startLabel(Date.parse(D(9, '00:00'))), 'Wed 9 Sep');
+}
+
+// ── time away ───────────────────────────────────────────────────────────────
+{
+  // Away from Tuesday evening: named from Tuesday, not Wednesday.
+  const away = [{ start: D(8, '18:00'), end: D(10, '00:00') }];
+  const busy = [{ start: D(7, '00:00'), end: D(8, '18:00') }];
+  const p = run({ away, busy, tasks: [task({ id: 'r', title: 'Report', dueByISO: due(9) })] });
+  assert.match(p.unplaced[0].reason, /\(you're away Tue 8 Sep – Wed 9 Sep\)$/);
+}
+{
+  // Away Monday to Wednesday, task due Wednesday: the miss names the time away.
+  const away = [{ start: D(7, '00:00'), end: D(10, '00:00') }];
+  const p = run({ away, tasks: [task({ id: 'r', title: 'Report', dueByISO: due(9) })] });
+  assert.equal(p.blocks.length, 0);
+  assert.match(p.unplaced[0].reason, /\(you're away Mon 7 Sep – Wed 9 Sep\)$/);
+}
+{
+  // A session that now sits in time away moves, and says why.
+  const away = [{ start: D(8, '00:00'), end: D(9, '00:00') }];
+  const existing = [{ eventId: 'e1', taskId: 'r', startISO: D(8, '10:00'), endISO: D(8, '11:00'), pinned: false }];
+  const p = run({ away, existing, tasks: [task({ id: 'r', title: 'Report', dueByISO: due(11) })] });
+  assert.equal(p.moved[0].why, "you're away then");
+  assert.ok(!of(p, 'r')[0].startISO.startsWith('2026-09-08'));
+}
+
+// ── habits [18] ─────────────────────────────────────────────────────────────
+const habit = (over) => ({ id: over.id ?? over.title, title: 'Gym', category: 'personal', durationMin: 60, perWeek: 3, ...over });
+const ofH = (plan, id) => plan.blocks.filter((b) => b.habitId === id);
+const dayN = (b) => Number(b.startISO.slice(8, 10));
+{
+  // Three a week: three sessions this week, on different days, none back to back.
+  const p = run({ tasks: [], habits: [habit({ id: 'g' })] });
+  const s = ofH(p, 'g');
+  assert.equal(s.length, 3);
+  const days = s.map(dayN).sort((a, b) => a - b);
+  assert.equal(new Set(days).size, 3);
+  for (let i = 1; i < days.length; i++) assert.ok(days[i] - days[i - 1] >= 2, `spread out: ${days}`);
+  for (const b of s) assert.ok(b.startISO >= NOW && b.startISO < D(14, '00:00'), 'inside this week');
+}
+{
+  // A morning habit lands in the morning.
+  const p = run({ tasks: [], habits: [habit({ id: 'g', preferredWindow: 'morning' })] });
+  for (const b of ofH(p, 'g')) assert.ok(Number(b.startISO.slice(11, 13)) < 12, b.startISO);
+}
+{
+  // This morning's session already happened: two more, neither today.
+  const existing = [{ eventId: 'm', habitId: 'g', startISO: D(7, '06:00'), endISO: D(7, '07:00'), pinned: false }];
+  const p = run({ existing, tasks: [], habits: [habit({ id: 'g' })] });
+  const added = ofH(p, 'g').filter((b) => b.status === 'new');
+  assert.equal(added.length, 2);
+  assert.ok(added.every((b) => dayN(b) !== 7));
+}
+{
+  // A week already at its target adds nothing; an extra unpinned one is moved off.
+  const existing = [8, 10, 12, 13].map((d, i) => ({ eventId: `x${i}`, habitId: 'g', startISO: D(d, '18:00'), endISO: D(d, '19:00'), pinned: false }));
+  const p = run({ existing, tasks: [], habits: [habit({ id: 'g' })] });
+  assert.equal(ofH(p, 'g').filter((b) => b.status === 'new').length, 0);
+  assert.equal(p.moved.length, 1);
+  assert.match(p.moved[0].why, /already has 3 Gym sessions/);
+}
+{
+  // Only two free days left this week: two sessions, and the miss says so.
+  const busy = [7, 8, 9, 10, 11].map((d) => ({ start: D(d, '00:00'), end: D(d + 1, '00:00') }));
+  const p = run({ busy, tasks: [], habits: [habit({ id: 'g' })] });
+  assert.equal(ofH(p, 'g').length, 2);
+  assert.equal(p.unplaced[0].habitId, 'g');
+  assert.match(p.unplaced[0].reason, /only 2 of 3 sessions fit this week/);
+  assert.ok(p.unplaced[0].options.includes('Gym 2x a week'));
+}
+{
+  // Habits are placed before tasks: the gym keeps its slot on a crowded day.
+  const busy = [8, 9, 10, 11, 12, 13].map((d) => ({ start: D(d, '00:00'), end: D(d + 1, '00:00') }));
+  const p = run({
+    busy,
+    tasks: [task({ id: 'w', title: 'Walk', category: 'personal', durationMin: 13 * 60, dueByISO: due(7) })],
+    habits: [habit({ id: 'g', perWeek: 1 })],
+  });
+  assert.equal(ofH(p, 'g').length, 1);
+  assert.equal(p.unplaced[0].taskId, 'w');
+}
+{
+  // From Friday on, next week is planned too.
+  const fri = '2026-09-11T08:00:00.000Z';
+  const input = { nowISO: fri, busy: [], existing: [], profile, tasks: [], habits: [habit({ id: 'g', perWeek: 2 })] };
+  const p = planWeek(input);
+  assert.deepEqual(verifyPlan(input, p), []);
+  assert.equal(ofH(p, 'g').filter((b) => b.startISO < D(14, '00:00')).length, 2);
+  assert.equal(ofH(p, 'g').filter((b) => b.startISO >= D(14, '00:00')).length, 2);
+}
+
+// ── travel ──────────────────────────────────────────────────────────────────
+{
+  const meet = { start: D(8, '10:00'), end: D(8, '11:00') };
+  assert.deepEqual(travelPadding([{ ...meet, location: 'Client HQ, Torstraße 1' }], 30), [
+    { start: D(8, '09:30'), end: D(8, '10:00') },
+    { start: D(8, '11:00'), end: D(8, '11:30') },
+  ]);
+  assert.deepEqual(travelPadding([{ ...meet, location: 'Zoom' }], 30), []);
+  assert.deepEqual(travelPadding([{ ...meet, location: 'Room 4', videoUrl: 'https://meet.google.com/x' }], 30), []);
+  assert.deepEqual(travelPadding([{ ...meet, location: 'Client HQ' }], 0), [], 'off at 0');
+  assert.deepEqual(travelPadding([{ ...meet }], 30), [], 'no location, no travel');
+  // Padded, the half hour before the meeting is not offered.
+  const busy = [meet, ...travelPadding([{ ...meet, location: 'Client HQ' }], 30)];
+  const day = [{ start: D(8, '00:00'), end: D(8, '09:00') }, { start: D(8, '11:30'), end: D(9, '00:00') }];
+  const p = run({ busy: [...busy, ...day, { start: D(7, '00:00'), end: D(8, '00:00') }], tasks: [task({ id: 'r', title: 'R', durationMin: 30, dueByISO: due(8) })] });
+  assert.equal(of(p, 'r')[0].startISO, D(8, '09:00'));
+  assert.equal(p.unplaced.length, 0);
+}
+
 // ── the verifier catches a broken plan on its own ───────────────────────────
 {
   const input = {
@@ -233,6 +373,33 @@ assert.equal(sessionSize(300, { splittable: false, minChunkMin: 30 }), 300);
   assert.match(problems, /overlaps busy time/);
   assert.match(problems, /ends after the deadline/);
   assert.match(problems, /120 min placed for a 60-min task/);
+}
+{
+  const input = {
+    nowISO: NOW,
+    busy: [],
+    away: [{ start: D(10, '00:00'), end: D(11, '00:00') }],
+    existing: [],
+    profile,
+    tasks: [task({ id: 'r', title: 'Report', notBeforeISO: D(9, '00:00'), dueByISO: due(11) })],
+    habits: [habit({ id: 'g', perWeek: 1 })],
+  };
+  const blk = (over) => ({ category: 'personal', status: 'new', score: 0, reason: '', ...over });
+  const bad = {
+    blocks: [
+      blk({ taskId: 'r', title: 'Report', category: 'deep-work', startISO: D(8, '09:00'), endISO: D(8, '10:00') }),
+      blk({ habitId: 'g', title: 'Gym', startISO: D(10, '08:00'), endISO: D(10, '09:00') }),
+      blk({ habitId: 'g', title: 'Gym', startISO: D(10, '18:00'), endISO: D(10, '19:00') }),
+    ],
+    unplaced: [],
+    order: ['r'],
+    moved: [],
+  };
+  const problems = verifyPlan(input, bad).join('\n');
+  assert.match(problems, /starts before its not-before/);
+  assert.match(problems, /overlaps time away/);
+  assert.match(problems, /a second Gym session that day/);
+  assert.match(problems, /Gym: 2 sessions in a week for 1x a week/);
 }
 
 console.log('plan-week.check: ok');

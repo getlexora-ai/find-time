@@ -16,17 +16,18 @@ model*; what it gets wrong is a list of traps for §8 of
 | --- | --- |
 | All-day events don't block hours | Done: `blocksTime` in `src/server/ai/find-time.ts`. Refined — an imported all-day event still marked busy (a holiday) does block. |
 | Declined / "free" events aren't busy | Done, same function. FluidCalendar stores these flags and never reads them. |
-| Task fields: due, priority, duration, lock | Done: `tasks` table + `src/server/tasks-repo.ts`, planned by `plan-week.ts`. "Not before" and postpone are not in the schema yet. |
-| A pinned block stays put through re-planning | Done: a non-flexible task block is pinned. Pin-on-drag needs the calendar to mark dragged blocks fixed — not yet. |
+| Task fields: due, priority, duration, lock | Done: `tasks` table + `src/server/tasks-repo.ts`, planned by `plan-week.ts`. "Not before" (`tasks.not_before`, db/020) and postpone are a hard lower bound. |
+| A pinned block stays put through re-planning | Done: a non-flexible task block is pinned, and moving one by hand pins it (`events-repo.updateEvent`, server-side, so every client gets it). |
 | Re-plan everything unpinned | Done, *with* minimal moves: valid future sessions are kept, only broken ones move |
-| "Next three" focus queue with postpone 1h / 3h / 1d / 1w | Later; a view over the plan, not the planner |
+| "Next three" focus queue with postpone 1h / 3h / 1d / 1w | Postpone done (chat and the Tasks page, same presets); the focus queue is later |
 | Ignore echoes of our own pushed blocks when they sync back | Check when two-way push lands |
 
 ## Traps — each one becomes a `.check.mjs` case in the backlog phase
 
-`src/server/ai/plan-week.check.mjs` now covers 1, 2, 5, 6, 7, 8, 9, 15 and 17
-(numbers in brackets in the file); 10–14 are calendar-sync concerns and 3 does
-not apply (we have one clock). 16 applies once blocks are pushed to Google.
+`src/server/ai/plan-week.check.mjs` now covers 1, 2, 5, 6, 7, 8, 9, 12, 15, 17
+and 18 (numbers in brackets in the file); 10, 11, 13 and 14 are calendar-sync
+concerns and 3 does not apply (we have one clock). 16 applies once blocks are
+pushed to Google.
 
 Scoring
 

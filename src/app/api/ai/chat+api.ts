@@ -21,6 +21,10 @@ import {
   TOOL_PLAN_WEEK,
   TOOL_TASK_DONE,
   TOOL_TASK_UPDATE,
+  TOOL_POSTPONE,
+  TOOL_ADD_HABIT,
+  TOOL_HABIT_UPDATE,
+  TOOL_TRAVEL,
   asString,
   clampInt,
 } from '@/server/ai/chat';
@@ -48,6 +52,7 @@ import {
   listMessages,
   loadProfile,
   saveProposals,
+  saveTravelMin,
   sessionExists,
   addRule,
 } from '@/server/ai/repo';
@@ -55,8 +60,20 @@ import { isConfigured } from '@/server/db';
 import { enforceRateLimit } from '@/server/rate-limit';
 import { checkTimeOff, splitByDay } from '@/server/ai/time-off';
 import { createEvent, deleteEvent, listEvents } from '@/server/events-repo';
-import { MAX_HORIZON_DAYS, type PlanInput, type PlanTask, dueLabel, planWeek, verifyPlan } from '@/server/ai/plan-week';
-import { type ApiTask, createTask, findOpenTasks, futureBlockIds, listOpenTasks, updateTask } from '@/server/tasks-repo';
+import {
+  MAX_HORIZON_DAYS,
+  type PlanInput,
+  type PlanTask,
+  dueLabel,
+  habitWeeks,
+  planWeek,
+  startLabel,
+  travelPadding,
+  verifyPlan,
+} from '@/server/ai/plan-week';
+import { type ApiHabit, createHabit, findHabits, listHabits, updateHabit } from '@/server/habits-repo';
+import { finishTask, postponeTask, stopHabit } from '@/server/task-actions';
+import { type ApiTask, createTask, findOpenTasks, listOpenTasks, updateTask } from '@/server/tasks-repo';
 import { IMPORTED_ORIGIN } from '@/lib/synced-fields';
 
 /**
@@ -104,11 +121,17 @@ function toPlanTask(t: ApiTask): PlanTask {
     durationMin: t.durationMin,
     dueByISO: t.dueBy,
     preferByISO: t.preferBy,
+    notBeforeISO: t.notBefore,
     priority: t.priority,
     preferredWindow: t.preferredWindow,
     splittable: t.splittable,
     minChunkMin: t.minChunkMin,
   };
+}
+
+/** "3x a week, 1h, mornings" */
+function habitText(h: ApiHabit): string {
+  return [`${h.perWeek}x a week`, hoursText(h.durationMin), h.preferredWindow ? `${h.preferredWindow}s` : ''].filter(Boolean).join(', ');
 }
 
 /** The structured preference card shown to the model — never any event text. */
@@ -240,9 +263,10 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
   let history: Awaited<ReturnType<typeof listMessages>>;
   let events: Awaited<ReturnType<typeof listEvents>>;
   let openTasks: ApiTask[];
+  let habits: ApiHabit[];
   begin(STEP.read);
   try {
-    [profile, history, events, openTasks] = await Promise.all([
+    [profile, history, events, openTasks, habits] = await Promise.all([
       loadProfile(userId),
       listMessages(sessionId, MAX_TURNS),
       listEvents(userId, nowISO, horizonISO),
@@ -250,6 +274,10 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
       listOpenTasks(userId).catch((err) => {
         console.error('ai/chat listOpenTasks', err);
         return [] as ApiTask[];
+      }),
+      listHabits(userId).catch((err) => {
+        console.error('ai/chat listHabits', err);
+        return [] as ApiHabit[];
       }),
     ]);
   } catch (err) {
@@ -311,6 +339,7 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
     previous: lastParsed.draft ?? null,
     lastProposals: (lastParsed.proposals ?? []).map((p) => ({ startISO: p.startISO, reason: p.reason })),
     taskTitles: openTasks.map((t) => t.title),
+    habitTitles: habits.map((h) => h.title),
   });
   const readMs = Date.now() - readT0;
 
@@ -341,6 +370,10 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
     [TOOL_LIST_TASKS]: 'answer',
     [TOOL_TASK_DONE]: 'answer',
     [TOOL_TASK_UPDATE]: 'answer',
+    [TOOL_POSTPONE]: 'answer',
+    [TOOL_ADD_HABIT]: 'answer',
+    [TOOL_HABIT_UPDATE]: 'answer',
+    [TOOL_TRAVEL]: 'record_rule',
   };
   // Logged before the action is carried out, so a turn that fails downstream
   // still leaves a record of what the model decided to do.
@@ -673,7 +706,9 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
             start: day.startISO,
             end: day.endISO,
             category: 'other',
-            itemType: 'event',
+            // Its own kind (db/020), so planning can say "you're away" rather
+            // than "something is booked".
+            itemType: 'away',
             flexibility: 'fixed',
             origin: 'manual',
           });
@@ -747,6 +782,7 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
     const title = asString(args.title, '').slice(0, 120);
     const durationMin = clampInt(args.durationMin, 15, 40 * 60, 60);
     const dueByISO = typeof args.dueByISO === 'string' && Number.isFinite(Date.parse(args.dueByISO)) ? args.dueByISO : null;
+    const notBefore = typeof args.notBeforeISO === 'string' && Number.isFinite(Date.parse(args.notBeforeISO)) ? args.notBeforeISO : null;
     const priority = (['low', 'medium', 'high'] as const).find((p) => p === args.priority) ?? 'medium';
     const preferredWindow = (['morning', 'afternoon', 'evening'] as const).find((w) => w === args.preferredWindow) ?? null;
     const categoryArg = asString(args.category, 'deep-work');
@@ -755,6 +791,7 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
         title,
         durationMin,
         dueBy: dueByISO,
+        notBefore,
         priority,
         preferredWindow,
         splittable: args.splittable === true,
@@ -762,24 +799,32 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
       });
       step({ tool: TOOL_ADD_TASK, label: doneLabel(TOOL_ADD_TASK, 'Added a task'), detail: choice.summary });
       const due = t.dueBy ? `, due ${dueLabel(t.dueBy)}` : '';
-      reply = `Added "${t.title}" — ${hoursText(t.durationMin)}${due}. Say "plan my week" when you want it on the calendar.`;
+      const from = t.notBefore ? `, not before ${startLabel(Date.parse(t.notBefore))}` : '';
+      reply = `Added "${t.title}" — ${hoursText(t.durationMin)}${due}${from}. Say "plan my week" when you want it on the calendar.`;
     } catch (err) {
       console.error('ai/chat addTask', err);
       reply = "I couldn't save that task just now, so nothing was added. Try again in a moment.";
     }
   } else if (choice.name === TOOL_LIST_TASKS) {
-    step({ tool: TOOL_LIST_TASKS, label: doneLabel(TOOL_LIST_TASKS, 'Your tasks'), detail: `${openTasks.length} open` });
+    step({ tool: TOOL_LIST_TASKS, label: doneLabel(TOOL_LIST_TASKS, 'Your tasks'), detail: `${openTasks.length} open · ${habits.length} habit${habits.length === 1 ? '' : 's'}` });
+    const habitLines = habits.length
+      ? `\n\nHabits:\n${habits.map((h) => `• ${h.title} — ${habitText(h)}`).join('\n')}`
+      : '';
     if (!openTasks.length) {
-      reply = 'No open tasks. Add one with "Add task: write the report, 3h, due Friday".';
+      reply = `No open tasks. Add one with "Add task: write the report, 3h, due Friday".${habitLines}`;
     } else {
       const lines = openTasks.slice(0, 10).map((t) => {
-        const bits = [hoursText(t.durationMin), t.dueBy ? `due ${dueLabel(t.dueBy)}` : '', t.priority !== 'medium' ? `${t.priority} priority` : '']
+        const bits = [
+          hoursText(t.durationMin),
+          t.dueBy ? `due ${dueLabel(t.dueBy)}` : '',
+          t.notBefore && Date.parse(t.notBefore) > now.getTime() ? `not before ${startLabel(Date.parse(t.notBefore))}` : '',
+          t.priority !== 'medium' ? `${t.priority} priority` : '']
           .filter(Boolean)
           .join(', ');
         return `• ${t.title} — ${bits}`;
       });
       const more = openTasks.length > 10 ? `\n…and ${openTasks.length - 10} more.` : '';
-      reply = `${openTasks.length} open task${openTasks.length === 1 ? '' : 's'}:\n${lines.join('\n')}${more}`;
+      reply = `${openTasks.length} open task${openTasks.length === 1 ? '' : 's'}:\n${lines.join('\n')}${more}${habitLines}`;
     }
   } else if (choice.name === TOOL_TASK_DONE || choice.name === TOOL_TASK_UPDATE) {
     const match = asString(args.match, '');
@@ -789,12 +834,8 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
       reply = `I can't find an open task called "${match}". Say "my tasks" to see them.`;
     } else if (choice.name === TOOL_TASK_DONE) {
       try {
-        await updateTask(userId, t.id, { status: 'done' });
-        // A finished task's future sessions are Find Time's own blocks: clear them,
-        // so finished work stops holding time.
-        const ids = await futureBlockIds(userId, t.id, nowISO);
-        let n = 0;
-        for (const id of ids) if (await deleteEvent(userId, id).catch(() => false)) n++;
+        // Its future sessions are Find Time's own blocks: cleared, so finished work stops holding time.
+        const { cleared: n } = await finishTask(userId, t, nowISO);
         if (n) deleted = { count: n };
         step({ tool: TOOL_TASK_DONE, label: doneLabel(TOOL_TASK_DONE, 'Finished a task'), detail: `${t.title} · ${n} future block${n === 1 ? '' : 's'} cleared` });
         reply = `Done — "${t.title}".${n ? ` Cleared ${n} upcoming session${n === 1 ? '' : 's'} from your calendar.` : ''}`;
@@ -822,42 +863,145 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
         reply = "I couldn't change that task just now. Try again in a moment.";
       }
     }
+  } else if (choice.name === TOOL_POSTPONE) {
+    const match = asString(args.match, '');
+    const at = typeof args.notBeforeISO === 'string' && Number.isFinite(Date.parse(args.notBeforeISO)) ? args.notBeforeISO : null;
+    const found = match ? await findOpenTasks(userId, match).catch(() => []) : [];
+    const t = found[0];
+    if (!t || !at) {
+      reply = `I can't find an open task called "${match}". Say "my tasks" to see them.`;
+    } else {
+      try {
+        // Its sessions before the new start come off now, like "done with", so
+        // the calendar stops promising them.
+        const { cleared: n } = await postponeTask(userId, t, at, nowISO);
+        if (n) deleted = { count: n };
+        const label = asString(args.label, startLabel(Date.parse(at)));
+        step({ tool: TOOL_POSTPONE, label: doneLabel(TOOL_POSTPONE, 'Postponed a task'), detail: `${t.title} · not before ${label}${n ? ` · ${n} cleared` : ''}` });
+        const late = t.dueBy && Date.parse(at) >= Date.parse(t.dueBy) ? ` That's after it's due (${dueLabel(t.dueBy)}) — move the due date too?` : '';
+        reply = `Okay — "${t.title}" won't start before ${label}.${n ? ` Took ${n} earlier session${n === 1 ? '' : 's'} off your calendar.` : ''}${late} Say "replan" to fit it in again.`;
+      } catch (err) {
+        console.error('ai/chat postpone', err);
+        reply = "I couldn't postpone that just now. Try again in a moment.";
+      }
+    }
+  } else if (choice.name === TOOL_ADD_HABIT) {
+    const title = asString(args.title, '').slice(0, 120);
+    const perWeek = clampInt(args.perWeek, 1, 7, 3);
+    const durationMin = clampInt(args.durationMin, 5, 480, 60);
+    const preferredWindow = (['morning', 'afternoon', 'evening'] as const).find((w) => w === args.preferredWindow) ?? null;
+    const categoryArg = asString(args.category, 'personal');
+    try {
+      const h = await createHabit(userId, {
+        title,
+        perWeek,
+        durationMin,
+        preferredWindow,
+        category: (CATEGORIES as readonly string[]).includes(categoryArg) ? categoryArg : 'personal',
+      });
+      step({ tool: TOOL_ADD_HABIT, label: doneLabel(TOOL_ADD_HABIT, 'Added a habit'), detail: choice.summary });
+      reply = `Added "${h.title}" — ${habitText(h)}. Say "plan my week" to put this week's sessions on the calendar.`;
+    } catch (err) {
+      console.error('ai/chat addHabit', err);
+      reply = "I couldn't save that habit just now, so nothing was added. Try again in a moment.";
+    }
+  } else if (choice.name === TOOL_HABIT_UPDATE) {
+    const match = asString(args.match, '');
+    const h = match ? (await findHabits(userId, match).catch(() => []))[0] : undefined;
+    if (!h) {
+      reply = `I can't find a habit called "${match}". Say "my habits" to see them.`;
+    } else if (args.stop === true) {
+      try {
+        const { cleared: n } = await stopHabit(userId, h, nowISO);
+        if (n) deleted = { count: n };
+        step({ tool: TOOL_HABIT_UPDATE, label: 'Stopped a habit', detail: `${h.title} · ${n} upcoming cleared` });
+        reply = `Stopped "${h.title}".${n ? ` Cleared ${n} upcoming session${n === 1 ? '' : 's'}.` : ''}`;
+      } catch (err) {
+        console.error('ai/chat stopHabit', err);
+        reply = "I couldn't stop that habit just now. Try again in a moment.";
+      }
+    } else {
+      const patch: Parameters<typeof updateHabit>[2] = {};
+      if (typeof args.perWeek === 'number') patch.perWeek = clampInt(args.perWeek, 1, 7, h.perWeek);
+      if (typeof args.durationMin === 'number') patch.durationMin = clampInt(args.durationMin, 5, 480, h.durationMin);
+      try {
+        const u = await updateHabit(userId, h.id, patch);
+        if (!u) throw new Error('no change');
+        step({ tool: TOOL_HABIT_UPDATE, label: doneLabel(TOOL_HABIT_UPDATE, 'Changed a habit'), detail: `${u.title} · ${habitText(u)}` });
+        reply = `Updated "${u.title}": ${habitText(u)}. Say "replan" to fit it in again.`;
+      } catch (err) {
+        console.error('ai/chat updateHabit', err);
+        reply = "I couldn't change that habit just now. Try again in a moment.";
+      }
+    }
+  } else if (choice.name === TOOL_TRAVEL) {
+    const minutes = clampInt(args.minutes, 0, 180, 0);
+    try {
+      await saveTravelMin(userId, minutes);
+      step({ tool: TOOL_TRAVEL, label: doneLabel(TOOL_TRAVEL, 'Travel time'), detail: minutes ? `${hoursText(minutes)} each way` : 'off' });
+      reply = minutes
+        ? `Got it — I'll keep ${hoursText(minutes)} free before and after anything with an address when I plan your week. Video calls don't count.`
+        : "Okay — no travel time. In-person meetings get no extra room when I plan.";
+    } catch (err) {
+      console.error('ai/chat travel', err);
+      reply = "I couldn't save that just now. Try again in a moment.";
+    }
   } else if (choice.name === TOOL_PLAN_WEEK) {
-    if (!openTasks.length) {
-      reply = 'There are no open tasks to plan. Add one with "Add task: write the report, 3h, due Friday".';
+    if (!openTasks.length && !habits.length) {
+      reply = 'There are no open tasks or habits to plan. Add one with "Add task: write the report, 3h, due Friday" or "Habit: gym 3x a week, 1h".';
     } else {
       begin(STEP.rank);
       const planT0 = Date.now();
       let planEvents: Awaited<ReturnType<typeof listEvents>>;
       try {
-        // A deadline can sit further out than the chat's usual horizon.
-        planEvents = await listEvents(userId, nowISO, iso(new Date(now.getTime() + MAX_HORIZON_DAYS * 86_400_000)));
+        // A deadline can sit further out than the chat's usual horizon; a
+        // habit's week can have started before today.
+        const weekStart = iso(new Date(Math.min(...habitWeeks(now.getTime()), now.getTime())));
+        planEvents = await listEvents(userId, weekStart, iso(new Date(now.getTime() + MAX_HORIZON_DAYS * 86_400_000)));
       } catch (err) {
         console.error('ai/chat planWeek events', err);
         return Response.json({ sessionId, error: 'Could not read your calendar.' }, { status: 500 });
       }
       const taskIds = new Set(openTasks.map((t) => t.id));
+      const habitIds = new Set(habits.map((h) => h.id));
+      const ownBlock = (e: (typeof planEvents)[number]) =>
+        Boolean((e.taskId && taskIds.has(e.taskId)) || (e.habitId && habitIds.has(e.habitId)));
+      const isAway = (e: (typeof planEvents)[number]) => e.itemType === 'away' || (e.allDay === true && blocksTime(e));
+      // The plan doesn't move other blocks, so flexible ones count as busy here;
+      // free, declined and all-day ones still don't (blocksTime).
+      const others = planEvents.filter((e) => !ownBlock(e) && !isAway(e) && blocksTime({ ...e, flexibility: undefined }));
       const input: PlanInput = {
         nowISO,
         profile,
         tasks: openTasks.map(toPlanTask),
-        // The plan doesn't move other blocks, so flexible ones count as busy here;
-        // free, declined and all-day ones still don't (blocksTime).
-        busy: planEvents
-          .filter((e) => !(e.taskId && taskIds.has(e.taskId)) && blocksTime({ ...e, flexibility: undefined }))
-          .map((e) => ({ start: e.start, end: e.end })),
-        existing: planEvents
-          .filter((e) => e.taskId && taskIds.has(e.taskId))
-          .map((e) => ({ eventId: e.id, taskId: e.taskId!, startISO: e.start, endISO: e.end, pinned: e.flexibility !== 'flexible' })),
+        habits: habits.map((h) => ({ ...h, category: (CATEGORIES as readonly string[]).includes(h.category) ? h.category : 'personal' })),
+        busy: [
+          ...others.map((e) => ({ start: e.start, end: e.end })),
+          // Travel either side of in-person events (off unless the user set it).
+          ...travelPadding(others, profile.travelMin),
+        ],
+        away: planEvents.filter((e) => !ownBlock(e) && isAway(e)).map((e) => ({ start: e.start, end: e.end })),
+        existing: planEvents.filter(ownBlock).map((e) => ({
+          eventId: e.id,
+          ...(e.taskId && taskIds.has(e.taskId) ? { taskId: e.taskId } : { habitId: e.habitId! }),
+          startISO: e.start,
+          endISO: e.end,
+          // Fixed by the user, or moved there by hand (events-repo pins on move).
+          pinned: e.flexibility !== 'flexible',
+        })),
       };
       const plan = planWeek(input);
       const problems = verifyPlan(input, plan);
       const added = plan.blocks.filter((b) => b.status === 'new');
       const kept = plan.blocks.length - added.length;
+      const what = [
+        openTasks.length && `${openTasks.length} task${openTasks.length === 1 ? '' : 's'}`,
+        habits.length && `${habits.length} habit${habits.length === 1 ? '' : 's'}`,
+      ].filter(Boolean).join(' · ');
       step({
         tool: STEP.rank,
         label: doneLabel(TOOL_PLAN_WEEK, 'Planned your week'),
-        detail: `${openTasks.length} task${openTasks.length === 1 ? '' : 's'} · ${added.length} new · ${kept} kept · ${plan.unplaced.length} don't fit`,
+        detail: `${what} · ${added.length} new · ${kept} kept · ${plan.unplaced.length} don't fit`,
         ms: Date.now() - planT0,
       });
 
@@ -882,7 +1026,8 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
                 features: b.features ?? ZERO_FEATURES,
                 reason: b.reason,
                 alternatives: [],
-                taskId: b.taskId,
+                ...(b.taskId ? { taskId: b.taskId } : {}),
+                ...(b.habitId ? { habitId: b.habitId } : {}),
                 ...(b.replacesEventId ? { replacesEventId: b.replacesEventId } : {}),
               })),
             );
@@ -896,16 +1041,23 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
               reason: p.reason,
               alternatives: [],
               ...(p.taskId ? { taskId: p.taskId } : {}),
+              ...(p.habitId ? { habitId: p.habitId } : {}),
             }));
           } catch (err) {
             console.error('ai/chat planWeek save', err);
             return Response.json({ sessionId, error: 'Could not save that plan. Try again.' }, { status: 500 });
           }
         }
-        const placedTasks = new Set(added.map((b) => b.taskId)).size;
+        const taskSessions = added.filter((b) => b.taskId);
+        const habitSessions = added.filter((b) => b.habitId);
+        const placedTasks = new Set(taskSessions.map((b) => b.taskId)).size;
         const lines: string[] = [];
         if (added.length) {
-          lines.push(`Here's the plan: ${added.length} session${added.length === 1 ? '' : 's'} for ${placedTasks} task${placedTasks === 1 ? '' : 's'}, most urgent first.`);
+          const parts = [
+            taskSessions.length && `${taskSessions.length} session${taskSessions.length === 1 ? '' : 's'} for ${placedTasks} task${placedTasks === 1 ? '' : 's'}, most urgent first`,
+            habitSessions.length && `${habitSessions.length} habit session${habitSessions.length === 1 ? '' : 's'}`,
+          ].filter(Boolean);
+          lines.push(`Here's the plan: ${parts.join(', and ')}.`);
         } else if (!plan.unplaced.length) {
           lines.push('Everything already has its time — nothing needs to change.');
         }
@@ -914,6 +1066,9 @@ async function handle(request: Request, emit: Emit): Promise<Response> {
           lines.push(
             `${plan.moved.length} existing session${plan.moved.length === 1 ? ' has' : 's have'} to move (${plan.moved[0].why}) — adding the new time replaces the old one.`,
           );
+        }
+        if (profile.travelMin > 0 && input.busy.length > others.length) {
+          lines.push(`I kept ${hoursText(profile.travelMin)} free either side of in-person meetings for travel.`);
         }
         for (const u of plan.unplaced.slice(0, 4)) {
           const tip = u.options[0] ? ` Try "${u.options[0]}".` : '';

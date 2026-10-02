@@ -237,4 +237,68 @@ assert.deepEqual([r.name, r.args.durationMin], ['update_task', 120]);
 assert.equal(sayT('gym takes 1h on Friday').name !== 'update_task', true);
 assert.equal(sayT('2h of deep work on Thursday').name, 'propose_blocks');
 
+// ── postpone / not before (Thursday 1 Oct) ──
+r = sayT('postpone the quarterly report a week');
+assert.deepEqual([r.name, r.args.match, r.args.notBeforeISO], ['postpone_task', 'Write the quarterly report', '2026-10-08T00:00:00.000Z']);
+r = sayT('push tax forms to next week');
+assert.deepEqual([r.name, r.args.notBeforeISO], ['postpone_task', '2026-10-05T00:00:00.000Z']);
+r = sayT('snooze tax forms 3 hours');
+assert.equal(r.args.notBeforeISO, '2026-10-01T12:00:00.000Z');
+r = sayT("tax forms can't start before Monday");
+assert.deepEqual([r.name, r.args.notBeforeISO], ['postpone_task', '2026-10-05T00:00:00.000Z']);
+r = sayT("don't start tax forms until November");
+assert.deepEqual([r.name, r.args.notBeforeISO], ['postpone_task', '2026-11-01T00:00:00.000Z']);
+// No "until when": asked with the usual choices, and the answer carries on.
+r = sayT('postpone tax forms');
+assert.equal(r.name, 'ask_clarification');
+assert.deepEqual(r.args.options, ['1 hour', '3 hours', 'Tomorrow', 'Next week']);
+r = understand('Tomorrow', { nowISO, previous: r.draft, lastProposals: [], taskTitles: titles });
+assert.deepEqual([r.name, r.args.match, r.args.notBeforeISO], ['postpone_task', 'Tax forms', '2026-10-02T00:00:00.000Z']);
+// A task they don't have is said, not guessed.
+assert.equal(sayT('postpone the budget').name, 'answer');
+// On a new task, "not before" is a start, never mistaken for the due date.
+r = say('add task: tax return, 3h, due 30 Oct, not before 20 Oct');
+assert.deepEqual([r.args.title, r.args.dueByISO, r.args.notBeforeISO], ['Tax return', '2026-10-31T00:00:00.000Z', '2026-10-20T00:00:00.000Z']);
+r = say('add task: write summary after the meeting, 1h');
+assert.equal(r.args.title, 'Write summary after the meeting', '"after the meeting" is not a date');
+assert.equal(r.args.notBeforeISO, undefined);
+
+// ── habits ──
+const sayH = (text, previous = null) =>
+  understand(text, { nowISO, previous, lastProposals: [], taskTitles: titles, habitTitles: ['Gym'] });
+r = say('habit: gym 3x a week, 1h, mornings');
+assert.deepEqual(
+  [r.name, r.args.title, r.args.category, r.args.perWeek, r.args.durationMin, r.args.preferredWindow],
+  ['add_habit', 'Gym', 'personal', 3, 60, 'morning'],
+);
+r = say('I want to go running twice a week for 45 minutes');
+assert.deepEqual([r.name, r.args.title, r.args.perWeek, r.args.durationMin], ['add_habit', 'Running', 2, 45]);
+r = say('add habit meditate every day for 15 min');
+assert.deepEqual([r.args.title, r.args.perWeek], ['Meditate', 7]);
+// Missing pieces are asked for, one at a time, never guessed.
+r = say('habit: yoga');
+assert.match(r.args.question, /How many times a week for Yoga/);
+r = say('3x a week', r.draft);
+assert.match(r.args.question, /How long is each Yoga session/);
+r = say('1h', r.draft);
+assert.deepEqual([r.name, r.args.perWeek, r.args.durationMin], ['add_habit', 3, 60]);
+// Changing the one they have.
+assert.deepEqual([sayH('gym 2x a week').name, sayH('gym 2x a week').args.perWeek], ['update_habit', 2]);
+assert.deepEqual([sayH('gym takes 45 min').name, sayH('gym takes 45 min').args.durationMin], ['update_habit', 45]);
+assert.equal(sayH('stop the gym habit').args.stop, true);
+assert.equal(sayH('stop gym').args.stop, true);
+// "delete gym tomorrow" is about blocks, not the habit.
+assert.equal(sayH('delete gym tomorrow').name, 'delete_blocks');
+assert.equal(sayH('my habits').name, 'list_tasks');
+
+// ── travel time ──
+assert.deepEqual([say('travel takes 30 min').name, say('travel takes 30 min').args.minutes], ['set_travel', 30]);
+assert.equal(say('allow 20 minutes for travel').args.minutes, 20);
+assert.equal(say('no travel time').args.minutes, 0);
+r = say('add travel time');
+assert.equal(r.name, 'ask_clarification');
+assert.equal(say('45 min', r.draft).args.minutes, 45);
+// Travelling somewhere is still time away.
+assert.equal(say("I'm travelling to Copenhagen from the 17th to the 22nd").name, 'block_time_off');
+
 console.log('understand.check: ok');

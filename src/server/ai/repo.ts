@@ -40,6 +40,7 @@ type ProfileRow = {
   default_buffer_min: number;
   min_focus_block_min: number;
   max_daily_focus_min: number;
+  travel_min: number | null;
 };
 
 type ConstraintRow = {
@@ -103,7 +104,7 @@ export async function loadProfile(userId: string): Promise<AgentProfile> {
   const [prof, constraints, learned] = await Promise.all([
     queryOne<ProfileRow>(
       `select timezone, work_hours, weights, energy_curve, duration_bias,
-              default_buffer_min, min_focus_block_min, max_daily_focus_min
+              default_buffer_min, min_focus_block_min, max_daily_focus_min, travel_min
          from scheduler_profiles where user_id = $1`,
       [userId],
     ),
@@ -132,6 +133,7 @@ export async function loadProfile(userId: string): Promise<AgentProfile> {
     base.defaultBufferMin = prof.default_buffer_min ?? base.defaultBufferMin;
     base.minFocusBlockMin = prof.min_focus_block_min ?? base.minFocusBlockMin;
     base.maxDailyFocusMin = prof.max_daily_focus_min ?? base.maxDailyFocusMin;
+    base.travelMin = prof.travel_min ?? base.travelMin;
   }
 
   base.rules = constraints.map(
@@ -172,6 +174,15 @@ export async function saveWeights(
        set weights = excluded.weights,
            learning = coalesce(scheduler_profiles.learning, '{}'::jsonb) || excluded.learning`,
     [userId, JSON.stringify(weights), evidence],
+  );
+}
+
+/** Minutes kept free either side of an in-person event when planning; 0 turns it off. */
+export async function saveTravelMin(userId: string, minutes: number): Promise<void> {
+  await query(
+    `insert into scheduler_profiles (user_id, travel_min) values ($1, $2)
+     on conflict (user_id) do update set travel_min = excluded.travel_min`,
+    [userId, minutes],
   );
 }
 
@@ -365,6 +376,8 @@ export type ProposalInput = {
   alternatives: { startISO: string; endISO: string; score: number; features: SlotFeatures }[];
   /** "plan my week": the task this block is a session of */
   taskId?: string;
+  /** "plan my week": the habit this block is a session of */
+  habitId?: string;
   /** "plan my week": the existing block this one takes the place of, deleted on accept */
   replacesEventId?: string;
 };
@@ -397,8 +410,8 @@ export async function saveProposals(
       await c.query(
         `insert into ai_suggestions
            (id, draft_id, user_id, "index", kind, title, category, proposed_start, proposed_end,
-            rationale, confidence, score, features, alternatives, task_id, event_id)
-         values ($1,$2,$3,$4,'create',$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13::jsonb,$14,$15)`,
+            rationale, confidence, score, features, alternatives, task_id, event_id, habit_id)
+         values ($1,$2,$3,$4,'create',$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13::jsonb,$14,$15,$16)`,
         [
           p.id,
           draftId,
@@ -415,6 +428,7 @@ export async function saveProposals(
           JSON.stringify(p.alternatives),
           p.taskId ?? null,
           p.replacesEventId ?? null,
+          p.habitId ?? null,
         ],
       );
     }
@@ -434,13 +448,14 @@ export type SuggestionRow = {
   alternatives: { startISO: string; endISO: string; score: number; features: SlotFeatures }[];
   status: string;
   task_id: string | null;
+  habit_id: string | null;
   /** the block an accepted "plan my week" session replaces */
   event_id: string | null;
 };
 
 export async function getSuggestion(userId: string, sugId: string): Promise<SuggestionRow | null> {
   return queryOne<SuggestionRow>(
-    `select id, title, category, proposed_start, proposed_end, features, alternatives, status, task_id, event_id
+    `select id, title, category, proposed_start, proposed_end, features, alternatives, status, task_id, event_id, habit_id
        from ai_suggestions where user_id = $1 and id = $2`,
     [userId, sugId],
   );
