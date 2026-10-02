@@ -4,7 +4,7 @@
  */
 import assert from 'node:assert/strict';
 
-const { toRow } = await import('./map.ts');
+const { toRow, detailsOf } = await import('./map.ts');
 const ctx = { userId: 'g_1', calendarId: 'cal_1', connectedAccountId: 'acct_1' };
 
 // timed event
@@ -22,7 +22,9 @@ const timed = toRow(
   ctx,
 );
 assert.equal(timed.deleted, false);
-assert.equal(timed.row.title, 'Standup');
+assert.equal(detailsOf({ summary: '  Standup  ' }).title, 'Standup');
+// nothing about what the event is reaches the database row
+for (const k of ['title', 'description', 'location', 'conference_url']) assert.ok(!(k in timed.row), k);
 assert.equal(timed.row.all_day, false);
 // Google's instant is re-stamped as the event's LOCAL clock with a Z, matching
 // the wall-clock convention the client reads (src/calendar/api-adapter.ts).
@@ -72,11 +74,7 @@ assert.equal(cancelled.providerEventId, 'ev5');
 assert.ok(!('row' in cancelled));
 
 // empty summary -> placeholder, never empty title (NOT NULL column)
-assert.equal(
-  toRow({ id: 'ev6', start: { dateTime: '2026-09-09T10:00:00Z' }, end: { dateTime: '2026-09-09T11:00:00Z' } }, ctx).row
-    .title,
-  '(no title)',
-);
+assert.equal(detailsOf({ id: 'ev6' }).title, '(no title)');
 
 
 // v2: times land in the USER's zone, not the organiser's.
@@ -123,7 +121,7 @@ const invite = toRow(
 );
 assert.equal(invite.row.transparency, 'transparent');
 assert.equal(invite.row.response_status, 'declined');
-assert.equal(invite.row.conference_url, 'https://meet.google.com/abc-defg-hij');
+assert.equal(detailsOf({ hangoutLink: 'https://meet.google.com/abc-defg-hij' }).conference_url, 'https://meet.google.com/abc-defg-hij');
 assert.equal(invite.row.attendee_count, 2);
 assert.equal(timed.row.transparency, 'opaque');
 assert.equal(timed.row.response_status, null);

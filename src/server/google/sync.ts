@@ -165,9 +165,6 @@ async function syncCalendar(
 }
 
 const EVENT_COLS = [
-  'title',
-  'description',
-  'location',
   'start_at',
   'end_at',
   'all_day',
@@ -182,7 +179,6 @@ const EVENT_COLS = [
   'remote_updated_at',
   'transparency',
   'response_status',
-  'conference_url',
   'attendee_count',
 ] as const;
 
@@ -191,14 +187,17 @@ async function upsertEvent(row: CalendarEventRow): Promise<void> {
 
   const setList = EVENT_COLS.map((c, i) => `${c} = $${i + 3}`).join(', ');
   const updated = await queryOne<{ id: string }>(
-    `update calendar_events set ${setList}, deleted_at = null, sync_state = 'synced'
+    // Blanking the content columns scrubs rows synced before content stopped
+    // being stored (see map.ts).
+    `update calendar_events set ${setList}, title = '', description = null, location = null,
+            conference_url = null, deleted_at = null, sync_state = 'synced'
       where calendar_id = $1 and provider_event_id = $2
       returning id`,
     [row.calendar_id, row.provider_event_id, ...values],
   );
   if (updated) return;
 
-  const cols = ['id', 'user_id', 'calendar_id', 'connected_account_id', 'item_type', 'category', 'origin', 'flexibility', 'sync_state', ...EVENT_COLS];
+  const cols = ['id', 'user_id', 'calendar_id', 'connected_account_id', 'title', 'item_type', 'category', 'origin', 'flexibility', 'sync_state', ...EVENT_COLS];
   const ph = cols.map((_, i) => `$${i + 1}`).join(', ');
   await queryOne(
     `insert into calendar_events (${cols.join(', ')}) values (${ph}) returning id`,
@@ -207,6 +206,7 @@ async function upsertEvent(row: CalendarEventRow): Promise<void> {
       row.user_id,
       row.calendar_id,
       row.connected_account_id,
+      '',
       'event',
       'other',
       'imported',

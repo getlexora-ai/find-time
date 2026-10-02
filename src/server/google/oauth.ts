@@ -20,10 +20,11 @@ export const SCOPES = [
   'email',
   'profile',
   'https://www.googleapis.com/auth/calendar.readonly',
-  // Write-back of protected focus blocks (push.ts), used only once the user
-  // switches it on. Accounts connected before this was added lack it until
-  // they reconnect; /api/calendar/settings reports `canWriteGoogle`.
-  'https://www.googleapis.com/auth/calendar.events',
+  // Read-only on connect: the narrowest scope Google verification accepts.
+  // Focus-block write-back (push.ts) needs calendar.events; there is no switch
+  // for it in the app yet. When there is, ask for that scope at that moment
+  // (include_granted_scopes keeps this one); /api/calendar/settings already
+  // refuses pushFocus without it (`canWriteGoogle`).
 ];
 
 const REFRESH_SKEW_MS = 60_000; // refresh a minute before expiry

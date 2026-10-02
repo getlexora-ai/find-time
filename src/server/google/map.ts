@@ -13,17 +13,17 @@ import { wallClockAt } from '../wall-clock.ts';
  * - sync asks for single occurrences (singleEvents=true), so a row is one
  *   occurrence; a series master (with `recurrence`) only arrives from an old
  *   series-mode sync and is still flagged `recurrence_unsupported`.
- * - free/busy, your own RSVP, the video link and the attendee count are kept,
- *   so a declined or "show as free" meeting does not block time.
+ * - free/busy, your own RSVP and the attendee count are kept, so a declined
+ *   or "show as free" meeting does not block time.
+ * - no content is stored: title, notes, location and video link stay in Google
+ *   and are read live per request (detailsOf, live-details.ts), the Cal.com /
+ *   Reclaim pattern. The database holds when you are busy, not what with.
  */
 
 export type CalendarEventRow = {
   user_id: string;
   calendar_id: string;
   connected_account_id: string;
-  title: string;
-  description: string | null;
-  location: string | null;
   start_at: string;
   end_at: string;
   all_day: boolean;
@@ -38,7 +38,6 @@ export type CalendarEventRow = {
   remote_updated_at: string | null;
   transparency: 'opaque' | 'transparent';
   response_status: string | null;
-  conference_url: string | null;
   attendee_count: number | null;
 };
 
@@ -115,9 +114,6 @@ export function toRow(
       user_id: ctx.userId,
       calendar_id: ctx.calendarId,
       connected_account_id: ctx.connectedAccountId,
-      title: g.summary?.trim() || '(no title)',
-      description: g.description ?? null,
-      location: g.location ?? null,
       start_at: startAt,
       end_at: endAt,
       all_day: allDay,
@@ -132,9 +128,25 @@ export function toRow(
       remote_updated_at: g.updated ?? null,
       transparency: g.transparency === 'transparent' ? 'transparent' : 'opaque',
       response_status: responseOf(g),
-      conference_url: conferenceOf(g),
       attendee_count: g.attendees ? g.attendees.filter((a) => !a.resource).length : null,
     },
+  };
+}
+
+/** What an event is about. Read live from Google, never written to the database. */
+export type EventDetails = {
+  title: string;
+  description: string | null;
+  location: string | null;
+  conference_url: string | null;
+};
+
+export function detailsOf(g: GEvent): EventDetails {
+  return {
+    title: g.summary?.trim() || '(no title)',
+    description: g.description ?? null,
+    location: g.location ?? null,
+    conference_url: conferenceOf(g),
   };
 }
 

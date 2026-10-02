@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { ApiEvent, EventInput } from '@/lib/api-types';
 
 import { query, queryOne } from './db';
+import { BUSY, liveDetails } from './google/live-details';
 
 export type { ApiEvent, EventInput };
 
@@ -31,12 +32,35 @@ type Row = {
   recurrence_parent_id: string | null;
   task_id: string | null;
   habit_id: string | null;
+  provider_event_id: string | null;
 };
 
 const COLS = `id, title, start_at, end_at, category, item_type, flexibility,
               origin, is_draft, rrule, project_label, description,
               calendar_id, all_day, location, transparency, response_status,
-              conference_url, attendee_count, done_at, exdates, recurrence_parent_id, task_id, habit_id`;
+              conference_url, attendee_count, done_at, exdates, recurrence_parent_id, task_id, habit_id,
+              provider_event_id`;
+
+/**
+ * Imported rows carry no content (google/map.ts); fill title, notes, location
+ * and video link from Google for this response only.
+ */
+async function withDetails(userId: string, rows: Row[]): Promise<Row[]> {
+  const imported = rows.filter((r) => r.origin === 'imported' && r.calendar_id && r.provider_event_id);
+  if (imported.length === 0) return rows;
+  const live = await liveDetails(
+    userId,
+    imported.map((r) => ({
+      calendarId: r.calendar_id!,
+      providerEventId: r.provider_event_id!,
+      start: r.start_at,
+      end: r.end_at,
+    })),
+  );
+  return rows.map((r) =>
+    imported.includes(r) ? { ...r, ...(live.get(`${r.calendar_id}:${r.provider_event_id}`) ?? BUSY) } : r,
+  );
+}
 
 function toApi(r: Row): ApiEvent {
   return {
@@ -87,7 +111,7 @@ export async function listEvents(
     `select ${COLS} from calendar_events where ${where.join(' and ')} order by start_at`,
     params,
   );
-  return rows.map(toApi);
+  return (await withDetails(userId, rows)).map(toApi);
 }
 
 export async function createEvent(userId: string, input: EventInput): Promise<ApiEvent> {
@@ -189,7 +213,7 @@ export async function updateEvent(
     return queryOne<Row>(
       `select ${COLS} from calendar_events where id = $1 and user_id = $2 and deleted_at is null`,
       [id, userId],
-    ).then((r) => (r ? toApi(r) : null));
+    ).then(async (r) => (r ? toApi((await withDetails(userId, [r]))[0]) : null));
   }
   const row = await queryOne<Row>(
     `update calendar_events set ${sets.join(', ')}
@@ -197,7 +221,7 @@ export async function updateEvent(
      returning ${COLS}`,
     params,
   );
-  return row ? toApi(row) : null;
+  return row ? toApi((await withDetails(userId, [row]))[0]) : null;
 }
 
 export async function deleteEvent(userId: string, id: string): Promise<boolean> {

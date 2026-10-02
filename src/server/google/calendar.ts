@@ -78,7 +78,7 @@ export async function listCalendars(accessToken: string): Promise<GCalListEntry[
 export async function collectEvents(
   accessToken: string,
   calendarId: string,
-  opts: { syncToken?: string; timeMin?: string; singleEvents?: boolean },
+  opts: { syncToken?: string; timeMin?: string; timeMax?: string; singleEvents?: boolean; showDeleted?: boolean },
 ): Promise<{ events: GEvent[]; nextSyncToken?: string }> {
   const events: GEvent[] = [];
   let pageToken: string | undefined;
@@ -89,11 +89,14 @@ export async function collectEvents(
   // Google arrives as exactly that, instead of hiding inside the master's rule.
   const base: Record<string, string> = {
     maxResults: '2500',
-    showDeleted: 'true',
+    showDeleted: opts.showDeleted === false ? 'false' : 'true',
     singleEvents: opts.singleEvents ? 'true' : 'false',
   };
   if (opts.syncToken) base.syncToken = opts.syncToken;
-  else if (opts.timeMin) base.timeMin = opts.timeMin;
+  else {
+    if (opts.timeMin) base.timeMin = opts.timeMin;
+    if (opts.timeMax) base.timeMax = opts.timeMax;
+  }
 
   do {
     const page = await gget<{ items?: GEvent[]; nextPageToken?: string; nextSyncToken?: string }>(
