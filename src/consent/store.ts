@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 import {
   CONSENT_MAX_AGE_DAYS,
   consentVersion,
@@ -58,6 +60,14 @@ export function readConsent(): ConsentRecord | null {
 export function hasConsent(category: OptionalCategory | 'necessary'): boolean {
   if (category === 'necessary') return true;
   return readConsent()?.choices[category] === true;
+}
+
+/**
+ * May an optional item be written? On web only after the visitor said yes;
+ * native apps have no cookies and no banner, so it is always allowed there.
+ */
+export function canStore(category: OptionalCategory): boolean {
+  return Platform.OS !== 'web' || hasConsent(category);
 }
 
 /** Should the first-visit banner show? */

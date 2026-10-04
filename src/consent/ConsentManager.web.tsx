@@ -31,7 +31,8 @@ import {
  *     again after 12 months or when the declaration grows,
  *   - Global Privacy Control counts as "reject all".
  *
- * While only necessary items are declared, the banner is a notice ("Got it").
+ * While only necessary items are declared, the banner is a notice ("Got it");
+ * Preferences (ft-theme, ft-hours) are optional, so today it asks for a choice.
  */
 
 const subscribeNone = () => () => {};
