@@ -1,5 +1,5 @@
 import { TRACK_ACTIONS, TRACK_STEPS } from '@/auth/onboarding';
-import { requireUserId, unauthorized } from '@/server/auth/clerk';
+import { requireUserId, unauthorized } from '@/server/auth/user';
 import { isConfigured, query } from '@/server/db';
 import { enforceRateLimit } from '@/server/rate-limit';
 

@@ -1,24 +1,24 @@
-import { useClerk, useUser } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
 import { Alert, StyleSheet, View } from 'react-native';
 
 import { apiFetch } from '@/lib/api';
+import { signOut, useAuthState } from '@/lib/session';
 
 import { N, R, SANS } from '../tokens';
 import { Press, Txt } from '../ui';
 
 /**
- * Native account control. Clerk has no `<UserButton />` / `<UserProfile />` on
- * native, so this is a small avatar that opens a native action sheet: manage
- * profile (web only), set up my week (onboarding again), sign out, or delete
- * the account (wipes Neon + Clerk).
+ * Native account control: a small avatar that opens a native action sheet —
+ * manage profile (web only), set up my week (onboarding again), sign out, or
+ * delete the account (DELETE /api/me wipes the data and the sign-in). Auth is
+ * Better Auth (src/lib/session.ts); the web build has the full menu
+ * (AccountButton.web.tsx).
  */
 export function AccountButton({ showName = false }: { showName?: boolean }) {
-  const { user } = useUser();
-  const { signOut } = useClerk();
+  const { user } = useAuthState();
   const router = useRouter();
 
-  const name = user?.fullName || user?.primaryEmailAddress?.emailAddress || 'Account';
+  const name = user?.name || user?.email || 'Account';
 
   function confirmDelete() {
     Alert.alert('Delete account?', 'This permanently removes your account and all calendar data.', [

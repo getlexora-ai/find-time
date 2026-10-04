@@ -1,8 +1,8 @@
 /**
  * Privacy Policy + Terms content (issue #2). EN-only for now.
  *
- * First pass, written to match how the product actually works today (Clerk auth,
- * Neon Postgres, Google Calendar (read + focus-block write-back), OpenAI for AI features,
+ * First pass, written to match how the product actually works today (Better Auth,
+ * self-hosted on Neon Postgres, Resend for email, Google Calendar (read + focus-block write-back), OpenAI for AI features,
  * Railway hosting, waitlist email capture). Plain prose, no claims the product
  * can't back. NOT yet counsel-reviewed — that review, and the EN-only vs EN/DE
  * call, are the user's (see the issue). If a DE entity operates the service, an
@@ -31,7 +31,7 @@ export const PRIVACY: { title: string; intro: string; sections: LegalSection[] }
       heading: '2. What we collect',
       body: [
         'Waitlist: your email address, the page the sign-up came from (a short "source" label), and a salted, irreversible hash of your IP address used only for spam and rate-limit protection. Your raw IP is not stored.',
-        'Account: when you sign in, identity and session data are handled by our authentication provider (Clerk) — typically your email address and name. Our database keeps only your Clerk user id, so the app can attach your calendars and events to you; your name and email stay with Clerk. For a connected Google account we keep Google’s anonymous account id, not its email address; the email is read from Google only to show you which account is connected.',
+        'Account: your email address, your name if you give it, and a password hash (or the Google account you sign in with). Sign-in runs on our own servers and this data is kept in our database, together with your active sign-in sessions (device and IP address, to keep them secure). For a connected Google account we keep Google’s anonymous account id, not its email address; the email is read from Google only to show you which account is connected.',
         'What you create in Find Time: tasks, habits, events you add, your planning preferences and your Plan with AI conversations are stored so the app can work for you.',
         'Google Calendar (optional): if you connect a Google account, we request access to read your calendars and to manage events. We store only when your events are (start and end, whether they show as busy, your RSVP and the number of guests) plus encrypted OAuth tokens. Event titles, notes, locations, guest names and video links are not stored: they are read from Google each time you open your calendar, used for that request and discarded. We write to your calendar only when you ask us to, in two cases. First, if you turn on focus-block sync, we add, update and remove Find Time’s own focus blocks as private busy events. Second, when you move, resize or delete one of your own events in Find Time, we make that same change in Google Calendar; this is offered only for one-off events you organise with no other guests, and no one is notified. Find Time never changes your Google events on its own, and never changes meetings with other guests, repeating events or events someone else organised.',
         'Find Time’s use and transfer of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements. We do not sell this data or use it for advertising, and we do not use it to develop, improve or train generalized AI or machine-learning models.',
@@ -55,7 +55,7 @@ export const PRIVACY: { title: string; intro: string; sections: LegalSection[] }
     {
       heading: '4. Processors we use',
       body: [
-        'Clerk — authentication and session management. Clerk uses Cloudflare to protect its sign-in service from bots.',
+        'Resend — sends sign-in codes and beta invitations to your email address.',
         'Neon — managed PostgreSQL database (EU region).',
         'Google — Calendar API when you connect an account.',
         'OpenAI — to turn a typed request into a structured one. OpenAI does not use API data for training and keeps it for up to 30 days for abuse monitoring.',
@@ -67,7 +67,7 @@ export const PRIVACY: { title: string; intro: string; sections: LegalSection[] }
       heading: '5. How long we keep it',
       body: [
         'Waitlist entries: until launch invitations are complete or you ask for removal, whichever is first.',
-        'Account and calendar data: for as long as your account exists. Deleting your account removes your user row and cascades to your profile, connected accounts, calendars and events; associated Clerk data is deleted too.',
+        'Account and calendar data: for as long as your account exists. Deleting your account removes your user row and cascades to your profile, connected accounts, calendars and events; your sign-in data and sessions are deleted with it.',
         'Rate-limit counters: rolling, cleared automatically after about two days.',
         'Cookie-choice log: 3 years, then deleted automatically. Your browser keeps the choice for 12 months, after which we ask again.',
         'Logs: retained for a short period by our host for security and debugging.',
@@ -76,7 +76,7 @@ export const PRIVACY: { title: string; intro: string; sections: LegalSection[] }
     {
       heading: '6. International transfers',
       body: [
-        'Data is stored in the EU where possible (Neon EU region). Some processors (Google, Clerk, OpenAI, Railway) may process data outside the EU under Standard Contractual Clauses or an adequacy decision.',
+        'Data is stored in the EU where possible (Neon EU region). Some processors (Google, Resend, OpenAI, Railway) may process data outside the EU under Standard Contractual Clauses or an adequacy decision.',
       ],
     },
     {
@@ -89,7 +89,7 @@ export const PRIVACY: { title: string; intro: string; sections: LegalSection[] }
     {
       heading: '8. Cookies',
       body: [
-        'Find Time stores only what is strictly necessary on your device: cookies that keep you signed in and protect sign-in from bots, plus a few settings in your browser’s storage (for example the calendar background you picked). Sign-in cookies are set only on the sign-in pages and inside the app, never while you just read this site. These need no consent under §25(2) TDDDG / Art. 5(3) ePrivacy Directive. There are no analytics, advertising or tracking cookies.',
+        'Find Time stores only what is strictly necessary on your device: cookies that keep you signed in, plus a few settings in your browser’s storage (for example the calendar background you picked). Sign-in cookies are set only on the sign-in pages and inside the app, never while you just read this site. These need no consent under §25(2) TDDDG / Art. 5(3) ePrivacy Directive. There are no analytics, advertising or tracking cookies.',
         'Fonts are served from our own server, so no request goes to Google Fonts when you load a page.',
         'If we ever add anything optional, it stays off until you agree in the cookie banner, and you can change or withdraw your choice at any time with “Cookie settings” at the bottom of every page or the button below. The full list of what is stored, by whom and for how long:',
       ],
@@ -117,7 +117,7 @@ export const TERMS: { title: string; intro: string; sections: LegalSection[] } =
     {
       heading: '2. Your account',
       body: [
-        'Sign-in is handled by Clerk. You are responsible for keeping your credentials secure and for activity under your account. You must be old enough to form a binding contract in your country.',
+        'You are responsible for keeping your credentials secure and for activity under your account. You must be old enough to form a binding contract in your country.',
       ],
     },
     {

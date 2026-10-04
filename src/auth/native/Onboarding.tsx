@@ -11,13 +11,13 @@
  *     already connected on the web is used for the preview here too.
  *   - Time zone is the device's, shown and saved as-is.
  */
-import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CATS, MONO, N, tint } from '@/calendar/tokens';
+import { useAuthState } from '@/lib/session';
 import { Press, Txt } from '@/design/ui';
 
 import { loadOnboarding, type OnboardingState, saveOnboarding, track } from '../client';
@@ -58,8 +58,7 @@ function deviceEnv(): { timezone?: string; clock24?: boolean } {
 
 export default function NativeOnboarding() {
   const router = useRouter();
-  const { isLoaded: authLoaded, isSignedIn } = useAuth();
-  const { user, isLoaded: userLoaded } = useUser();
+  const { isLoaded: authLoaded, isSignedIn, user, firstName, refetch } = useAuthState();
   const env = useMemo(() => deviceEnv(), []);
 
   const [a, setA] = useState<OnboardingAnswers>(() => defaultAnswers(env));
@@ -80,18 +79,18 @@ export default function NativeOnboarding() {
     void (async () => {
       const st = await loadOnboarding();
       setServer(st);
-      if (st?.existing && st.answers) setA({ ...st.answers, firstName: st.answers.firstName || user.firstName || '' });
-      else setA({ ...defaultAnswers(env), firstName: user.firstName ?? '' });
+      if (st?.existing && st.answers) setA({ ...st.answers, firstName: st.answers.firstName || firstName });
+      else setA({ ...defaultAnswers(env), firstName });
       setReady(true);
     })();
-  }, [user, env]);
+  }, [user, firstName, env]);
 
   useEffect(() => {
     if (authLoaded && !isSignedIn) router.replace('/login');
   }, [authLoaded, isSignedIn, router]);
   useEffect(() => {
-    if (userLoaded && user?.publicMetadata?.onboarded && !busy && !done) router.replace('/app');
-  }, [userLoaded, user, busy, done, router]);
+    if (authLoaded && user?.onboarded && !busy && !done) router.replace('/app');
+  }, [authLoaded, user, busy, done, router]);
 
   useEffect(() => {
     if (!ready || done || viewed.current.has(step)) return;
@@ -146,7 +145,7 @@ export default function NativeOnboarding() {
             : { answers: a, changed: existing ? [...changed] : undefined },
       );
       track(kind === 'skip' ? TRACK[step] : 'done', kind, 'native');
-      await user?.reload();
+      await refetch();
       if (kind === 'finish') {
         setDone(true);
         setBusy(null);
@@ -159,7 +158,7 @@ export default function NativeOnboarding() {
     }
   }
 
-  if (!authLoaded || !userLoaded || !user || !ready) {
+  if (!authLoaded || !user || !ready) {
     return (
       <View style={[s.root, s.center]}>
         <ActivityIndicator color={N.ink} />

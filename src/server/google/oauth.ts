@@ -4,7 +4,7 @@ import { decrypt, encrypt } from '../crypto';
 /**
  * Google OAuth 2.0 (authorization-code flow) — no SDK, just `fetch`.
  *
- * Calendar-connect only — Clerk owns login now. `calendar.readonly` grants the
+ * Calendar connect only — sign-in with Google is Better Auth's (src/server/auth/auth.ts). `calendar.readonly` grants the
  * pull sync; the `openid email profile` scopes just name the connected account.
  * Tokens are stored AES-256-GCM-encrypted in `oauth_tokens` (db/010).
  *

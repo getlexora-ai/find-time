@@ -28,7 +28,7 @@ export const CATEGORIES: { id: Category; label: string; description: string }[] 
     id: 'necessary',
     label: 'Necessary',
     description:
-      'Needed for the site to work: signing in, keeping your session secure, protecting sign-up from bots, and remembering this choice. They can’t be switched off.',
+      'Needed for the site to work: signing in, keeping your session secure, and remembering this choice. They can’t be switched off.',
   },
   {
     id: 'preferences',
@@ -60,68 +60,21 @@ export type DeclaredItem = {
 };
 
 export const DECLARATION: DeclaredItem[] = [
-  // ── Clerk (sign-in) ────────────────────────────────────────────────
+  // ── Sign-in (Better Auth, served by Find Time itself) ─────────────
+  // Names are `ft.` + Better Auth's cookie; on https they gain `__Secure-`.
   {
-    name: '__session*',
-    provider: 'Clerk (sign-in)',
-    purpose: 'Short-lived token that proves you are signed in.',
-    expiry: 'Session',
+    name: 'ft.*',
+    provider: 'Find Time (sign-in)',
+    purpose: 'Keeps you signed in: the session token, and short-lived sign-in state while you log in with Google.',
+    expiry: '7 days, renewed while you use it',
     type: 'Cookie',
     category: 'necessary',
   },
   {
-    name: '__client_uat*',
-    provider: 'Clerk (sign-in)',
-    purpose: 'Timestamp that tells the site whether your sign-in changed.',
-    expiry: '1 year',
-    type: 'Cookie',
-    category: 'necessary',
-  },
-  {
-    name: '__client',
-    provider: 'Clerk (sign-in)',
-    purpose: 'Keeps you signed in on Clerk’s sign-in domain.',
-    expiry: 'Until sign-out',
-    type: 'Cookie',
-    category: 'necessary',
-  },
-  {
-    name: '__refresh*',
-    provider: 'Clerk (sign-in)',
-    purpose: 'Renews your sign-in session without asking again.',
-    expiry: 'Until sign-out',
-    type: 'Cookie',
-    category: 'necessary',
-  },
-  {
-    name: '__clerk_db_jwt*',
-    provider: 'Clerk (sign-in)',
-    purpose: 'Links your browser to the sign-in service (development setup).',
-    expiry: '1 year',
-    type: 'Cookie',
-    category: 'necessary',
-  },
-  {
-    name: '__clerk_environment',
-    provider: 'Clerk (sign-in)',
-    purpose: 'Caches the sign-in form’s configuration so it loads faster.',
-    expiry: 'Persistent',
-    type: 'Local storage',
-    category: 'necessary',
-  },
-  {
-    name: '__cf_bm',
-    provider: 'Cloudflare (for Clerk)',
-    purpose: 'Bot protection on the sign-in service.',
-    expiry: '30 minutes',
-    type: 'Cookie',
-    category: 'necessary',
-  },
-  {
-    name: '_cfuvid',
-    provider: 'Cloudflare (for Clerk)',
-    purpose: 'Rate limiting on the sign-in service.',
-    expiry: 'Session',
+    name: '__Secure-ft.*',
+    provider: 'Find Time (sign-in)',
+    purpose: 'The same sign-in cookies, on the secure (https) site.',
+    expiry: '7 days, renewed while you use it',
     type: 'Cookie',
     category: 'necessary',
   },
@@ -206,10 +159,6 @@ export const DECLARATION: DeclaredItem[] = [
  * The scanner fails on any host not listed here.
  */
 export const THIRD_PARTY_HOSTS: { host: string; provider: string; purpose: string }[] = [
-  { host: '*.clerk.accounts.dev', provider: 'Clerk', purpose: 'Sign-in (development instance)' },
-  { host: 'clerk.usefindtime.com', provider: 'Clerk', purpose: 'Sign-in (production instance)' },
-  { host: 'img.clerk.com', provider: 'Clerk', purpose: 'Profile pictures on sign-in' },
-  { host: 'challenges.cloudflare.com', provider: 'Cloudflare (for Clerk)', purpose: 'Bot check on sign-up' },
 ];
 
 export function knownHost(host: string): boolean {

@@ -1,5 +1,5 @@
 import { IMPORTED_LOCKED_MESSAGE, canDelete, isImported, lockedFields } from '@/lib/synced-fields';
-import { requireUserId, unauthorized } from '@/server/auth/clerk';
+import { requireUserId, unauthorized } from '@/server/auth/user';
 import { isConfigured } from '@/server/db';
 import { deleteEvent, getEventMeta, updateEvent, type EventInput } from '@/server/events-repo';
 import { deleteRemote, moveRemote } from '@/server/google/edit';

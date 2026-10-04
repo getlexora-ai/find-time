@@ -8,11 +8,11 @@ import { syncAccount } from '@/server/google/sync';
 /**
  * GET /api/auth/google/callback — Google redirects here with `?code` + `?state`.
  *
- * The signed `state` carries the Clerk user id that started the connect. We
+ * The signed `state` carries the user id that started the connect. We
  * verify it, exchange the code, attach a `connected_accounts` row to that user,
  * store the encrypted tokens, kick off the first sync, and send the browser back
  * to /app — or to /welcome when onboarding started the connect (the
- * `ft_oauth_return` cookie). No session is set — Clerk already owns that.
+ * `ft_oauth_return` cookie). No session is set — Better Auth already owns that.
  * Failure → `<that page>?connect=error`.
  */
 export async function GET(request: Request): Promise<Response> {
@@ -37,7 +37,7 @@ export async function GET(request: Request): Promise<Response> {
 
     const accountId = await tx(async (c) => {
       // The mirror row is normally already there (requireUserId in /start). This
-      // is just an FK backstop; it never overwrites the Clerk-sourced identity.
+      // is just an FK backstop; it never touches the identity in `auth_user`.
       await c.query(`insert into users (id) values ($1) on conflict (id) do nothing`, [ownerId]);
       // ponytail: a row from before db/024 has no subject yet; the first
       // reconnect adopts it. Assumes one Google account per user, true today.

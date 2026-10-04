@@ -27,7 +27,8 @@ Calendar-specific design: [../docs/db/calendar-schema.md](../docs/db/calendar-sc
 | `021_effort_and_minimums.sql` | `tasks.effort`; `habits.min_per_week`; `scheduler_profiles.hard_work`. Effort budget, habit minimums, spread/cluster — §8 of [../docs/planning-agent-plan.md](../docs/planning-agent-plan.md) |
 | `022_onboarding_events.sql` | `onboarding_events` — what people do on `/welcome` (view / connect / skip / finish per step), for the onboarding drop-off funnel. Query in the file header |
 | `026_consent_log.sql` | `consent_log` — proof of each cookie choice (random consent id, version, method, choices; no IP or user). Written by `/api/consent`, rows deleted after 3 years |
-| `schema.sql` | **generated** — `001`–`007` + `001_waitlist` (incl. the `014` columns) concatenated; what a fresh DB gets. **Run `010` and `013` after it.** |
+| `027_better_auth.sql` | Better Auth replaces Clerk: `auth_user` / `auth_session` / `auth_account` / `auth_verification` (src/server/auth/auth.ts); `users.email` defaults to `''`; `waitlist.invited_at` (the beta gate) |
+| `schema.sql` | **generated** — `001`–`007` + `001_waitlist` (incl. the `014` columns) concatenated; what a fresh DB gets. **Run `010`, `013` and `027` after it.** |
 
 Each file is idempotent (`create table if not exists`, `do $$ … exception when duplicate_object`), so re-running one is safe.
 

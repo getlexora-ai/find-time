@@ -37,6 +37,11 @@ function db(): Pool {
   return (globalThis.__ftPool ??= makePool());
 }
 
+/** The shared pool, for libraries that take one (Better Auth — src/server/auth/auth.ts). */
+export function pool(): Pool {
+  return db();
+}
+
 export function isConfigured(): boolean {
   return Boolean(process.env.DATABASE_URL);
 }

@@ -8,7 +8,7 @@
  * then lists every cookie, localStorage / sessionStorage key and third-party
  * host the browser touched, and checks each against src/consent/registry.ts.
  * Fails (exit 1) when something is:
- *   - any cookie on a public page (PUBLIC: landing + legal — Clerk isn't loaded there),
+ *   - any cookie on a public page (PUBLIC: landing + legal — auth isn't touched there),
  *   - not declared in the registry (it must be listed before it ships),
  *   - declared as optional but present before consent (it must be gated),
  *   - a third-party host not in THIRD_PARTY_HOSTS (it sees every visitor's IP).

@@ -1,5 +1,5 @@
 import type { ReportReason, ReportResponse } from '@/lib/api-types';
-import { requireUserId, unauthorized } from '@/server/auth/clerk';
+import { requireUserId, unauthorized } from '@/server/auth/user';
 import { getOwnedMessage } from '@/server/ai/repo';
 import { isConfigured } from '@/server/db';
 import { enforceRateLimit } from '@/server/rate-limit';

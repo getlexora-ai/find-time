@@ -1,11 +1,11 @@
-import { requireUserId } from '@/server/auth/clerk';
+import { requireUserId } from '@/server/auth/user';
 import { isConfigured } from '@/server/db';
 import { listAccountsWithCalendars } from '@/server/accounts-repo';
 
 /**
  * GET /api/calendar/accounts — the signed-in user's Google connections + their
  * calendars, plus the profile for the sidebar chip. `{ signedIn: false }` when
- * there is no valid Clerk token (the `/app` gate is what actually redirects).
+ * there is no valid session (the `/app` gate is what actually redirects).
  */
 export async function GET(request: Request): Promise<Response> {
   if (!isConfigured()) {

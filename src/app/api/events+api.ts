@@ -1,4 +1,4 @@
-import { requireUserId, unauthorized } from '@/server/auth/clerk';
+import { requireUserId, unauthorized } from '@/server/auth/user';
 import { isConfigured } from '@/server/db';
 import { createEvent, listEvents, type EventInput } from '@/server/events-repo';
 import { pushFocus } from '@/server/google/push';

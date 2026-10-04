@@ -1,5 +1,5 @@
 import type { PreferenceItem, PreferencesResponse } from '@/lib/api-types';
-import { requireUserId, unauthorized } from '@/server/auth/clerk';
+import { requireUserId, unauthorized } from '@/server/auth/user';
 import { describeClaim } from '@/server/ai/learn';
 import { MIN_EVIDENCE } from '@/server/ai/preferences';
 import { deleteRule, forgetLearned, loadProfile, setLearnedVerdict } from '@/server/ai/repo';

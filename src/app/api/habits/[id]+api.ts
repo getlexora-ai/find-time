@@ -1,5 +1,5 @@
 import type { TaskActionResponse } from '@/lib/api-types';
-import { requireUserId, unauthorized } from '@/server/auth/clerk';
+import { requireUserId, unauthorized } from '@/server/auth/user';
 import { isConfigured } from '@/server/db';
 import { getHabit } from '@/server/habits-repo';
 import { stopHabit } from '@/server/task-actions';

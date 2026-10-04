@@ -1,5 +1,5 @@
 import type { TaskActionResponse } from '@/lib/api-types';
-import { requireUserId, unauthorized } from '@/server/auth/clerk';
+import { requireUserId, unauthorized } from '@/server/auth/user';
 import { isConfigured } from '@/server/db';
 import { POSTPONE_PRESETS, type PostponePreset, finishTask, postponeTask, presetInstant } from '@/server/task-actions';
 import { getTask, updateTask } from '@/server/tasks-repo';

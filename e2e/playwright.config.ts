@@ -2,12 +2,11 @@ import { defineConfig, devices } from '@playwright/test';
 
 /**
  * End-to-end: sign up → verify → onboarding → app, and sign in, against a
- * running Find Time (`npx expo start --web` or `npx expo serve`) wired to a
- * Clerk **development** instance. See ./README.md for the env it needs.
+ * running Find Time (`npx expo start --web` or `npx expo serve`) with a
+ * database and `E2E_FIXED_OTP` set. See ./README.md for the env it needs.
  */
 export default defineConfig({
   testDir: './tests',
-  globalSetup: './global-setup.ts',
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 1 : 0,

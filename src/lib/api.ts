@@ -1,19 +1,20 @@
 import { Platform } from 'react-native';
 
 /**
- * One wrapper for every call to the `+api.ts` routes. It attaches the Clerk
- * session token as `Authorization: Bearer …` so the same code path works on
- * web and native (native has no cookie jar).
+ * One wrapper for every call to the `+api.ts` routes. Better Auth's session
+ * is a cookie: web is same-origin, so the browser sends it; native has no
+ * cookie jar, so the getter returns the cookie from SecureStore and it goes
+ * out as a `Cookie` header (src/lib/auth-client.ts).
  *
- * `getToken` comes from Clerk's `useAuth()` hook, which can only run inside a
- * component — `AuthBridge` in `app/_layout.tsx` pushes it here once mounted.
+ * `AuthBridge` in `app/_layout.tsx` installs the getter once the session is
+ * known, with the user id, and again on sign-in / sign-out / account switch.
  */
 
 const BASE = process.env.EXPO_PUBLIC_API_URL ?? '';
 
 type TokenGetter = () => Promise<string | null>;
 let getToken: TokenGetter | null = null;
-/** Clerk id of the signed-in user, or null. Stores key their local caches by it. */
+/** Id of the signed-in user, or null. Stores key their local caches by it. */
 let userId: string | null = null;
 const tokenListeners = new Set<() => void>();
 
@@ -38,11 +39,11 @@ export function currentUserId(): string | null {
 
 /**
  * Run `listener` each time a token getter is installed — on first mount and
- * again whenever Clerk hands AuthBridge a new one (sign-in, account switch).
+ * again whenever AuthBridge installs a new one (sign-in, account switch).
  *
  * For stores that load at import time. Those run before AuthBridge has
- * mounted, so their first request goes out without a token and 401s; this is
- * how they retry once a token exists, instead of waiting for some unrelated
+ * mounted, so their first request goes out without a session and 401s; this
+ * is how they retry once a session exists, instead of waiting for some unrelated
  * screen action to happen to refresh them.
  */
 export function onTokenGetter(listener: () => void): () => void {
@@ -55,13 +56,14 @@ export function onTokenGetter(listener: () => void): () => void {
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers);
   try {
-    const token = getToken ? await getToken() : null;
-    if (token) headers.set('Authorization', `Bearer ${token}`);
+    const cookie = getToken ? await getToken() : null;
+    if (cookie) headers.set('Cookie', cookie);
   } catch {
-    // No token → the request goes out unauthenticated and the route answers 401.
+    // No session → the request goes out unauthenticated and the route answers 401.
   }
   return fetch(`${BASE}${path}`, {
-    // Web still sends Clerk's cookies too; harmless alongside the bearer token.
+    // Web: the browser attaches the session cookie. Native: set above, and
+    // `omit` keeps the platform from adding its own.
     credentials: Platform.OS === 'web' ? 'include' : 'omit',
     ...init,
     headers,

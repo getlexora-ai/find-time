@@ -6,7 +6,7 @@ import {
   type PreviewBlock,
   workHoursOf,
 } from '@/auth/onboarding';
-import { clerkClient, requireUserId, unauthorized } from '@/server/auth/clerk';
+import { firstNameOf, markOnboarded, requireUserId, setFirstName, unauthorized } from '@/server/auth/user';
 import { blocksTime } from '@/server/ai/find-time';
 import { loadProfile, savePlanSettings } from '@/server/ai/repo';
 import { getSettings, patchSettings } from '@/server/calendar/settings-repo';
@@ -25,10 +25,8 @@ import { wallClockNow } from '@/server/wall-clock';
  *      from connected calendars, as preview blocks (Mon = 0), or null.
  *
  * POST /api/onboarding — `{ answers, changed }` writes only the groups in
- *      `changed` (omitted = all, for first-time users), then marks the Clerk
- *      user `publicMetadata.onboarded`. `{ skip: true }` only sets the flag.
- *      Without a database nothing is stored, but the flag is still set
- *      (`saved: false`) so nobody is stuck in setup.
+ *      `changed` (omitted = all, for first-time users), then sets
+ *      `auth_user.onboarded`. `{ skip: true }` only sets the flag.
  */
 
 const DAY = 86_400_000;
@@ -41,7 +39,7 @@ export async function GET(request: Request): Promise<Response> {
 
   let firstName = '';
   try {
-    firstName = (await clerkClient.users.getUser(userId)).firstName ?? '';
+    firstName = await firstNameOf(userId);
   } catch {
     // name is a nicety; the form still works without it
   }
@@ -154,7 +152,7 @@ export async function POST(request: Request): Promise<Response> {
         }
         saved = true;
       }
-      if (changed.has('name') && a.firstName) await clerkClient.users.updateUser(userId, { firstName: a.firstName });
+      if (changed.has('name') && a.firstName) await setFirstName(userId, a.firstName);
     } catch (err) {
       console.error('POST /api/onboarding', err);
       return Response.json({ error: 'Could not save your answers. Try again.' }, { status: 500 });
@@ -162,7 +160,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    await clerkClient.users.updateUserMetadata(userId, { publicMetadata: { onboarded: true } });
+    await markOnboarded(userId);
   } catch (err) {
     console.error('POST /api/onboarding (metadata)', err);
     return Response.json({ error: 'Saved, but could not finish setup. Try again.' }, { status: 500 });

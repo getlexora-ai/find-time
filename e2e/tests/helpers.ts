@@ -1,26 +1,23 @@
-import { setupClerkTestingToken } from '@clerk/testing/playwright';
 import { expect, type Page, test } from '@playwright/test';
 
-export const HAS_CLERK = Boolean(
-  (process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? process.env.CLERK_PUBLISHABLE_KEY) && process.env.CLERK_SECRET_KEY,
-);
+/**
+ * The app under test must run with the same `E2E_FIXED_OTP` (and not in
+ * production): every emailed code is then that value, so the specs can type
+ * it (src/server/auth/auth.ts). Without it every spec is skipped.
+ */
+export const TEST_CODE = process.env.E2E_FIXED_OTP ?? '';
 
-/** Skip a spec unless a Clerk dev instance is configured. */
-export function needsClerk() {
-  test.skip(!HAS_CLERK, 'Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY (dev instance) to run.');
+/** Skip a spec unless the app was started with a fixed test code. */
+export function needsAuth() {
+  test.skip(!TEST_CODE, 'Start the app and the tests with the same E2E_FIXED_OTP=123456 to run.');
 }
 
-/**
- * Clerk test mode: any `+clerk_test` address on a dev instance accepts the
- * code 424242 and sends no email.
- * https://clerk.com/docs/testing/test-emails-and-phones
- */
-export const TEST_CODE = '424242';
-export const testEmail = (tag: string) => `findtime-e2e-${tag}-${Date.now()}+clerk_test@example.com`;
+const BASE = process.env.E2E_BASE_URL ?? 'http://localhost:8081';
+
+export const testEmail = (tag: string) => `findtime-e2e-${tag}-${Date.now()}@example.com`;
 export const PASSWORD = 'e2e-Password-2026!';
 
 export async function open(page: Page, path: string) {
-  if (HAS_CLERK) await setupClerkTestingToken({ page });
   await page.goto(path);
 }
 
@@ -39,13 +36,22 @@ export async function signUp(page: Page, email: string) {
   await enterCode(page);
 }
 
-/** Remove a test user through the Clerk Backend API (cascades our DB rows via DELETE /api/me is not needed: the user never connected anything). */
-export async function deleteClerkUser(email: string) {
-  const key = process.env.CLERK_SECRET_KEY;
-  if (!key) return;
-  const h = { Authorization: `Bearer ${key}` };
-  const res = await fetch(`https://api.clerk.com/v1/users?email_address=${encodeURIComponent(email)}`, { headers: h });
+/**
+ * Remove a test user the way a person would: sign in through Better Auth's
+ * API, then `DELETE /api/me` (wipes `users` + `auth_user` in one transaction).
+ * Quietly does nothing if the account was never finished.
+ */
+export async function deleteTestUser(email: string) {
+  const headers = { 'Content-Type': 'application/json', Origin: BASE };
+  const res = await fetch(`${BASE}/api/auth/sign-in/email`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ email, password: PASSWORD }),
+  });
   if (!res.ok) return;
-  const users = (await res.json()) as { id: string }[];
-  for (const u of users) await fetch(`https://api.clerk.com/v1/users/${u.id}`, { method: 'DELETE', headers: h });
+  const cookie = res.headers
+    .getSetCookie()
+    .map((c) => c.split(';')[0])
+    .join('; ');
+  await fetch(`${BASE}/api/me`, { method: 'DELETE', headers: { Origin: BASE, Cookie: cookie } });
 }

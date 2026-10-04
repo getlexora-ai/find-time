@@ -11,8 +11,8 @@ import { refresh as refreshEvents } from './cal-store';
  * calendars and the connect / disconnect / toggle / sync actions. Same
  * `useSyncExternalStore` surface as `cal-store.ts`.
  *
- * `signedIn` here just mirrors "the API accepted our Clerk token" — the real
- * auth gate is Clerk on `/app`. Every mutation that can change which events
+ * `signedIn` here just mirrors "the API accepted our session" — the real
+ * auth gate is the session check on `/app`. Every mutation that can change which events
  * exist ends by re-fetching the event store, so the grid updates without a reload.
  */
 
@@ -116,7 +116,7 @@ export async function connect(): Promise<void> {
   }
 }
 
-/** Clear the local calendar snapshot on sign-out (Clerk does the real thing). */
+/** Clear the local calendar snapshot on sign-out (Better Auth does the real thing). */
 export async function resetAccounts(): Promise<void> {
   set({ signedIn: false, user: null, accounts: [] });
   await refreshEvents();

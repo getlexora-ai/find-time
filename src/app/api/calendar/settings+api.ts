@@ -1,5 +1,5 @@
 import type { CalendarSettings } from '@/lib/api-types';
-import { requireUserId, unauthorized } from '@/server/auth/clerk';
+import { requireUserId, unauthorized } from '@/server/auth/user';
 import { checkPatch, getSettings, patchSettings } from '@/server/calendar/settings-repo';
 import { isConfigured } from '@/server/db';
 

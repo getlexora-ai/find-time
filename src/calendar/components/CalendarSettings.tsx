@@ -4,14 +4,14 @@ import { StyleSheet, Text, View } from 'react-native';
 import { C } from '@/design/tokens';
 import { apiFetch } from '@/lib/api';
 import type { CalendarSettings as Settings } from '@/lib/api-types';
-import { HAIRLINE, MONO_STACK } from '@/lib/clerkAppearance';
 
 import { connect, disconnect, refreshAccounts, setCalRead, syncNow, useAccounts } from '../account-store';
 import { Icon, type IconName } from '../Icon';
 import { CalSwatch, Press } from '../ui';
+import { HAIRLINE, MONO_STACK } from './account-theme';
 
 /**
- * "Calendars" page inside Clerk's Manage account (web): the place to connect,
+ * "Calendars" page inside Manage account (web, AccountModal.web.tsx): the place to connect,
  * reconnect, sync and disconnect Google Calendar, and pick which calendars
  * are read.
  *
@@ -20,10 +20,11 @@ import { CalSwatch, Press } from '../ui';
  * expired grant is replaced and the old sync error is cleared — nothing is
  * deleted.
  *
- * It lives on Clerk's dark surface, not the calendar's light one, so it takes
- * its colours and type from the Clerk theme (src/lib/clerkAppearance.ts)
+ * It lives on the account modal's dark surface, not the calendar's light one,
+ * so it takes its colours and type from the account theme (./account-theme.ts)
  * rather than the calendar tokens. It also uses no app providers (no toast):
- * Clerk's modal renders it, and every state it needs is in the account store.
+ * the modal is portalled outside them, and every state it needs is in the
+ * account store.
  */
 
 const K = {
