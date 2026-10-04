@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Animated, Easing, Platform, StyleSheet, View, type ViewStyle } from 'react-native';
 
+import { useReducedMotion } from '@/design/useReducedMotion';
 import type { TraceStep } from '@/lib/api-types';
 
 import { useCalEvents } from '../cal-store';
@@ -64,8 +65,10 @@ export function Shimmer({ height = 2 }: { height?: number }) {
 
 /** Rises in from 6px below. */
 export function FadeIn({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
-  const v = useState(() => new Animated.Value(0))[0];
+  const reduce = useReducedMotion();
+  const v = useState(() => new Animated.Value(reduce ? 1 : 0))[0];
   useEffect(() => {
+    if (reduce) return;
     Animated.timing(v, {
       toValue: 1,
       duration: 280,
@@ -73,7 +76,7 @@ export function FadeIn({ children, delay = 0 }: { children: React.ReactNode; del
       easing: Easing.out(Easing.cubic),
       useNativeDriver: driver,
     }).start();
-  }, [v, delay]);
+  }, [v, delay, reduce]);
   return (
     <Animated.View
       style={{
@@ -202,10 +205,71 @@ function Dots() {
   );
 }
 
-/** "Worked through 4 steps · 2.1s", opening onto the steps with their numbers. */
+/** Pops in from 60% with a little overshoot, then stays put. */
+function Pop({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
+  const reduce = useReducedMotion();
+  const v = useState(() => new Animated.Value(reduce ? 1 : 0))[0];
+  useEffect(() => {
+    if (reduce) return;
+    Animated.timing(v, {
+      toValue: 1,
+      duration: 320,
+      delay,
+      easing: Easing.out(Easing.back(2.2)),
+      useNativeDriver: driver,
+    }).start();
+  }, [v, delay, reduce]);
+  return (
+    <Animated.View
+      style={{
+        opacity: v.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, 1, 1] }),
+        transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) }],
+      }}>
+      {children}
+    </Animated.View>
+  );
+}
+
+/** The rail between two steps, drawn downwards once the step above has landed. */
+function RailLine({ delay }: { delay: number }) {
+  const reduce = useReducedMotion();
+  const v = useState(() => new Animated.Value(reduce ? 1 : 0))[0];
+  useEffect(() => {
+    if (reduce) return;
+    Animated.timing(v, {
+      toValue: 1,
+      duration: 260,
+      delay,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: driver,
+    }).start();
+  }, [v, delay, reduce]);
+  return (
+    <Animated.View
+      style={[
+        styles.railLine,
+        {
+          transformOrigin: 'top',
+          transform: [{ scaleY: v }],
+        } as unknown as ViewStyle,
+      ]}
+    />
+  );
+}
+
+const STAGGER = 90;
+
+/**
+ * "Needs one detail · 4 steps · 0.3s" — what the turn came to, opening onto the
+ * steps with their numbers. On the newest reply the steps land one after
+ * another; the order and the numbers are the server's, only the reveal is paced.
+ */
 export function Trace({ steps, open: startOpen = false }: { steps: TraceStep[]; open?: boolean }) {
   const [open, setOpen] = useState(startOpen);
   const ms = steps.reduce((n, s) => n + (s.ms ?? 0), 0);
+  const last = steps[steps.length - 1];
+  // Older replies render settled; only the newest one plays its steps in.
+  const play = startOpen;
   return (
     <View style={styles.trace}>
       <Press
@@ -217,13 +281,22 @@ export function Trace({ steps, open: startOpen = false }: { steps: TraceStep[]; 
         <View style={styles.stack}>
           {steps.slice(0, 4).map((s, i) => (
             <View key={`${s.tool}-${i}`} style={[styles.stackItem, { marginLeft: i ? -8 : 0, zIndex: 10 - i }]}>
-              <StepIcon tool={s.tool} size={22} />
+              {play ? (
+                <Pop delay={i * STAGGER}>
+                  <StepIcon tool={s.tool} size={22} />
+                </Pop>
+              ) : (
+                <StepIcon tool={s.tool} size={22} />
+              )}
             </View>
           ))}
         </View>
-        <Txt style={styles.traceTitle}>
-          {`Worked through ${steps.length} steps`}
-          {ms > 0 && <Txt style={styles.traceMs}>{` · ${(ms / 1000).toFixed(1)}s`}</Txt>}
+        <Txt style={styles.traceTitle} numberOfLines={1}>
+          {last?.label ?? 'Worked through it'}
+          <Txt style={styles.traceMs}>
+            {` · ${steps.length} ${steps.length === 1 ? 'step' : 'steps'}`}
+            {ms > 0 && ` · ${(ms / 1000).toFixed(1)}s`}
+          </Txt>
         </Txt>
         <View style={styles.spacer} />
         <View style={{ transform: [{ rotate: open ? '180deg' : '0deg' }] }}>
@@ -233,11 +306,13 @@ export function Trace({ steps, open: startOpen = false }: { steps: TraceStep[]; 
       {open && (
         <View style={styles.traceBody}>
           {steps.map((s, i) => (
-            <FadeIn key={`${s.tool}-${i}`} delay={i * 70}>
+            <FadeIn key={`${s.tool}-${i}`} delay={i * STAGGER}>
               <View style={styles.traceRow}>
                 <View style={styles.rail}>
-                  <StepIcon tool={s.tool} size={24} />
-                  {i < steps.length - 1 && <View style={styles.railLine} />}
+                  <Pop delay={i * STAGGER}>
+                    <StepIcon tool={s.tool} size={24} />
+                  </Pop>
+                  {i < steps.length - 1 && <RailLine delay={i * STAGGER + 140} />}
                 </View>
                 <View style={styles.traceText}>
                   <Txt style={styles.traceLabel}>{s.label}</Txt>

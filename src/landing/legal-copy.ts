@@ -60,6 +60,7 @@ export const PRIVACY: { title: string; intro: string; sections: LegalSection[] }
         'Google — Calendar API when you connect an account.',
         'OpenAI — to turn a typed request into a structured one. OpenAI does not use API data for training and keeps it for up to 30 days for abuse monitoring.',
         'Railway — application hosting and infrastructure logs.',
+        'Better Auth — an admin dashboard for sign-ins: receives account and sign-in events (user ID, name, email address, time, IP address and device) so we can support and secure accounts.',
         'Each acts as a processor under a data-processing agreement and only on our instructions.',
       ],
     },
@@ -76,7 +77,7 @@ export const PRIVACY: { title: string; intro: string; sections: LegalSection[] }
     {
       heading: '6. International transfers',
       body: [
-        'Data is stored in the EU where possible (Neon EU region). Some processors (Google, Resend, OpenAI, Railway) may process data outside the EU under Standard Contractual Clauses or an adequacy decision.',
+        'Data is stored in the EU where possible (Neon EU region). Some processors (Google, Resend, OpenAI, Railway, Better Auth) may process data outside the EU under Standard Contractual Clauses or an adequacy decision.',
       ],
     },
     {

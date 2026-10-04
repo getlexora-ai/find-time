@@ -1,4 +1,5 @@
 import { expo } from '@better-auth/expo';
+import { dash } from '@better-auth/infra';
 import { betterAuth } from 'better-auth';
 import { APIError } from 'better-auth/api';
 import { emailOTP } from 'better-auth/plugins';
@@ -18,6 +19,8 @@ import { codeMail, existingAccountMail, sendMail } from '@/server/email';
  *   Google            `signIn.social` → /api/auth/callback/google
  *   native            the Expo plugin: session cookie kept in SecureStore,
  *                     `findtime://` deep links trusted
+ *   dashboard         Better Auth's hosted dashboard (`dash()`), only when
+ *                     BETTER_AUTH_API_KEY is set; the plugin reads the key itself
  *
  * `onboarded` on the user is what `/app` gates on (set by /api/onboarding).
  * `BETA_INVITE_ONLY=1` refuses sign-ups whose email hasn't been invited
@@ -86,6 +89,7 @@ function makeAuth() {
         },
       }),
       expo(),
+      ...(process.env.BETTER_AUTH_API_KEY ? [dash()] : []),
     ],
     databaseHooks: {
       user: {
