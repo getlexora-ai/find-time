@@ -123,6 +123,23 @@ export async function listEvents(
   return (await withDetails(userId, rows)).map(toApi);
 }
 
+/**
+ * Find Time's own repeating events that began before `to`. listEvents returns
+ * a series once, on its first day, so a planner that only read that would book
+ * over every later one; the AI expands these (ai/place-at.ts expandRepeat).
+ * Imported Google series are already stored one row per instance.
+ */
+export async function listOwnRepeats(userId: string, to: string): Promise<ApiEvent[]> {
+  const rows = await query<Row>(
+    `select ${COLS} from calendar_events
+      where user_id = $1 and deleted_at is null and rrule is not null
+        and origin <> 'imported' and start_at < $2
+      order by start_at`,
+    [userId, to],
+  );
+  return (await withDetails(userId, rows)).map(toApi);
+}
+
 export async function createEvent(userId: string, input: EventInput): Promise<ApiEvent> {
   const row = await queryOne<Row>(
     `insert into calendar_events

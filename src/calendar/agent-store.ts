@@ -258,6 +258,7 @@ export async function acceptProposal(p: ChatProposal): Promise<AcceptResult> {
       category: p.category,
       startISO: p.startISO,
       endISO: p.endISO,
+      rrule: p.repeat?.rrule,
     });
   } catch {
     return { ok: false, notes: [] };

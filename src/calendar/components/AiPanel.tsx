@@ -218,7 +218,7 @@ export function AiPanel({
       }
       setDecisions((d) => ({
         ...d,
-        [p.id]: { kind: 'added', label: fmtSlot(p.startISO, p.endISO) },
+        [p.id]: { kind: 'added', label: p.repeat ? `${fmtSlot(p.startISO, p.endISO)} · repeats ${p.repeat.label}` : fmtSlot(p.startISO, p.endISO) },
       }));
       onApplied(p.startISO, 1, 1);
       if (res.notes.length) toast(res.notes[0]);
@@ -701,6 +701,14 @@ function ProposalCard({
             styles.tileTime,
             styles.tileTimeProposed,
           ]}>{`${fmtSlot(proposal.startISO, proposal.endISO)} · proposed`}</Txt>
+        {proposal.repeat && (
+          <View style={styles.tileMetaRow}>
+            <Icon name="refresh" size={13} color={N.muted} />
+            <Txt style={styles.tileTime}>
+              {`Repeats ${proposal.repeat.label}${proposal.repeat.count ? ` · ${proposal.repeat.count} times` : ''}`}
+            </Txt>
+          </View>
+        )}
       </View>
       <DayStrip startISO={proposal.startISO} endISO={proposal.endISO} />
       {/* The scorer's own reason. Showing it is what makes the feedback

@@ -469,6 +469,8 @@ export function createAgentBlock(input: {
   category: string;
   startISO: string;
   endISO: string;
+  /** a weekly repeat: saved as one routine (repeating) event from startISO */
+  rrule?: string;
 }): Promise<unknown> {
   return createEventAsync({
     date: input.startISO.slice(0, 10),
@@ -476,7 +478,7 @@ export function createAgentBlock(input: {
     end: input.endISO.slice(11, 16),
     title: input.title,
     cat: API_CAT_TO_CAT[input.category] ?? 'deep',
-    kind: 'ai',
+    ...(input.rrule ? { kind: 'routine' as const, rrule: input.rrule } : { kind: 'ai' as const }),
   });
 }
 

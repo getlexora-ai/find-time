@@ -113,6 +113,15 @@ export type ChatProposal = {
   taskId?: string;
   /** "plan my week": the habit this block is a session of */
   habitId?: string;
+  /** a weekly repeat: startISO/endISO are the first one; adding it saves one repeating event */
+  repeat?: {
+    /** RFC 5545 body, e.g. FREQ=WEEKLY;BYDAY=MO,TU,WE,TH;UNTIL=20261029T235959 */
+    rrule: string;
+    /** "Mon–Thu · until Thu 29 Oct" */
+    label: string;
+    /** how many times in all; null when it has no end */
+    count: number | null;
+  };
 };
 
 /** A backlog task (db/002 `tasks`) — what "plan my week" places. */

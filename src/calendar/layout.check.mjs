@@ -56,6 +56,13 @@ const ev = (o) => ({ id: 1, date: '2026-09-28', start: '09:00', end: '10:00', ti
   assert.equal(repeatsOn({ date: '2026-09-28', rrule: 'FREQ=DAILY;UNTIL=20261007T000000Z' }, '2026-10-07'), true, 'UNTIL is inclusive');
   assert.equal(repeatsOn({ date: '2026-09-28', rrule: 'FREQ=DAILY;UNTIL=20261007T000000Z' }, '2026-10-08'), false);
 
+  // What Plan with AI writes for "German class Mon–Thu, 5–29 Oct" (server/ai/place-at.ts weeklyRule).
+  const german = { date: '2026-10-05', rrule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH;UNTIL=20261029T235959' };
+  const on = [];
+  for (let d = 1; d <= 31; d++) if (repeatsOn(german, `2026-10-${String(d).padStart(2, '0')}`)) on.push(d);
+  assert.deepEqual(on, [5, 6, 7, 8, 12, 13, 14, 15, 19, 20, 21, 22, 26, 27, 28, 29], 'Mon–Thu, 5–29 Oct, no Fridays');
+  assert.equal(repeatsOn(german, '2026-11-02'), false, 'nothing after the last day');
+
   const three = { date: '2026-09-28', rrule: 'FREQ=DAILY;COUNT=3' };
   assert.equal(repeatsOn(three, '2026-09-30'), true, 'third of three');
   assert.equal(repeatsOn(three, '2026-10-01'), false, 'fourth is past COUNT');
