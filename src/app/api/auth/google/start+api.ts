@@ -7,7 +7,7 @@ import { enforceRateLimit } from '@/server/rate-limit';
  * POST /api/auth/google/start — begin a Google Calendar connect for the
  * signed-in Clerk user.
  *
- * Google no longer logs anyone in; this only grants `calendar.readonly`. Returns
+ * Google no longer logs anyone in; this only grants Calendar access (oauth.ts SCOPES). Returns
  * `{ url }` for the client to redirect to, and sets a short-lived
  * `ft_oauth_state` nonce cookie. The signed `state` carries the Clerk user id so
  * the callback knows who owns the new connection.
