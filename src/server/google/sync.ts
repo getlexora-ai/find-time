@@ -19,7 +19,20 @@ const READ_ROLES = new Set(['owner', 'writer', 'reader']);
 
 export type SyncResult = { imported: number; deleted: number; calendars: number };
 
-export async function syncAccount(userId: string, accountId: string): Promise<SyncResult> {
+// One sync per account at a time. Connect starts a background sync and the
+// calendar screen asks for one as it opens; two concurrent runs over the same
+// rows made one fail and flash "Sync failed". A second caller joins the first.
+const inFlight = new Map<string, Promise<SyncResult>>();
+
+export function syncAccount(userId: string, accountId: string): Promise<SyncResult> {
+  const running = inFlight.get(accountId);
+  if (running) return running;
+  const run = runSync(userId, accountId).finally(() => inFlight.delete(accountId));
+  inFlight.set(accountId, run);
+  return run;
+}
+
+async function runSync(userId: string, accountId: string): Promise<SyncResult> {
   try {
     const token = await getValidAccessToken(accountId);
     const calendars = await upsertCalendars(userId, accountId, token);
