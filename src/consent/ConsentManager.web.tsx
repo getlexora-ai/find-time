@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent } from 'react';
 
 import { COOKIES } from '@/landing/copy';
 
 import './consent.css';
 import { DeclarationTable } from './DeclarationTable';
-import { CATEGORIES, DECLARATION, optionalInUse, type OptionalCategory } from './registry';
+import { CATEGORIES, DECLARATION, optionalInUse, THIRD_PARTY_HOSTS, type OptionalCategory } from './registry';
 import {
   gpcSignal,
   needsChoice,
@@ -82,13 +82,28 @@ export function ConsentManager() {
     <>
       {needsChoice() && !open && (
         <section className="cc-banner" aria-label={COOKIES.title} role="region">
-          <p className="cc-title">{COOKIES.title}</p>
+          <p className="cc-title">
+            <CookieMark />
+            {COOKIES.title}
+          </p>
           <p className="cc-text">
             {noticeOnly ? COOKIES.notice : COOKIES.consent(listNames(optional))}{' '}
             <a className="cc-link" href="/privacy#cookies">
               {COOKIES.privacyLink}
             </a>
           </p>
+          <ul className="cc-strip" aria-label={COOKIES.settings}>
+            {CATEGORIES.map((c) => {
+              const used = c.id === 'necessary' || optional.includes(c.id as OptionalCategory);
+              return (
+                <li key={c.id} className={c.id === 'necessary' ? 'cc-chip cc-chip-on' : used ? 'cc-chip' : 'cc-chip cc-chip-off'}>
+                  <span className="cc-chip-dot" aria-hidden />
+                  {c.label}
+                  {!used && <span className="cc-sr">, {COOKIES.notUsed.toLowerCase()}</span>}
+                </li>
+              );
+            })}
+          </ul>
           <div className="cc-actions">
             {noticeOnly ? (
               <>
@@ -144,11 +159,21 @@ function SettingsDialog({
   const ref = useRef<HTMLDialogElement>(null);
   const current = readConsent();
   const [draft, setDraft] = useState<Choices>(current?.choices ?? NONE);
+  const [tab, setTab] = useState<Tab>('consent');
 
   useEffect(() => {
     const d = ref.current;
     if (d && !d.open) d.showModal(); // native focus trap, Esc, inert page behind
   }, []);
+
+  // Arrow keys move between tabs (WAI-ARIA tabs pattern).
+  const onTabKey = (e: KeyboardEvent) => {
+    const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+    if (!step) return;
+    const next = TABS[(TABS.indexOf(tab) + step + TABS.length) % TABS.length];
+    setTab(next);
+    document.getElementById(`cc-tab-${next}`)?.focus();
+  };
 
   return (
     <dialog
@@ -165,6 +190,7 @@ function SettingsDialog({
       <div className="cc-dialog-in">
         <header className="cc-dialog-head">
           <h2 id="cc-dialog-title" className="cc-h">
+            <CookieMark />
             {COOKIES.settings}
           </h2>
           <button type="button" className="cc-x" aria-label={COOKIES.close} onClick={onClose}>
@@ -172,53 +198,108 @@ function SettingsDialog({
           </button>
         </header>
 
-        <div className="cc-dialog-body">
-          <p className="cc-text">{COOKIES.dialogIntro}</p>
-          {!noticeOnly && gpcSignal() && <p className="cc-note">{COOKIES.gpc}</p>}
+        <div className="cc-tabs" role="tablist" aria-label={COOKIES.settings} onKeyDown={onTabKey}>
+          {TABS.map((t) => (
+            <button
+              key={t}
+              type="button"
+              role="tab"
+              id={`cc-tab-${t}`}
+              aria-controls="cc-panel"
+              aria-selected={tab === t}
+              tabIndex={tab === t ? 0 : -1}
+              className="cc-tab"
+              onClick={() => setTab(t)}>
+              {COOKIES.tabs[t]}
+              {t === 'details' && <span className="cc-count">{DECLARATION.length}</span>}
+            </button>
+          ))}
+        </div>
 
-          {CATEGORIES.map((c) => {
-            const items = DECLARATION.filter((i) => i.category === c.id);
-            const required = c.id === 'necessary';
-            const used = items.length > 0;
-            const on = required || draft[c.id as OptionalCategory];
-            return (
-              <section key={c.id} className="cc-cat">
-                <div className="cc-cat-row">
-                  <div>
-                    <h3 className="cc-cat-h">{c.label}</h3>
-                    <p className="cc-cat-d">{c.description}</p>
-                  </div>
-                  {required ? (
-                    <span className="cc-tag">{COOKIES.alwaysOn}</span>
-                  ) : used ? (
+        <div className="cc-dialog-body" role="tabpanel" id="cc-panel" aria-labelledby={`cc-tab-${tab}`}>
+          {tab === 'consent' && (
+            <>
+              <p className="cc-text">{COOKIES.dialogIntro}</p>
+              {!noticeOnly && gpcSignal() && <p className="cc-note">{COOKIES.gpc}</p>}
+              {CATEGORIES.map((c) => {
+                const required = c.id === 'necessary';
+                const used = DECLARATION.some((i) => i.category === c.id);
+                const on = required || (used && draft[c.id as OptionalCategory]);
+                return (
+                  <section key={c.id} className="cc-cat">
+                    <div>
+                      <h3 className="cc-cat-h">
+                        {c.label}
+                        {required ? (
+                          <span className="cc-tag">{COOKIES.alwaysOn}</span>
+                        ) : (
+                          !used && <span className="cc-tag cc-tag-off">{COOKIES.notUsed}</span>
+                        )}
+                      </h3>
+                      <p className="cc-cat-d">{c.description}</p>
+                    </div>
                     <button
                       type="button"
                       role="switch"
                       aria-checked={on}
                       aria-label={c.label}
+                      disabled={required || !used}
                       className="cc-switch"
                       onClick={() => setDraft((d) => ({ ...d, [c.id]: !d[c.id as OptionalCategory] }))}>
                       <span />
                     </button>
-                  ) : (
-                    <span className="cc-tag cc-tag-off">{COOKIES.notUsed}</span>
-                  )}
-                </div>
-                {used && (
-                  <details className="cc-details">
-                    <summary>{COOKIES.items(items.length)}</summary>
+                  </section>
+                );
+              })}
+            </>
+          )}
+
+          {tab === 'details' &&
+            CATEGORIES.map((c) => {
+              const items = DECLARATION.filter((i) => i.category === c.id);
+              return (
+                <details key={c.id} className="cc-acc" open={c.id === 'necessary'}>
+                  <summary>
+                    <span className="cc-acc-h">{c.label}</span>
+                    <span className="cc-count">{items.length}</span>
+                  </summary>
+                  <p className="cc-cat-d">{c.description}</p>
+                  {items.length > 0 ? (
                     <div className="cc-table-wrap">
                       <DeclarationTable category={c.id} />
                     </div>
-                  </details>
-                )}
-              </section>
-            );
-          })}
+                  ) : (
+                    <p className="cc-empty">{COOKIES.noItems}</p>
+                  )}
+                </details>
+              );
+            })}
 
-          <p className="cc-meta">
-            {current ? COOKIES.yourChoice(new Date(current.ts).toLocaleDateString(), current.id) : COOKIES.noChoice}
-          </p>
+          {tab === 'about' && (
+            <>
+              {COOKIES.about
+                .filter((_, i) => i < 2 || firstPartyOnly())
+                .map((t) => (
+                  <p key={t} className="cc-text cc-para">
+                    {t}
+                  </p>
+                ))}
+              <p className="cc-text cc-para">
+                <a className="cc-link" href="/privacy#cookies">
+                  {COOKIES.privacyLink}
+                </a>
+              </p>
+              <div className="cc-record">
+                <p className="cc-record-h">{COOKIES.recordTitle}</p>
+                <p className="cc-meta">
+                  {current
+                    ? COOKIES.yourChoice(new Date(current.ts).toLocaleDateString(), current.id)
+                    : COOKIES.noChoice}
+                </p>
+                <p className="cc-cat-d">{COOKIES.withdraw}</p>
+              </div>
+            </>
+          )}
         </div>
 
         <footer className="cc-actions cc-dialog-foot">
@@ -242,6 +323,31 @@ function SettingsDialog({
         </footer>
       </div>
     </dialog>
+  );
+}
+
+const TABS = ['consent', 'details', 'about'] as const;
+type Tab = (typeof TABS)[number];
+
+/** True while every declared item is Find Time's own and no other host is contacted. */
+function firstPartyOnly(): boolean {
+  return THIRD_PARTY_HOSTS.length === 0 && DECLARATION.every((i) => i.provider.startsWith('Find Time'));
+}
+
+function CookieMark() {
+  return (
+    <svg className="cc-mark" viewBox="0 0 20 20" width="18" height="18" aria-hidden>
+      <path
+        d="M10 2.5a7.5 7.5 0 1 0 7.4 8.7 2.6 2.6 0 0 1-3.1-2.6 2.6 2.6 0 0 1-2.9-3.3A2.6 2.6 0 0 1 10 2.5Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      <circle cx="7" cy="9" r="1" fill="currentColor" />
+      <circle cx="9.5" cy="13.5" r="1" fill="currentColor" />
+      <circle cx="13.5" cy="13" r="0.9" fill="currentColor" />
+    </svg>
   );
 }
 
