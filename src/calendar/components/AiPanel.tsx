@@ -13,13 +13,14 @@ import {
   type ViewStyle,
 } from 'react-native';
 
-import type { ChatMessage, ChatProposal, RejectReason, ReportReason } from '@/lib/api-types';
+import type { ChangeItem, ChangeSet, ChatMessage, ChatProposal, RejectReason, ReportReason } from '@/lib/api-types';
 
 import {
   REJECT_REASONS,
   REPORT_REASONS,
   acceptAlternative,
   acceptProposal,
+  applyChanges,
   loadHistory,
   loadTools,
   rejectProposal,
@@ -28,6 +29,7 @@ import {
   sendMessage,
   useAgentTools,
 } from '../agent-store';
+import { localIdFor, useCalEvents } from '../cal-store';
 import { Icon } from '../Icon';
 
 import { BREAK_COLOR, CATS, N, R, SANS, SHADOW, T, tint, TINT } from '../tokens';
@@ -245,6 +247,28 @@ export function AiPanel({
     [onApplied, toast],
   );
 
+  const onApplyChanges = useCallback(
+    async (set: ChangeSet) => {
+      if (adding.current.has(set.id)) return;
+      adding.current.add(set.id);
+      const res = await applyChanges(set).finally(() => adding.current.delete(set.id));
+      if (!res.done) {
+        toast("Couldn't apply those changes.");
+        return;
+      }
+      const label = `${res.done} change${res.done === 1 ? '' : 's'} applied${res.failed ? ` · ${res.failed} couldn't be made` : ''}`;
+      setDecisions((d) => ({ ...d, [set.id]: { kind: 'added', label } }));
+      const first = set.items.find((i) => i.startISO)?.startISO;
+      if (first) onApplied(first, res.done, set.items.length);
+      if (res.failed) toast(`${res.failed} change${res.failed === 1 ? '' : 's'} couldn't be made.`);
+    },
+    [onApplied, toast],
+  );
+
+  const onDeclineChanges = useCallback((set: ChangeSet) => {
+    setDecisions((d) => ({ ...d, [set.id]: { kind: 'declined', label: 'nothing changed' } }));
+  }, []);
+
   const onReject = useCallback(
     async (p: ChatProposal, reason: RejectReason, label: string) => {
       setRejecting(null);
@@ -353,6 +377,8 @@ export function AiPanel({
             onAcceptAlt={onAcceptAlt}
             onReject={onReject}
             onOpenReject={setRejecting}
+            onApplyChanges={onApplyChanges}
+            onDeclineChanges={onDeclineChanges}
             onAnswer={(a) => void send(a)}
             reported={Boolean(m.reported || reported[m.id])}
             reporting={reporting === m.id}
@@ -488,6 +514,8 @@ function MessageRow({
   onAcceptAlt,
   onReject,
   onOpenReject,
+  onApplyChanges,
+  onDeclineChanges,
   onAnswer,
   reported,
   reporting,
@@ -502,6 +530,8 @@ function MessageRow({
   onAcceptAlt: (p: ChatProposal, alt: { startISO: string; endISO: string }) => void;
   onReject: (p: ChatProposal, reason: RejectReason, label: string) => void;
   onOpenReject: (id: string | null) => void;
+  onApplyChanges: (set: ChangeSet) => void;
+  onDeclineChanges: (set: ChangeSet) => void;
   onAnswer: (text: string) => void;
   reported: boolean;
   reporting: boolean;
@@ -562,6 +592,15 @@ function MessageRow({
             onOpenReject={onOpenReject}
           />
         ))}
+
+        {message.changes && (
+          <ChangesCard
+            set={message.changes}
+            decision={decisions[message.changes.id]}
+            onApply={onApplyChanges}
+            onDecline={onDeclineChanges}
+          />
+        )}
 
         {/* Client-side error bubbles (`err_…`) never reached the server, so
           there is no turn behind them to report. */}
@@ -662,6 +701,62 @@ function ReportBox({
  * waits for you, the deep-work tint once it is on your calendar, faded if you
  * turned it down.
  */
+/**
+ * Several linked changes the engine checked together ("move Gym to 18:00, add
+ * Learn German at 17:30"). One Apply makes them all; nothing moves before.
+ * A moved or removed event shows its own title from the calendar — the card
+ * itself never stores a Google event's title.
+ */
+function ChangesCard({
+  set,
+  decision,
+  onApply,
+  onDecline,
+}: {
+  set: ChangeSet;
+  decision?: Decision;
+  onApply: (set: ChangeSet) => void;
+  onDecline: (set: ChangeSet) => void;
+}) {
+  const events = useCalEvents();
+  const titleOf = (it: ChangeItem) => {
+    const id = it.eventId ? localIdFor(it.eventId) : undefined;
+    return (id !== undefined && events.find((e) => e.id === id)?.title) || it.title || 'Event';
+  };
+  const line = (it: ChangeItem) =>
+    it.op === 'add'
+      ? `Add · ${fmtSlot(it.startISO!, it.endISO!)}`
+      : it.op === 'delete'
+        ? `Remove · ${fmtSlot(it.fromStartISO!, it.fromEndISO!)}`
+        : `${it.fromStartISO!.slice(11, 16)} → ${fmtSlot(it.startISO!, it.endISO!)}`;
+
+  return (
+    <View style={[styles.card, SHADOW.sm]}>
+      {set.items.map((it, i) => (
+        <View key={i} style={[styles.tile, decision ? (decision.kind === 'added' ? styles.tileAdded : styles.tileSkipped) : styles.tileProposed]}>
+          <Txt style={styles.tileTitle}>{titleOf(it)}</Txt>
+          <Txt style={[styles.tileTime, !decision && styles.tileTimeProposed]}>{line(it)}</Txt>
+        </View>
+      ))}
+      {decision ? (
+        <View style={styles.tileMetaRow}>
+          <Icon name={decision.kind === 'added' ? 'check' : 'close'} size={13} color={decision.kind === 'added' ? BREAK_COLOR : N.faint} />
+          <Txt style={styles.tileTime}>{decision.label}</Txt>
+        </View>
+      ) : (
+        <View style={styles.btnRow}>
+          <Press onPress={() => onApply(set)} hoverBg={N.inkHover} style={styles.primary}>
+            <Txt style={styles.primaryTxt}>{set.items.length === 1 ? 'Apply' : `Apply all ${set.items.length}`}</Txt>
+          </Press>
+          <Press onPress={() => onDecline(set)} hoverBg={N.sunken} style={styles.secondary}>
+            <Txt style={styles.secondaryTxt}>Not this</Txt>
+          </Press>
+        </View>
+      )}
+    </View>
+  );
+}
+
 function ProposalCard({
   proposal,
   decision,
