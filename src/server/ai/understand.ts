@@ -682,7 +682,9 @@ function readTimeOff(raw: string, nowMs: number): { startISO: string; endISO: st
   const first = hits[0];
   const second = hits[1];
   if (second && /^\s*(?:to|till|until|through|thru|-|–|and)\s*(?:the\s+)?$/.test(low.slice(first.end, second.index))) {
-    return { startISO: at(first.day, first.part), endISO: at(second.day, second.part) };
+    // "Tuesday to Thursday" on a Thursday: the end weekday is the one after the start, not today.
+    const end = second.day < first.day ? second.day + 7 * DAY * Math.ceil((first.day - second.day) / (7 * DAY)) : second.day;
+    return { startISO: at(first.day, first.part), endISO: at(end, second.part) };
   }
   if (/\b(?:until|till|through|thru)\s*$/.test(low.slice(0, first.index))) {
     return { startISO: ymd(today), endISO: at(first.day, first.part) };

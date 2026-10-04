@@ -1,7 +1,7 @@
 import { isConfigured, query, queryOne } from '../db.ts';
 import { aiConfigured, chatWithTools, type ToolDef } from './llm.ts';
 import { TOOL_ASK, TOOL_PLACE_AT, TOOL_PROPOSE } from './tools/names.ts';
-import { NOT_UNDERSTOOD, type Understood } from './understand.ts';
+import { type Draft, NOT_UNDERSTOOD, type Understood } from './understand.ts';
 
 /**
  * The model as a fallback reader. When understand.ts can't read a sentence,
@@ -38,13 +38,17 @@ const EXAMPLES = [
   'dinner at 19:00 on Saturday for 2h',
   'add task: write the quarterly report, 3h, due Friday',
   'add task: tax return, 3h, due 30 Oct, not before 20 Oct',
+  'add task: prep for the investor call, 3h, due Oct 14',
   'habit: gym 3x a week, 1h, mornings',
   'add habit meditate every day for 15 min',
+  'add habit read every day for 20 min, evenings',
+  '30 min call with mom this weekend after 10am',
   'never book me before 10',
   'no meetings on Fridays',
   'keep Friday afternoons free',
   '15 minutes between meetings',
   "I'm off from the 17th to the 22nd",
+  'Berlin trip from Oct 6 to Oct 8',
   'vacation in Lisbon next week',
   'cancel gym tomorrow',
   'clear everything on Friday',
@@ -55,7 +59,7 @@ const EXAMPLES = [
 
 const WD = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-function system(nowISO: string): string {
+function system(nowISO: string, lastQuestion?: string): string {
   const d = new Date(nowISO);
   return [
     'You rewrite a calendar request into one short English sentence that a strict rule-based reader understands.',
@@ -63,11 +67,20 @@ function system(nowISO: string): string {
     'Phrasings it understands:',
     ...EXAMPLES.map((e) => `- ${e}`),
     'Rules:',
-    '- Keep every fact the user gave: what, how long, which day, what time, how often. Keep their own words for the title.',
+    '- Keep every fact the user gave: what, how long, which day, what time, how often. Keep their own words for the title, short (2-4 words).',
     '- Never add a day, a length or a time the user did not say; leave it out and the app will ask.',
-    '- Use weekday names, "today", "tomorrow", "next week" or dates like "Oct 17". Write times as 18:00 or 6pm.',
+    '- Use weekday names, "today", "tomorrow", "next week" or dates like "Oct 17"; for a span of days use dates ("from Oct 6 to Oct 8"). Write times as 18:00 or 6pm. Write lengths as "30 min" or "2h", never inside the title.',
+    '- Work with a deadline or spread over several days is a task: "add task: <title>, <length>, due <day>".',
+    '- Something every day or several times a week is a habit: "add habit <title> every day for <length>" or "habit: <title> 3x a week, <length>".',
+    '- Drop conditions the app cannot check (how many meetings a day has, other people, weather); never put them in the title.',
+    '- Travel or being away is a trip: "<place> trip from <day> to <day>".',
     '- Translate other languages to English. Fix typos and slang.',
     '- If it is not a request about planning their time, return "".',
+    ...(lastQuestion
+      ? [
+          `The app just asked: "${lastQuestion}". If the message answers it, return only the answer in the phrasing above ("18:00", "90 min", "afternoon", "Tuesday"), not a new request.`,
+        ]
+      : []),
   ].join('\n');
 }
 
@@ -76,11 +89,17 @@ function system(nowISO: string): string {
  * than three words as the title. Real titles are short ("Dentist", "Deep
  * work"); a longer real one ("Write the blog post") costs one call, comes back
  * unchanged and keeps its first reading.
+ *
+ * Mid-conversation, a reply read as a new item is also worth one: "pm" or
+ * "like 90 mins" after a question became blocks titled "Pm" and "Like". With
+ * the question (rewriteForRules' lastQuestion) the model turns them into "18:00"
+ * and "90 min"; a real new request comes back as itself.
  */
-export function weakRead(c: Understood): boolean {
+export function weakRead(c: Understood, previous: Draft | null = null): boolean {
   if (c.summary === NOT_UNDERSTOOD) return true;
   if (c.name !== TOOL_PROPOSE && c.name !== TOOL_PLACE_AT && c.name !== TOOL_ASK) return false;
   const title = typeof c.args.title === 'string' ? c.args.title : (c.draft?.title ?? '');
+  if (previous?.title && c.draft?.title && c.draft.title !== previous.title) return true;
   return title.trim().split(/\s+/).length > 3;
 }
 
@@ -107,12 +126,12 @@ async function addSpend(usd: number): Promise<void> {
 }
 
 /** The rewrite, or null (no key, over budget, not a request, timeout, any failure). */
-export async function rewriteForRules(text: string, nowISO: string): Promise<string | null> {
+export async function rewriteForRules(text: string, nowISO: string, lastQuestion?: string): Promise<string | null> {
   if (!aiConfigured()) return null;
   try {
     if (!(await underBudget())) return null;
     const r = await chatWithTools({
-      system: system(nowISO),
+      system: system(nowISO, lastQuestion?.slice(0, 200)),
       history: [{ role: 'user', text }],
       tools: [TOOL], // the only tool, and a call is required: forced
       signal: AbortSignal.timeout(8000),

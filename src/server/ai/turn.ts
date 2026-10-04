@@ -147,8 +147,9 @@ export async function runTurn(
   // The rules couldn't read it, or read it badly (rewrite.ts weakRead): the model rewrites it into phrasing they do read, and
   // the rules decide again. A rewrite they still can't read changes nothing.
   let read = text;
-  if (weakRead(choice)) {
-    const rewritten = await rewriteForRules(text, nowISO);
+  if (weakRead(choice, readCtx.previous)) {
+    const lastQuestion = lastReply?.kind === 'question' ? lastReply.content : undefined;
+    const rewritten = await rewriteForRules(text, nowISO, lastQuestion);
     const again = rewritten ? understand(rewritten, readCtx) : null;
     if (rewritten && again && again.summary !== NOT_UNDERSTOOD) {
       choice = { ...again, summary: `${again.summary} · read by AI as "${rewritten}"` };
