@@ -4,7 +4,7 @@
  */
 import assert from 'node:assert/strict';
 
-const { isImported, lockedFields, PROVIDER_OWNED_FIELDS } = await import('./synced-fields.ts');
+const { canDelete, isImported, lockedFields, PROVIDER_OWNED_FIELDS } = await import('./synced-fields.ts');
 
 // Only imported events are locked.
 assert.deepEqual(lockedFields('manual', { title: 'x', start: 'a', end: 'b' }), []);
@@ -31,5 +31,13 @@ assert.equal(isImported('imported'), true);
 assert.equal(isImported('manual'), false);
 assert.equal(isImported(undefined), false);
 assert.ok(PROVIDER_OWNED_FIELDS.includes('title'));
+
+// An imported event Google lets you edit: times move, title and notes stay Google's.
+assert.deepEqual(lockedFields('imported', { start: 'a', end: 'b' }, true), []);
+assert.deepEqual(lockedFields('imported', { title: 'x', start: 'a' }, true), ['title']);
+assert.deepEqual(lockedFields('imported', { start: 'a', end: 'b' }, false), ['start', 'end']);
+assert.equal(canDelete('imported', true), true);
+assert.equal(canDelete('imported', false), false);
+assert.equal(canDelete('manual'), true);
 
 console.log('synced-fields.check: ok');

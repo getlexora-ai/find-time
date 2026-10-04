@@ -33,13 +33,21 @@ type Row = {
   task_id: string | null;
   habit_id: string | null;
   provider_event_id: string | null;
+  provider_editable: boolean;
 };
+
+// Editable from here = sync's verdict (map.ts editableHere) AND the account granted
+// calendar.events; an account connected read-only shows its events read-only.
+const EDITABLE = `(provider_editable and exists (
+                select 1 from oauth_tokens t where t.connected_account_id = calendar_events.connected_account_id
+                   and position('https://www.googleapis.com/auth/calendar.events' in coalesce(t.scope, '')) > 0
+              )) as provider_editable`;
 
 const COLS = `id, title, start_at, end_at, category, item_type, flexibility,
               origin, is_draft, rrule, project_label, description,
               calendar_id, all_day, location, transparency, response_status,
               conference_url, attendee_count, done_at, exdates, recurrence_parent_id, task_id, habit_id,
-              provider_event_id`;
+              provider_event_id, ${EDITABLE}`;
 
 /**
  * Imported rows carry no content (google/map.ts); fill title, notes, location
@@ -89,6 +97,7 @@ function toApi(r: Row): ApiEvent {
     seriesId: r.recurrence_parent_id,
     taskId: r.task_id,
     habitId: r.habit_id,
+    ...(r.provider_editable ? { googleEditable: true } : {}),
   };
 }
 
@@ -164,13 +173,16 @@ const PATCHABLE: Record<string, string> = {
   allDay: 'all_day',
 };
 
-/** An event's origin, or null when it does not exist for this user. */
-export async function getEventOrigin(userId: string, id: string): Promise<string | null> {
-  const row = await queryOne<{ origin: string }>(
-    `select origin from calendar_events where id = $1 and user_id = $2 and deleted_at is null`,
+/** An event's origin and whether Google lets you edit it here, or null when it does not exist for this user. */
+export async function getEventMeta(
+  userId: string,
+  id: string,
+): Promise<{ origin: string; googleEditable: boolean } | null> {
+  const row = await queryOne<{ origin: string; provider_editable: boolean }>(
+    `select origin, ${EDITABLE} from calendar_events where id = $1 and user_id = $2 and deleted_at is null`,
     [id, userId],
   );
-  return row?.origin ?? null;
+  return row ? { origin: row.origin, googleEditable: row.provider_editable } : null;
 }
 
 export async function updateEvent(

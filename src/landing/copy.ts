@@ -122,7 +122,7 @@ export const LANDING = {
     hint: 'Try them',
     items: [
       { title: 'Nothing lands without a yes.', body: 'Every plan is a proposal first.', ui: 'proposal' },
-      { title: 'Reads first. Writes only if you ask.', body: 'Only your focus blocks, as private busy events.', ui: 'toggle' },
+      { title: 'Reads first. Writes only if you ask.', body: 'Your focus blocks, and the events you move yourself.', ui: 'toggle' },
       { title: 'Other people’s meetings never move.', body: 'It plans around them.', ui: 'locked' },
     ],
     uiText: {
@@ -174,7 +174,7 @@ export const LANDING = {
       },
       {
         q: 'Does it write to my Google Calendar?',
-        a: 'Only if you turn it on — and then only your focus blocks, as private busy events.',
+        a: 'Only when you ask. Turn on focus-block sync and your focus blocks appear as private busy events. Move or delete one of your own events in Find Time and Google updates too — for one-off events without guests. It never edits meetings with other people.',
       },
       {
         q: 'What if everything doesn’t fit?',

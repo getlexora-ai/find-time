@@ -682,7 +682,9 @@ function readTimeOff(raw: string, nowMs: number): { startISO: string; endISO: st
   const first = hits[0];
   const second = hits[1];
   if (second && /^\s*(?:to|till|until|through|thru|-|–|and)\s*(?:the\s+)?$/.test(low.slice(first.end, second.index))) {
-    return { startISO: at(first.day, first.part), endISO: at(second.day, second.part) };
+    // "Tuesday to Thursday" on a Thursday: the end weekday is the one after the start, not today.
+    const end = second.day < first.day ? second.day + 7 * DAY * Math.ceil((first.day - second.day) / (7 * DAY)) : second.day;
+    return { startISO: at(first.day, first.part), endISO: at(end, second.part) };
   }
   if (/\b(?:until|till|through|thru)\s*$/.test(low.slice(0, first.index))) {
     return { startISO: ymd(today), endISO: at(first.day, first.part) };
@@ -1249,6 +1251,10 @@ const isQuestion = (raw: string, namesDay: boolean) =>
 const REVISION_CUE =
   /^\s*(?:no\b|nope|actually|instead|make\s+(?:it|them)|can\s+you\s+make|could\s+you\s+make|move\s+(?:it|them)|not\b|what\s+about|how\s+about|try\b|shorter|longer|earlier|later\b|sooner|too\s+(?:early|late|long|short))/i;
 
+/** Summary of a turn the rules could not read at all: turn.ts may hand it to the model (rewrite.ts). */
+export const NOT_UNDERSTOOD = 'not understood';
+const giveUp = (reply: string, keep: Draft | null): Understood => ({ ...answer(reply, keep), summary: NOT_UNDERSTOOD });
+
 const answer = (reply: string, keep: Draft | null): Understood => ({
   name: TOOL_ANSWER,
   args: { reply },
@@ -1335,7 +1341,7 @@ export function understand(text: string, ctx: UnderstandContext): Understood {
   }
 
   const rule = readRule(raw);
-  if (rule === 'unclear') return answer(RULE_HELP, prev);
+  if (rule === 'unclear') return giveUp(RULE_HELP, prev);
   if (rule) return { name: TOOL_RULE, args: rule, draft: null, summary: `rule · ${String(rule.kind)}` };
 
   if (looksAway(raw)) {
@@ -1352,7 +1358,7 @@ export function understand(text: string, ctx: UnderstandContext): Understood {
   if (!followUp && isQuestion(raw, Boolean(f.when)) && !f.durationMin && !f.at) {
     return answer(`I can't answer questions about your calendar yet — I can place time on it. ${HELP}`, prev);
   }
-  if (!followUp && !title && !f.when && !f.durationMin && !f.at && !f.part) return answer(HELP, prev);
+  if (!followUp && !title && !f.when && !f.durationMin && !f.at && !f.part) return giveUp(HELP, prev);
 
   const d: Draft = followUp ? { ...prev!, placed: false } : { tool: TOOL_PROPOSE };
   const changed: string[] = [];

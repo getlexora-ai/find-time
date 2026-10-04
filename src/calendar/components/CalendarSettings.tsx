@@ -1,7 +1,9 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { C } from '@/design/tokens';
+import { apiFetch } from '@/lib/api';
+import type { CalendarSettings as Settings } from '@/lib/api-types';
 import { HAIRLINE, MONO_STACK } from '@/lib/clerkAppearance';
 
 import { connect, disconnect, refreshAccounts, setCalRead, syncNow, useAccounts } from '../account-store';
@@ -65,6 +67,63 @@ const T = ({ style, children, lines }: { style: object | object[]; children: Rea
     {children}
   </Text>
 );
+
+/**
+ * Focus-block write-back (push.ts): off by default. The server refuses to turn
+ * it on without the calendar.events grant (409) and says to reconnect.
+ */
+function PushFocusRow() {
+  const [on, setOn] = useState<boolean | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiFetch('/api/calendar/settings')
+      .then((r) => (r.ok ? (r.json() as Promise<{ settings: Settings }>) : null))
+      .then((b) => b && setOn(b.settings.pushFocus))
+      .catch(() => {});
+  }, []);
+
+  async function toggle() {
+    const next = !on;
+    setOn(next);
+    setMsg(null);
+    try {
+      const r = await apiFetch('/api/calendar/settings', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ pushFocus: next }),
+      });
+      if (!r.ok) {
+        setOn(!next);
+        setMsg(((await r.json().catch(() => null)) as { error?: string } | null)?.error ?? 'Could not save.');
+      }
+    } catch {
+      setOn(!next);
+      setMsg('Could not save.');
+    }
+  }
+
+  if (on === null) return null;
+  return (
+    <View style={styles.card}>
+      <Press
+        hoverBg={K.hover}
+        style={styles.calRow}
+        accessibilityRole="checkbox"
+        aria-checked={on}
+        aria-label="Add my focus blocks to Google Calendar"
+        onPress={() => void toggle()}>
+        <View style={[styles.box, on && styles.boxOn]}>{on && <Icon name="check" size={10} color={K.onLime} />}</View>
+        <T style={styles.calName}>Add my focus blocks to Google Calendar</T>
+      </Press>
+      <T style={styles.status}>
+        As private busy events on your primary calendar, so others see the time as taken. This switch writes only Find
+        Time’s own focus blocks.
+      </T>
+      {!!msg && <T style={styles.error}>{msg}</T>}
+    </View>
+  );
+}
 
 export function CalendarSettings() {
   const { loading, accounts, syncing, error } = useAccounts();
@@ -157,6 +216,7 @@ export function CalendarSettings() {
               </View>
             );
           })}
+          <PushFocusRow />
           <View style={styles.another}>
             <Btn kind="quiet" label="Connect another Google account" icon="calendar-add" onPress={connect} />
           </View>
