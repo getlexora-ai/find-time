@@ -67,7 +67,10 @@ export const SAVE_FAILED = "Couldn't save that change. Check your connection and
 function emit() {
   events = [...events];
   listeners.forEach((l) => l());
-  if (owner && !preview) AsyncStorage.setItem(cacheKey(owner), JSON.stringify(events)).catch(() => {});
+  // Imported titles and notes are live from Google and never stored, not even
+  // on the device: the cache keeps their times only.
+  const cached = events.map((e) => (e.imported ? { ...e, title: '', notes: '' } : e));
+  if (owner && !preview) AsyncStorage.setItem(cacheKey(owner), JSON.stringify(cached)).catch(() => {});
 }
 
 export type CalLoad = { status: 'loading' | 'ready' | 'error'; error: string | null };
@@ -273,14 +276,21 @@ async function persist(temp: CalEvent): Promise<CalEvent> {
   if (queued?.op.kind === 'patch') {
     const patch = queued.op.patch;
     const merged = { ...saved, ...patch };
-    events = events.map((e) => (e.id === temp.id ? merged : e));
+    events = swapIn(temp.id, merged);
     emit();
     void sendPatch(serverId, saved, patch).then(queued.settle);
     return merged;
   }
-  events = events.map((e) => (e.id === temp.id ? saved : e));
+  events = swapIn(temp.id, saved);
   emit();
   return saved;
+}
+
+/** Replace the temp row with the saved one; a refresh during the POST may
+ *  already have dropped the temp row, and the saved one must not vanish. */
+function swapIn(tempId: CalEvent['id'], saved: CalEvent): CalEvent[] {
+  if (events.some((e) => e.id === tempId)) return events.map((e) => (e.id === tempId ? saved : e));
+  return events.some((e) => e.id === saved.id) ? events : [...events, saved];
 }
 
 /** Fire-and-forget create, for callers that must stay synchronous. */

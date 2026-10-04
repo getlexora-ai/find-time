@@ -105,12 +105,16 @@ export async function runTurn(
     return Response.json({ sessionId, error: 'Could not read your calendar.' }, { status: 500 });
   }
 
+  // Imported titles are live from Google and never stored; these lists feed
+  // clash text that is saved (ai_messages, ai_suggestions.reason), so they
+  // carry a generic name for imported events.
+  const named = (e: (typeof events)[number]) => ({ start: e.start, end: e.end, title: e.origin === 'imported' ? 'a calendar event' : e.title });
   // Only time the calendar itself calls busy is a conflict (see blocksTime).
-  const busy = events.filter(blocksTime).map((e) => ({ start: e.start, end: e.end, title: e.title }));
+  const busy = events.filter(blocksTime).map(named);
   // Everything a person would see at a given time, busy or not: a time the
   // user names is checked against this. All-day markers and declined invites
   // aren't "something at 12:00".
-  const shown = events.filter((e) => !e.allDay && e.rsvp !== 'declined').map((e) => ({ start: e.start, end: e.end, title: e.title }));
+  const shown = events.filter((e) => !e.allDay && e.rsvp !== 'declined').map(named);
 
   step({
     tool: STEP.read,

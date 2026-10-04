@@ -637,7 +637,7 @@ html.lenis body { height: auto; }
   display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;
   padding-block: 28px; font-size: 12px; color: var(--muted);
 }
-.lp .ftr-row nav { display: flex; gap: 24px; }
+.lp .ftr-row nav { display: flex; flex-wrap: wrap; gap: 8px 24px; }
 .lp .ftr-row .link { font-size: 14px; }
 .lp .wordmark-wrap { overflow: hidden; max-width: var(--col); margin-inline: auto; padding-inline: var(--pad); }
 .lp .wordmark {
@@ -705,5 +705,5 @@ html.lp-motion .lp .row-rule { transform: scaleX(0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .lp *, .lp *::before, .lp *::after { transition-duration: 0.01ms !important; }
+  .lp *, .lp *::before, .lp *::after { transition-duration: 0.01ms !important; animation: none !important; }
 }

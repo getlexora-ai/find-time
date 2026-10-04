@@ -115,6 +115,8 @@ export function AiPanel({
   // proposal id -> what the user did with it, so a decided card stops offering
   // buttons and shows the outcome instead.
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
+  // Proposals being added right now: a second click must not add a second block.
+  const adding = useRef(new Set<string>());
   // proposal id -> reason chips are open
   const [rejecting, setRejecting] = useState<string | null>(null);
   // message id -> report form is open
@@ -207,7 +209,9 @@ export function AiPanel({
 
   const onAccept = useCallback(
     async (p: ChatProposal) => {
-      const res = await acceptProposal(p);
+      if (adding.current.has(p.id)) return;
+      adding.current.add(p.id);
+      const res = await acceptProposal(p).finally(() => adding.current.delete(p.id));
       if (!res.ok) {
         toast('Could not add that block.');
         return;
@@ -224,7 +228,9 @@ export function AiPanel({
 
   const onAcceptAlt = useCallback(
     async (p: ChatProposal, alt: { startISO: string; endISO: string }) => {
-      const res = await acceptAlternative(p, alt);
+      if (adding.current.has(p.id)) return;
+      adding.current.add(p.id);
+      const res = await acceptAlternative(p, alt).finally(() => adding.current.delete(p.id));
       if (!res.ok) {
         toast('Could not add that block.');
         return;

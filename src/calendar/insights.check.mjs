@@ -17,6 +17,7 @@ export async function resolve(spec, ctx, next) {
   if (spec === 'react-native') return stub('export const Platform = { select: (o) => o.default };');
   if (spec === '@react-native-async-storage/async-storage') return stub('export default {};');
   if (spec === 'react') return stub('export const useSyncExternalStore = () => null;');
+  if (spec === '@/consent/store') return stub('export const canStore = () => false;');
   if (spec === '@/lib/api') return stub('export const apiFetch = () => null, hasTokenGetter = () => false, onTokenGetter = () => () => {};');
   if (spec.startsWith('.') && !/\\.[a-z]+$/i.test(spec)) return next(spec + '.ts', ctx);
   return next(spec, ctx);

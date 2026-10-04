@@ -191,11 +191,20 @@ async function upsertEvent(row: CalendarEventRow): Promise<void> {
     // being stored (see map.ts).
     `update calendar_events set ${setList}, title = '', description = null, location = null,
             conference_url = null, deleted_at = null, sync_state = 'synced'
-      where calendar_id = $1 and provider_event_id = $2
+      where calendar_id = $1 and provider_event_id = $2 and origin = 'imported'
       returning id`,
     [row.calendar_id, row.provider_event_id, ...values],
   );
   if (updated) return;
+
+  // Our own block pushed to Google (push.ts) comes back in the feed: it is
+  // already here under its own origin, live or deleted. Never import it.
+  const ours = await queryOne<{ id: string }>(
+    `select id from calendar_events
+      where calendar_id = $1 and provider_event_id = $2 and origin <> 'imported' limit 1`,
+    [row.calendar_id, row.provider_event_id],
+  );
+  if (ours) return;
 
   const cols = ['id', 'user_id', 'calendar_id', 'connected_account_id', 'title', 'item_type', 'category', 'origin', 'flexibility', 'sync_state', ...EVENT_COLS];
   const ph = cols.map((_, i) => `$${i + 1}`).join(', ');

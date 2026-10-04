@@ -1,3 +1,5 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import { authClient } from './auth-client';
 
 /**
@@ -19,8 +21,17 @@ export function useAuthState() {
   };
 }
 
-/** Sign out and drop the session (cookie on web, SecureStore on native). */
+/** Per-user caches (consent registry: "until sign-out"): the week's events, the open chat. */
+const USER_CACHES = ['ft-cal-events-v2:', 'ft.agent.session:'];
+
+/** Sign out, drop the session (cookie on web, SecureStore on native) and this device's per-user caches. */
 export async function signOut(): Promise<void> {
   await authClient.signOut();
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    await AsyncStorage.multiRemove(keys.filter((k) => USER_CACHES.some((p) => k.startsWith(p))));
+  } catch {
+    // storage unavailable: nothing was cached
+  }
 }
 

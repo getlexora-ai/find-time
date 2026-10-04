@@ -1,7 +1,7 @@
 import { ScrollViewStyleReset } from 'expo-router/html';
 import { type PropsWithChildren } from 'react';
 
-import { META } from '@/landing/copy';
+import { META, SITE } from '@/landing/copy';
 
 /**
  * The HTML shell every web route is rendered into. Runs in Node only — it is not
@@ -18,9 +18,6 @@ import { META } from '@/landing/copy';
  * public/fonts — never from fonts.googleapis.com.
  */
 
-// The deployed origin — used for canonical + absolute OG image URLs. Set
-// EXPO_PUBLIC_SITE_URL on Railway to the real host.
-const SITE = (process.env.EXPO_PUBLIC_SITE_URL || 'https://www.usefindtime.com').replace(/\/$/, '');
 const OG_IMAGE = `${SITE}/find-time-og.jpg`;
 
 export default function Root({ children }: PropsWithChildren) {
@@ -37,7 +34,7 @@ export default function Root({ children }: PropsWithChildren) {
         <title>{META.title}</title>
         <meta name="description" content={META.description} />
         <meta name="theme-color" content="#FAFAFA" />
-        <link rel="canonical" href={`${SITE}/`} />
+        {/* No canonical / og:url here: this shell wraps every route. Each page sets its own. */}
         <link rel="manifest" href="/site.webmanifest" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
@@ -45,7 +42,6 @@ export default function Root({ children }: PropsWithChildren) {
         <meta property="og:site_name" content="Find Time" />
         <meta property="og:title" content={META.title} />
         <meta property="og:description" content={META.description} />
-        <meta property="og:url" content={`${SITE}/`} />
         <meta property="og:image" content={OG_IMAGE} />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={META.title} />

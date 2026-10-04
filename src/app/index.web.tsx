@@ -1,7 +1,7 @@
 import Head from 'expo-router/head';
 
 import LandingPage from '@/landing/dom/LandingPage';
-import { META } from '@/landing/copy';
+import { META, SITE } from '@/landing/copy';
 import { joinWaitlist, validateEmail } from '@/signup/waitlist';
 
 /**
@@ -30,6 +30,8 @@ export default function Landing() {
       <Head>
         <title>{META.title}</title>
         <meta name="description" content={META.description} />
+        <link rel="canonical" href={`${SITE}/`} />
+        <meta property="og:url" content={`${SITE}/`} />
       </Head>
       <LandingPage onJoinWaitlist={onJoinWaitlist} />
     </>
