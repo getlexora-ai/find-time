@@ -48,10 +48,14 @@ const LIMITS: Record<RateRoute, Pair> = {
 
 type Key = { kind: 'ip' } | { kind: 'user'; userId: string };
 
-/** First hop of x-forwarded-for (client IP behind Railway's edge), salted-hashed. */
+/**
+ * Client IP as Railway's edge saw it, salted-hashed. The edge appends to
+ * x-forwarded-for, so the last hop is the one it vouches for; earlier hops are
+ * whatever the client sent and would let anyone rotate past the limits.
+ */
 function ipHashOf(req: Request): string {
   const xff = req.headers.get('x-forwarded-for') ?? '';
-  const ip = xff.split(',')[0]!.trim() || 'unknown';
+  const ip = xff.split(',').pop()!.trim() || 'unknown';
   const salt = process.env.SESSION_SECRET ?? '';
   return createHash('sha256').update(`${salt}:${ip}`).digest('hex').slice(0, 32);
 }

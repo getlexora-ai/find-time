@@ -751,8 +751,9 @@ const PLAN_WEEK =
   /^\s*(?:please\s+|can\s+you\s+|could\s+you\s+)?(?:(?:plan|schedule|organi[sz]e|sort\s+out)\s+(?:(?:my|the|all\s+(?:of\s+)?my|all\s+the)\s+)?(?:week|tasks|backlog|to-?dos|to-?do\s+list)(?:\s+(?:for\s+)?(?:this|next)\s+week)?|re-?plan(?:\s+(?:my|the)\s+(?:week|tasks))?)\s*[.!?]*$/i;
 const LIST_TASKS =
   /^\s*(?:(?:show|list|what\s+are|what's\s+on|whats\s+on)\s+)?(?:me\s+)?(?:my\s+|the\s+)?(?:open\s+)?(?:tasks|to-?dos|backlog|to-?do\s+list)\s*[?.!]*$/i;
+/** "finished the report", "mark the report as done" — `mark` alone is not done ("mark Friday as focus time"). */
 const TASK_DONE =
-  /^\s*(?:i(?:'ve|\s+have)?\s+)?(?:finished|completed|done\s+with|mark(?:ed)?)\s+(?:the\s+|my\s+)?(.+?)(?:\s+(?:as\s+)?(?:done|complete|completed|finished))?\s*[.!]*$/i;
+  /^\s*(?:i(?:'ve|\s+have)?\s+)?(?:(?:finished|completed|done\s+with)\s+(?:the\s+|my\s+)?(.+?)(?:\s+(?:as\s+)?(?:done|complete|completed|finished))?|mark(?:ed)?\s+(?:the\s+|my\s+)?(.+?)\s+(?:as\s+)?(?:done|complete|completed|finished))\s*[.!]*$/i;
 const TASK_SPLIT = /^\s*(?:you\s+can\s+|it's\s+ok\s+to\s+|ok\s+to\s+)?split\s+(?:up\s+)?(?:the\s+|my\s+)?(.+?)\s*[.!]*$/i;
 const TASK_DUE = /^\s*(?:move\s+|make\s+)?(?:the\s+|my\s+)?(.+?)\s+(?:is\s+)?(?:now\s+)?due\s+(.+?)\s*[.!]*$/i;
 const TASK_TAKES = /^\s*(?:the\s+|my\s+)?(.+?)\s+(?:takes|will\s+take|needs)\s+(.+?)\s*[.!]*$/i;
@@ -765,13 +766,21 @@ const TASK_EFFORT =
   /^\s*(?:the\s+|my\s+)?(.+?)\s+(?:is|are|will\s+be|is\s+going\s+to\s+be)\s+(?:a\s+|an\s+|really\s+|quite\s+|pretty\s+|very\s+|super\s+)*(hard|difficult|demanding|draining|intense|tough|heavy|easy|light|simple|quick|mindless)(?:\s+(?:one|task|work))?\s*[.!]*$/i;
 const TASK_CANCEL = /^\s*(?:no|nope|cancel|never\s*mind|forget\s+it|stop)\b[\s.!]*$/i;
 
-/** The open task a phrase names: exact title first, then one containing the other. */
+/** Words that point at a task without naming one: never a match. */
+const NOT_A_NAME = /^(?:it|this|that|them|these|those|everything|all|as|one|the\s+one|this\s+one|that\s+one)$/;
+
+/** Whether `hay` contains `needle` as whole words ("report" in "write the report", not "it" in "write"). */
+function hasWords(hay: string, needle: string): boolean {
+  return new RegExp(`(?:^|\\W)${needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\W|$)`).test(hay);
+}
+
+/** The open task a phrase names: exact title first, then one containing the other as whole words. */
 function matchTask(phrase: string, titles: string[]): string | null {
   const p = phrase.toLowerCase().replace(/^(?:the|my)\s+/, '').replace(/[.!?]+$/, '').trim();
-  if (p.length < 2) return null;
+  if (p.length < 3 || NOT_A_NAME.test(p)) return null;
   return (
     titles.find((t) => t.toLowerCase() === p) ??
-    titles.find((t) => t.toLowerCase().includes(p) || p.includes(t.toLowerCase())) ??
+    titles.find((t) => hasWords(t.toLowerCase(), p) || hasWords(p, t.toLowerCase())) ??
     null
   );
 }
@@ -864,9 +873,15 @@ function readTaskTurn(raw: string, ctx: UnderstandContext, nowMs: number, today:
   if (LIST_TASKS.test(raw)) return { name: TOOL_LIST_TASKS, args: { reply: '' }, draft: null, summary: 'list open tasks' };
 
   const done = TASK_DONE.exec(raw);
-  if (done) {
-    const match = matchTask(done[1], titles) ?? done[1].trim();
-    return { name: TOOL_TASK_DONE, args: { match, reply: '' }, draft: null, summary: `done · "${match}"` };
+  // Finishing a task clears its sessions, so it only happens for a task the
+  // sentence actually names — never on a guess from "mark it done".
+  const doneTitle = done && matchTask(done[1] ?? done[2], titles);
+  if (doneTitle) {
+    return { name: TOOL_TASK_DONE, args: { match: doneTitle, reply: '' }, draft: null, summary: `done · "${doneTitle}"` };
+  }
+  if (done && titles.length) {
+    const question = 'Which task did you finish?';
+    return { name: TOOL_ASK, args: { question, options: titles.slice(0, 4).map((t) => `Done with ${t}`) }, draft: null, summary: 'done · which task?' };
   }
 
   // Changes to a task only count when they name one the user actually has.

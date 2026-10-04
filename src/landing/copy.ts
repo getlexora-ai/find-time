@@ -14,6 +14,9 @@
  * - No customers, metrics or quotes we don't have.
  */
 
+/** The deployed origin, for canonical and absolute OG URLs. Set EXPO_PUBLIC_SITE_URL on Railway. */
+export const SITE = (process.env.EXPO_PUBLIC_SITE_URL || 'https://www.usefindtime.com').replace(/\/$/, '');
+
 export const META = {
   title: 'Find Time — plan the week you meant to have',
   description:

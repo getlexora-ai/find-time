@@ -1,10 +1,11 @@
+import { usePathname } from 'expo-router';
 import Head from 'expo-router/head';
 
 import { DeclarationTable } from '@/consent/DeclarationTable';
 import { CookieSettingsLink } from '@/consent/CookieSettingsLink';
 
 import './dom/landing.css';
-import { LANDING } from './copy';
+import { LANDING, SITE } from './copy';
 import { LEGAL_UPDATED, type LegalSection } from './legal-copy';
 
 /**
@@ -35,11 +36,13 @@ export function LegalScreen({
   sections: LegalSection[];
 }) {
   const name = title.charAt(0) + title.slice(1).toLowerCase();
+  const path = usePathname();
   return (
     <div className="lp">
       <Head>
         <title>{`${name} — Find Time`}</title>
         <meta name="description" content={description} />
+        <link rel="canonical" href={`${SITE}${path}`} />
       </Head>
       <a className="skip" href="#main">
         Skip to content

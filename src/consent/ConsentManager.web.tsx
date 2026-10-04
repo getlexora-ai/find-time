@@ -178,6 +178,7 @@ function SettingsDialog({
 
   return (
     <dialog
+      data-lenis-prevent
       ref={ref}
       className="cc-dialog"
       aria-labelledby="cc-dialog-title"

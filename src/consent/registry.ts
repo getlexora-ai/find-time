@@ -5,7 +5,7 @@
  * sessionStorage) is listed here. Three things read it:
  *   - the banner / settings dialog (src/consent/ConsentManager.web.tsx),
  *   - the declaration table on /privacy#cookies,
- *   - `npm run cookies:check` (scripts/cookie-scan.mjs), which loads the real
+ *   - `cd e2e && npm run cookies:check` (e2e/cookie-scan.mjs), which loads the real
  *     site and fails on anything undeclared, the way Cookiebot's scanner does.
  *
  * Rule (GDPR Art. 6/7, ePrivacy Art. 5(3), §25 TDDDG): only `necessary` items may
@@ -122,7 +122,7 @@ export const DECLARATION: DeclaredItem[] = [
   {
     name: 'ft-cal-events-v2:*',
     provider: 'Find Time',
-    purpose: 'Your event times (no titles), so the calendar opens instantly.',
+    purpose: 'Your event times (no Google titles or notes), so the calendar opens instantly.',
     expiry: 'Until sign-out',
     type: 'Local storage',
     category: 'necessary',
@@ -131,6 +131,14 @@ export const DECLARATION: DeclaredItem[] = [
     name: 'ft.agent.session:*',
     provider: 'Find Time',
     purpose: 'Keeps your current Plan with AI conversation.',
+    expiry: 'Until sign-out',
+    type: 'Local storage',
+    category: 'necessary',
+  },
+  {
+    name: 'better-auth.message',
+    provider: 'Find Time',
+    purpose: 'Tells your other open tabs that you signed in or out.',
     expiry: 'Persistent',
     type: 'Local storage',
     category: 'necessary',
