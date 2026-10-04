@@ -45,7 +45,8 @@ import {
   TOOL_PLAN_SETTINGS,
 } from './tools/names.ts';
 import { durationOptions } from './clarify.ts';
-import { ambiguousTime, daysLabel, weeklyDates, weeklyRule } from './place-at.ts';
+import { datesBetween, describeRule, firstOnOrAfter, formatRule, parseRule, type Rule } from '../../lib/repeats.ts';
+import { ambiguousTime } from './place-at.ts';
 
 /** Stamped on every logged turn in place of the old prompt version. Bump on any behaviour change. */
 export const PARSER_VERSION = 'r4';
@@ -113,6 +114,8 @@ export type Draft = {
   days?: number[];
   /** place_at with days: no end date wanted ("every Monday", "every week") */
   repeatOpen?: boolean;
+  /** place_at: a repeat the form read that weekdays alone can't say ("every other Friday", "monthly", "6 times"); its end is `to` */
+  rule?: string;
   /** place_at, set by the route: the time overlaps something and the user was asked whether to go ahead */
   clashAsked?: boolean;
   /** set by the route: the last turn put blocks on the card */
@@ -215,7 +218,7 @@ const DEFAULT_TITLE: Record<string, string> = {
   personal: 'Personal time',
 };
 
-function categoryOf(low: string): string {
+export function categoryOf(low: string): string {
   for (const [cat, re] of CATEGORY_WORDS) if (re.test(low)) return cat;
   return 'deep-work';
 }
@@ -1484,7 +1487,7 @@ export function understand(text: string, ctx: UnderstandContext): Understood {
     changed.push('changed_day');
   }
   // Answering "Until when?": an open-ended weekly repeat.
-  if (followUp && d.days?.length && /\b(?:every week|weekly|no end|ongoing|keep (?:it )?going|forever)\b/i.test(raw)) {
+  if (followUp && (d.days?.length || d.rule) && /\b(?:every week|weekly|no end|ongoing|keep (?:it )?going|forever)\b/i.test(raw)) {
     d.repeatOpen = true;
   }
 
@@ -1511,25 +1514,7 @@ export function understand(text: string, ctx: UnderstandContext): Understood {
   const category = d.category ?? 'deep-work';
   const name = d.title ?? DEFAULT_TITLE[category];
 
-  if (d.tool === TOOL_PLACE_AT) {
-    if (d.atUnsure && d.atMin !== undefined) {
-      const pm = d.atMin >= 720 ? d.atMin : d.atMin + 720;
-      const am = pm - 720;
-      return ask(`Did you mean ${hhmm(pm)} or ${hhmm(am)}?`, [hhmm(pm), hhmm(am)], { ...d, atMin: pm }, `${name} · am or pm?`);
-    }
-    if (d.days?.length) return repeatAt(d, name, nowMs, today);
-    const from = d.from ? fromYmd(d.from) : NaN;
-    if (!d.single || !Number.isFinite(from)) {
-      const opts: string[] = [];
-      if ((d.atMin ?? 0) * MIN > nowMs - today) opts.push('Today');
-      opts.push('Tomorrow', WD_LONG[new Date(today + 2 * DAY).getUTCDay()], WD_LONG[new Date(today + 3 * DAY).getUTCDay()]);
-      return ask(`Which day should ${name} go on?`, opts, d, `${name} · ${hhmm(d.atMin ?? 0)} · day missing`);
-    }
-    if (!d.durationMin || d.durationMin <= 0) {
-      return ask(`How long do you need for ${name}?`, durationOptions(category), d, `${name} · ${hhmm(d.atMin ?? 0)} · length missing`);
-    }
-    return placeAtFrom({ ...d, clashAsked: false }, today)!;
-  }
+  if (d.tool === TOOL_PLACE_AT) return placeAtDraft(d, nowMs);
 
   const from = d.from ? fromYmd(d.from) : NaN;
   const to = d.to ? fromYmd(d.to) : NaN;
@@ -1575,6 +1560,35 @@ export function understand(text: string, ctx: UnderstandContext): Understood {
   return { name: TOOL_PROPOSE, args, draft: d, summary: bits.join(' · ') };
 }
 
+/**
+ * A place_at draft — read by the rules here, or filled by the model's form
+ * (form.ts) — to the call to make, or to the one question still open: am or
+ * pm, which day, how long, until when. Both readers end here, so both ask the
+ * same questions and never guess.
+ */
+export function placeAtDraft(d: Draft, nowMs: number): Understood {
+  const today = dayStart(nowMs);
+  const category = d.category ?? 'deep-work';
+  const name = d.title ?? DEFAULT_TITLE[category];
+  if (d.atUnsure && d.atMin !== undefined) {
+    const pm = d.atMin >= 720 ? d.atMin : d.atMin + 720;
+    const am = pm - 720;
+    return ask(`Did you mean ${hhmm(pm)} or ${hhmm(am)}?`, [hhmm(pm), hhmm(am)], { ...d, atMin: pm }, `${name} · am or pm?`);
+  }
+  if (d.days?.length || d.rule) return repeatAt(d, name, nowMs, today);
+  const from = d.from ? fromYmd(d.from) : NaN;
+  if (!d.single || !Number.isFinite(from)) {
+    const opts: string[] = [];
+    if ((d.atMin ?? 0) * MIN > nowMs - today) opts.push('Today');
+    opts.push('Tomorrow', WD_LONG[new Date(today + 2 * DAY).getUTCDay()], WD_LONG[new Date(today + 3 * DAY).getUTCDay()]);
+    return ask(`Which day should ${name} go on?`, opts, d, `${name} · ${hhmm(d.atMin ?? 0)} · day missing`);
+  }
+  if (!d.durationMin || d.durationMin <= 0) {
+    return ask(`How long do you need for ${name}?`, durationOptions(category), d, `${name} · ${hhmm(d.atMin ?? 0)} · length missing`);
+  }
+  return placeAtFrom({ ...d, clashAsked: false }, today)!;
+}
+
 /** A complete place_at draft (one day, a time, a length) as the call to make; null if anything is missing. */
 function placeAtFrom(d: Draft, today: number): Understood | null {
   const from = d.from ? fromYmd(d.from) : NaN;
@@ -1596,33 +1610,46 @@ function placeAtFrom(d: Draft, today: number): Understood | null {
  * unless the person said "every"/"Mondays" — "Mon–Thu 11:00" alone could mean
  * this week or every week, so that is asked.
  */
+/** This reader counts Sunday as 0 (Date.getUTCDay); the shared engine counts Monday as 0. */
+const monDays = (days: number[]) => days.map((x) => (x + 6) % 7);
+
 function repeatAt(d: Draft, name: string, nowMs: number, today: number): Understood {
-  const days = d.days!;
   const at = d.atMin ?? 0;
-  const label = daysLabel(days);
+  // The pattern without its end: weekdays read by the rules, or any rule the form filled.
+  const base: Rule | null = d.rule ? parseRule(d.rule) : { freq: 'WEEKLY', interval: 1, byDay: monDays(d.days ?? []), until: null, count: null };
+  if (!base) return answer('How often should it repeat?', d);
+  const pattern = formatRule({ ...base, until: null, count: null });
+  const what = describeRule(d.from ?? ymd(today), pattern).split(' · ')[0];
   if (!d.durationMin || d.durationMin <= 0) {
-    return ask(`How long is each ${name}?`, durationOptions(d.category ?? 'deep-work'), d, `${name} · ${label} ${hhmm(at)} · length missing`);
+    return ask(`How long is each ${name}?`, durationOptions(d.category ?? 'deep-work'), d, `${name} · ${what} ${hhmm(at)} · length missing`);
   }
   const lo = d.from ? Math.max(fromYmd(d.from), today) : today;
   const hiEx = d.to ? fromYmd(d.to) : NaN;
-  if (!Number.isFinite(hiEx) && !d.repeatOpen) {
+  if (!Number.isFinite(hiEx) && !base.count && !d.repeatOpen) {
     const later = new Date(today + 27 * DAY);
     const month = MONTHS[later.getUTCMonth()].replace(/^./, (c) => c.toUpperCase());
+    const weekly = base.freq === 'WEEKLY' && base.interval === 1;
     return ask(
       `Until when should ${name} repeat?`,
-      ['Every week', 'Just this week', `Until ${month} ${later.getUTCDate()}`],
+      [weekly ? 'Every week' : 'No end date', ...(weekly ? ['Just this week'] : []), `Until ${month} ${later.getUTCDate()}`],
       d,
-      `${name} · ${label} ${hhmm(at)} · end missing`,
+      `${name} · ${what} ${hhmm(at)} · end missing`,
     );
   }
   // Today counts only if the time hasn't passed yet.
   const startDay = lo === today && at * MIN <= nowMs - today ? today + DAY : lo;
   const until = Number.isFinite(hiEx) ? ymd(hiEx - DAY) : null;
-  const dates = weeklyDates(ymd(startDay), days, until);
-  if (!dates.length) return answer(`There's no ${label} left in that range. Which dates did you mean?`, d);
-  const first = fromYmd(dates[0]);
+  const rule: Rule = { ...base, until };
+  const firstDay = firstOnOrAfter(ymd(startDay), rule);
+  if (!firstDay || (until && firstDay > until)) return answer(`There's no ${what} left in that range. Which dates did you mean?`, d);
+  const rrule = formatRule(rule);
+  const bounded = until ?? (rule.count ? '9999-12-31' : null);
+  const dates = bounded ? datesBetween(firstDay, rrule, firstDay, bounded) : [firstDay];
+  const first = fromYmd(firstDay);
   const start = first + at * MIN;
-  const span = until ? `${dayLabel(first, today)} – ${dayLabel(fromYmd(dates[dates.length - 1]), today)} · ${dates.length} times` : 'every week';
+  const span = bounded
+    ? `${dayLabel(first, today)} – ${dayLabel(fromYmd(dates[dates.length - 1]), today)} · ${dates.length} times`
+    : `from ${dayLabel(first, today)} · no end`;
   return {
     name: TOOL_PLACE_AT,
     args: {
@@ -1630,11 +1657,11 @@ function repeatAt(d: Draft, name: string, nowMs: number, today: number): Underst
       category: d.category ?? 'deep-work',
       startISO: iso(start),
       endISO: iso(start + d.durationMin * MIN),
-      rrule: weeklyRule(days, until ?? undefined),
+      rrule,
       reply: '',
     },
     draft: d,
-    summary: `${name} · ${label} ${hhmm(at)} · ${d.durationMin} min · ${span}`,
+    summary: `${name} · ${what} ${hhmm(at)} · ${d.durationMin} min · ${span}`,
   };
 }
 

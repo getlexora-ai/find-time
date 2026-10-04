@@ -1,21 +1,10 @@
 import { STEP } from '@/lib/agent-tools';
+import { datesBetween, describeRule, parseRule } from '@/lib/repeats';
 import { IMPORTED_ORIGIN } from '@/lib/synced-fields';
 import { createEvent, deleteEvent } from '@/server/events-repo';
 import { dayWindowFor, durationOptions, missingInfo, questionFor, whenOptions } from '../clarify';
 import { rankFreeSlots, selectSlots } from '../find-time';
-import {
-  ambiguousTime,
-  checkPlaceAt,
-  clashNote,
-  daysLabel,
-  freeNear,
-  overlapList,
-  overlapping,
-  readWeeklyRule,
-  type Span,
-  weeklyDates,
-  weeklyRule,
-} from '../place-at';
+import { ambiguousTime, checkPlaceAt, clashNote, freeNear, overlapList, overlapping, type Span } from '../place-at';
 import { adjustDuration, effectiveBuffer } from '../preferences';
 import { saveProposals } from '../repo';
 import { ZERO_FEATURES } from '../scoring';
@@ -185,10 +174,11 @@ export const placeAt: ToolHandler = async (args, ctx) => {
 };
 
 /**
- * "German class Mon–Thu 11:00–14:45, 5–29 Oct": one repeating proposal. Every
- * date comes from the rule (place-at.ts), never from a model. Each one inside
- * the window we can see is checked; clashes go in the reason, so adding it is
- * a choice made knowing them.
+ * "German class Mon–Thu 11:00–14:45, 5–29 Oct", "every other Friday",
+ * "monthly on the 5th, 6 times": one repeating proposal. Every date comes from
+ * the rule (src/lib/repeats.ts, the same reader the grid draws with), never from
+ * a model. Each one inside the window we can see is checked; clashes go in the
+ * reason, so adding it is a choice made knowing them.
  */
 async function placeRepeat(
   args: Record<string, unknown>,
@@ -197,16 +187,20 @@ async function placeRepeat(
   category: string,
   first: Span,
 ): ReturnType<ToolHandler> {
-  const rule = readWeeklyRule(args.rrule);
-  if (!rule || !rule.days.length) return { reply: 'Which days should it repeat on?' };
-  const dates = weeklyDates(first.startISO.slice(0, 10), rule.days, rule.until);
+  const rrule = typeof args.rrule === 'string' ? args.rrule : '';
+  const rule = parseRule(rrule);
+  if (!rule) return { reply: 'How often should it repeat?' };
+  const firstDay = first.startISO.slice(0, 10);
+  const ends = rule.until ?? (rule.count ? '9999-12-31' : null);
+  // Bounded series: every date. Open-ended: the ones inside the planning window.
+  const dates = datesBetween(firstDay, rrule, firstDay, ends ?? ctx.horizonISO.slice(0, 10));
   const startHM = first.startISO.slice(10);
   const endHM = first.endISO.slice(10);
   const visible = dates.filter((d) => `${d}${startHM}` <= ctx.horizonISO);
   const clashDays = visible.filter((d) => overlapping(ctx.shown, { startISO: `${d}${startHM}`, endISO: `${d}${endHM}` }).length);
 
-  const label = `${daysLabel(rule.days)} · ${rule.until ? `until ${shortDay(rule.until)}` : 'every week'}`;
-  const count = rule.until ? dates.length : null;
+  const label = describeRule(firstDay, rrule);
+  const count = ends ? dates.length : null;
   const seen = visible.length === dates.length ? '' : ' in the next three weeks';
   const reason = clashDays.length
     ? `it's the time you asked for, but it overlaps something on ${clashDays.slice(0, 3).map(shortDay).join(', ')}${clashDays.length > 3 ? ` and ${clashDays.length - 3} more` : ''}`
@@ -220,9 +214,12 @@ async function placeRepeat(
     const stored = await saveProposals(ctx.userId, ctx.sessionId, first, [
       { title, category, ...first, score: 0, features: ZERO_FEATURES, reason, alternatives: [] },
     ]);
-    const proposals = stored.map((p) => ({ ...toChatProposal(p), repeat: { rrule: weeklyRule(rule.days, rule.until ?? undefined), label, count } }));
-    const many = count ? `${count} times` : 'every week';
-    return { kind: 'plan', proposals, reply: asString(args.reply) || `Here's ${title}, ${daysLabel(rule.days)} ${startHM.slice(1, 6)}, ${many}. Nothing is saved until you add it.` };
+    const proposals = stored.map((p) => ({ ...toChatProposal(p), repeat: { rrule, label, count } }));
+    return {
+      kind: 'plan',
+      proposals,
+      reply: asString(args.reply) || `Here's ${title} at ${startHM.slice(1, 6)}, ${label.replace(' · ', ', ')}. Nothing is saved until you add it.`,
+    };
   } catch (err) {
     console.error('ai/chat placeRepeat', err);
     return { fail: 'Could not save that plan. Try again.' };
