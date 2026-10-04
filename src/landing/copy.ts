@@ -210,17 +210,32 @@ export const LANDING = {
 } as const;
 
 /**
- * Cookie notice (issue #4). Notice-only while the site sets *only* strictly
- * necessary cookies (Clerk auth). Turn `OPTIONAL_COOKIES` on in
- * `components/CookieConsent.tsx` when analytics or any non-essential cookie
- * lands, and this becomes an accept / decline choice.
+ * Cookie banner + settings dialog (src/consent/ConsentManager.web.tsx). The
+ * banner is a notice while only necessary items are declared in
+ * src/consent/registry.ts, and becomes an Accept / Reject choice by itself once
+ * an optional category is declared there.
  */
 export const COOKIES = {
-  lead: 'Cookies.',
-  body:
-    'Find Time uses only cookies needed for the site to work — sign-in and security. ' +
-    'No tracking or advertising cookies. See the',
-  privacyLink: 'privacy policy',
-  dismiss: 'Got it',
-  dismissLabel: 'Dismiss cookie notice',
+  title: 'Cookies',
+  notice:
+    'Find Time only stores what it needs to sign you in, keep the site secure and remember your settings. No analytics, advertising or tracking.',
+  consent: (optional: string) =>
+    `We use necessary cookies to run the site. With your OK we’d also use ${optional} cookies. You can change this any time under “Cookie settings” at the bottom of every page.`,
+  gotIt: 'Got it',
+  acceptAll: 'Accept all',
+  rejectAll: 'Reject all',
+  customize: 'Customize',
+  settings: 'Cookie settings',
+  save: 'Save choices',
+  close: 'Close',
+  privacyLink: 'Privacy policy',
+  dialogIntro:
+    'Choose what Find Time may store on your device. Necessary items can’t be turned off; everything else stays off until you turn it on, and you can change your mind here at any time.',
+  notUsed: 'Not used on this site',
+  alwaysOn: 'Always on',
+  items: (n: number) => (n === 1 ? '1 item' : `${n} items`),
+  gpc: 'Your browser sends a Global Privacy Control signal, so optional cookies stay off unless you turn them on here.',
+  yourChoice: (date: string, id: string) => `Your choice from ${date}. Consent ID: ${id}`,
+  noChoice: 'You haven’t made a choice yet.',
+  cols: { name: 'Name', provider: 'Provider', purpose: 'Purpose', expiry: 'Expiry', type: 'Type' },
 } as const;

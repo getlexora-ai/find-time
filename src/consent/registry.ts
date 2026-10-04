@@ -1,0 +1,247 @@
+/**
+ * Cookie + storage declaration — the single source of truth for consent.
+ *
+ * Everything that stores something on a visitor's device (cookies, localStorage,
+ * sessionStorage) is listed here. Three things read it:
+ *   - the banner / settings dialog (src/consent/ConsentManager.web.tsx),
+ *   - the declaration table on /privacy#cookies,
+ *   - `npm run cookies:check` (scripts/cookie-scan.mjs), which loads the real
+ *     site and fails on anything undeclared, the way Cookiebot's scanner does.
+ *
+ * Rule (GDPR Art. 6/7, ePrivacy Art. 5(3), §25 TDDDG): only `necessary` items may
+ * be set without a choice. Anything else goes in another category, and its
+ * script must be loaded through `loadScript()` / gated with `hasConsent()` in
+ * ./store.ts so nothing runs before the visitor says yes.
+ *
+ * The banner switches itself from a notice to a real Accept / Reject choice the
+ * moment any optional category has an entry here, and everyone who saw the
+ * notice is asked again (the consent version includes the optional categories
+ * in use). Plain, erasable TypeScript only: the scanner imports this file with
+ * Node's type stripping.
+ */
+
+export type Category = 'necessary' | 'preferences' | 'statistics' | 'marketing';
+export type OptionalCategory = Exclude<Category, 'necessary'>;
+
+export const CATEGORIES: { id: Category; label: string; description: string }[] = [
+  {
+    id: 'necessary',
+    label: 'Necessary',
+    description:
+      'Needed for the site to work: signing in, keeping your session secure, protecting sign-up from bots, and remembering this choice. They can’t be switched off.',
+  },
+  {
+    id: 'preferences',
+    label: 'Preferences',
+    description: 'Remember optional settings across visits beyond what you set yourself.',
+  },
+  {
+    id: 'statistics',
+    label: 'Statistics',
+    description: 'Help us understand how the site is used, through anonymous measurement.',
+  },
+  {
+    id: 'marketing',
+    label: 'Marketing',
+    description: 'Used to show or measure advertising.',
+  },
+];
+
+export type StorageType = 'Cookie' | 'Local storage' | 'Session storage';
+
+export type DeclaredItem = {
+  /** exact name, or a prefix ending in `*` (e.g. `__client_uat*`) */
+  name: string;
+  provider: string;
+  purpose: string;
+  expiry: string;
+  type: StorageType;
+  category: Category;
+};
+
+export const DECLARATION: DeclaredItem[] = [
+  // ── Clerk (sign-in) ────────────────────────────────────────────────
+  {
+    name: '__session*',
+    provider: 'Clerk (sign-in)',
+    purpose: 'Short-lived token that proves you are signed in.',
+    expiry: 'Session',
+    type: 'Cookie',
+    category: 'necessary',
+  },
+  {
+    name: '__client_uat*',
+    provider: 'Clerk (sign-in)',
+    purpose: 'Timestamp that tells the site whether your sign-in changed.',
+    expiry: '1 year',
+    type: 'Cookie',
+    category: 'necessary',
+  },
+  {
+    name: '__client',
+    provider: 'Clerk (sign-in)',
+    purpose: 'Keeps you signed in on Clerk’s sign-in domain.',
+    expiry: 'Until sign-out',
+    type: 'Cookie',
+    category: 'necessary',
+  },
+  {
+    name: '__refresh*',
+    provider: 'Clerk (sign-in)',
+    purpose: 'Renews your sign-in session without asking again.',
+    expiry: 'Until sign-out',
+    type: 'Cookie',
+    category: 'necessary',
+  },
+  {
+    name: '__clerk_db_jwt*',
+    provider: 'Clerk (sign-in)',
+    purpose: 'Links your browser to the sign-in service (development setup).',
+    expiry: '1 year',
+    type: 'Cookie',
+    category: 'necessary',
+  },
+  {
+    name: '__clerk_environment',
+    provider: 'Clerk (sign-in)',
+    purpose: 'Caches the sign-in form’s configuration so it loads faster.',
+    expiry: 'Persistent',
+    type: 'Local storage',
+    category: 'necessary',
+  },
+  {
+    name: '__cf_bm',
+    provider: 'Cloudflare (for Clerk)',
+    purpose: 'Bot protection on the sign-in service.',
+    expiry: '30 minutes',
+    type: 'Cookie',
+    category: 'necessary',
+  },
+  {
+    name: '_cfuvid',
+    provider: 'Cloudflare (for Clerk)',
+    purpose: 'Rate limiting on the sign-in service.',
+    expiry: 'Session',
+    type: 'Cookie',
+    category: 'necessary',
+  },
+  // ── Find Time ──────────────────────────────────────────────────────
+  {
+    name: 'ft-consent',
+    provider: 'Find Time',
+    purpose: 'Remembers your cookie choice so we don’t ask on every page.',
+    expiry: '12 months',
+    type: 'Local storage',
+    category: 'necessary',
+  },
+  {
+    name: 'ft_oauth_state',
+    provider: 'Find Time',
+    purpose: 'Security check while you connect a Google Calendar.',
+    expiry: '10 minutes',
+    type: 'Cookie',
+    category: 'necessary',
+  },
+  {
+    name: 'ft_oauth_return',
+    provider: 'Find Time',
+    purpose: 'Where to send you back after connecting a Google Calendar.',
+    expiry: '10 minutes',
+    type: 'Cookie',
+    category: 'necessary',
+  },
+  {
+    name: 'ft-theme',
+    provider: 'Find Time',
+    purpose: 'The calendar background you picked. Saved only when you change it.',
+    expiry: 'Persistent',
+    type: 'Local storage',
+    category: 'necessary',
+  },
+  {
+    name: 'ft-hours',
+    provider: 'Find Time',
+    purpose: 'The hours your calendar shows. Saved only when you change it.',
+    expiry: 'Persistent',
+    type: 'Local storage',
+    category: 'necessary',
+  },
+  {
+    name: 'ft-cal-events-v2:*',
+    provider: 'Find Time',
+    purpose: 'Your event times (no titles), so the calendar opens instantly.',
+    expiry: 'Until sign-out',
+    type: 'Local storage',
+    category: 'necessary',
+  },
+  {
+    name: 'ft.agent.session:*',
+    provider: 'Find Time',
+    purpose: 'Keeps your current Plan with AI conversation.',
+    expiry: 'Persistent',
+    type: 'Local storage',
+    category: 'necessary',
+  },
+  {
+    name: 'ft-onboarding:*',
+    provider: 'Find Time',
+    purpose: 'Your answers during setup, so a reload doesn’t lose them.',
+    expiry: 'Session',
+    type: 'Session storage',
+    category: 'necessary',
+  },
+  {
+    name: 'ft-redo',
+    provider: 'Find Time',
+    purpose: 'Marks that you reopened setup from settings.',
+    expiry: 'Session',
+    type: 'Session storage',
+    category: 'necessary',
+  },
+];
+
+/**
+ * Other servers a visitor's browser talks to. Each one sees the visitor's IP, so
+ * each must be necessary (or consent-gated) and named in the privacy policy.
+ * The scanner fails on any host not listed here.
+ */
+export const THIRD_PARTY_HOSTS: { host: string; provider: string; purpose: string }[] = [
+  { host: '*.clerk.accounts.dev', provider: 'Clerk', purpose: 'Sign-in (development instance)' },
+  { host: 'clerk.usefindtime.com', provider: 'Clerk', purpose: 'Sign-in (production instance)' },
+  { host: 'img.clerk.com', provider: 'Clerk', purpose: 'Profile pictures on sign-in' },
+  { host: 'challenges.cloudflare.com', provider: 'Cloudflare (for Clerk)', purpose: 'Bot check on sign-up' },
+];
+
+export function knownHost(host: string): boolean {
+  return THIRD_PARTY_HOSTS.some((h) =>
+    h.host.startsWith('*.') ? host.endsWith(h.host.slice(1)) : host === h.host,
+  );
+}
+
+/** Re-ask everyone this many days after their choice (CNIL / EDPB guidance: 6–13 months). */
+export const CONSENT_MAX_AGE_DAYS = 365;
+
+/**
+ * Bump to ask everyone again (e.g. a purpose changed). Adding a new optional
+ * category re-asks on its own — see `consentVersion()`.
+ */
+export const POLICY_VERSION = 1;
+
+export function matches(item: DeclaredItem, name: string): boolean {
+  return item.name.endsWith('*') ? name.startsWith(item.name.slice(0, -1)) : name === item.name;
+}
+
+export function declared(name: string, type: StorageType): DeclaredItem | undefined {
+  return DECLARATION.find((i) => i.type === type && matches(i, name));
+}
+
+/** Optional categories that actually have something declared. */
+export function optionalInUse(): OptionalCategory[] {
+  return CATEGORIES.map((c) => c.id).filter(
+    (id): id is OptionalCategory => id !== 'necessary' && DECLARATION.some((i) => i.category === id),
+  );
+}
+
+export function consentVersion(): string {
+  return [POLICY_VERSION, ...optionalInUse()].join(':');
+}

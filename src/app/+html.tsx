@@ -14,7 +14,8 @@ import { META } from '@/landing/copy';
  * `/`, `/login`, `/app`, `/privacy`, `/terms` do.
  *
  * Fonts: Google Sans Flex + JetBrains Mono, the calendar's two faces
- * (src/calendar/tokens.ts, docs/calendar-spec.md §1.2).
+ * (src/calendar/tokens.ts, docs/calendar-spec.md §1.2), served from
+ * public/fonts — never from fonts.googleapis.com.
  */
 
 // The deployed origin — used for canonical + absolute OG image URLs. Set
@@ -51,12 +52,16 @@ export default function Root({ children }: PropsWithChildren) {
         <meta name="twitter:description" content={META.description} />
         <meta name="twitter:image" content={OG_IMAGE} />
 
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/* Self-hosted (public/fonts): loading them from Google would send every
+            visitor's IP to Google without consent (LG München I, 3 O 17493/20). */}
         <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+          rel="preload"
+          href="/fonts/google-sans-flex-latin.woff2"
+          as="font"
+          type="font/woff2"
+          crossOrigin="anonymous"
         />
+        <link rel="stylesheet" href="/fonts/fonts.css" />
 
         {/* Disables body scrolling on web so a root <ScrollView> behaves natively. */}
         <ScrollViewStyleReset />

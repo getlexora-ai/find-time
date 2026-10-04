@@ -4,6 +4,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 
+import { ConsentManager } from '@/consent/ConsentManager';
 import { setTokenGetter } from '@/lib/api';
 import { clerkAppearance } from '@/lib/clerkAppearance';
 import '../global.css';
@@ -22,6 +23,8 @@ import '../global.css';
  * `ClerkProvider` wraps everything (auth state is global); `AuthBridge` hands the
  * session-token getter to `src/lib/api.ts` so non-React fetch code can attach it.
  * The calendar's theme/toast providers still live in `app/_layout.tsx`, not here.
+ * `ConsentManager` is the site-wide cookie banner + settings dialog (web only;
+ * src/consent).
  */
 const PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
@@ -51,6 +54,7 @@ export default function RootLayout() {
         <Stack.Screen name="preview" options={{ contentStyle: { backgroundColor: '#FAFAFA' } }} />
       </Stack>
       <StatusBar style="light" />
+      <ConsentManager />
     </ClerkProvider>
   );
 }

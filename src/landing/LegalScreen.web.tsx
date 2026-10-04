@@ -1,5 +1,8 @@
 import Head from 'expo-router/head';
 
+import { DeclarationTable } from '@/consent/DeclarationTable';
+import { CookieSettingsLink } from '@/consent/CookieSettingsLink';
+
 import './dom/landing.css';
 import { LANDING } from './copy';
 import { LEGAL_UPDATED, type LegalSection } from './legal-copy';
@@ -10,7 +13,8 @@ import { LEGAL_UPDATED, type LegalSection } from './legal-copy';
  * readable column. Native keeps LegalScreen.tsx.
  *
  * Each section gets an id from its heading ("8. Cookies" → #cookies) so the
- * cookie notice can deep-link to /privacy#cookies.
+ * cookie notice can deep-link to /privacy#cookies. That section also gets the
+ * full cookie declaration (src/consent/registry.ts) and a settings button.
  */
 const slug = (heading: string) =>
   heading
@@ -88,6 +92,16 @@ export function LegalScreen({
                     {p}
                   </p>
                 ))}
+                {slug(s.heading) === 'cookies' && (
+                  <>
+                    <p className="body">
+                      <CookieSettingsLink className="btn btn-ghost btn-sm" />
+                    </p>
+                    <div className="legal-table">
+                      <DeclarationTable />
+                    </div>
+                  </>
+                )}
               </section>
             ))}
           </div>
@@ -103,6 +117,7 @@ export function LegalScreen({
                 {l.label}
               </a>
             ))}
+            <CookieSettingsLink />
           </nav>
         </div>
         <div className="wordmark-wrap" aria-hidden="true">

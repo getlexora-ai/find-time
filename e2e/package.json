@@ -4,7 +4,8 @@
   "description": "End-to-end tests for sign up, sign in and onboarding. Kept out of the app's package.json so the app's lockfile never moves for them.",
   "scripts": {
     "test": "playwright test",
-    "list": "playwright test --list"
+    "list": "playwright test --list",
+    "cookies:check": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON cookie-scan.mjs"
   },
   "devDependencies": {
     "@clerk/testing": "1.14.10",

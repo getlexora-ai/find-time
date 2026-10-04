@@ -22,7 +22,8 @@ export type RateRoute =
   | 'ai-report'
   | 'google-connect'
   | 'onboarding'
-  | 'onboarding-event';
+  | 'onboarding-event'
+  | 'consent';
 
 const LIMITS: Record<RateRoute, Pair> = {
   // unauthenticated — spammable to junk; keep tight
@@ -41,6 +42,8 @@ const LIMITS: Record<RateRoute, Pair> = {
   onboarding: { hour: 30, day: 100 },
   // authed, one tiny insert per step viewed
   'onboarding-event': { hour: 120, day: 400 },
+  // unauthenticated, one tiny insert per cookie choice — a flood guard only
+  consent: { hour: 30, day: 100 },
 };
 
 type Key = { kind: 'ip' } | { kind: 'user'; userId: string };
