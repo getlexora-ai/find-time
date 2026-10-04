@@ -170,6 +170,9 @@ assert.notEqual(say('gym tomorrow 1h', listed).name, 'delete_blocks', 'a new req
 r = say('cancel that', { tool: 'propose_blocks', title: 'X', placed: true });
 assert.equal(r.name, 'answer', 'cancelling a proposal deletes nothing');
 assert.equal(say('keep Friday clear').name, 'block_time_off', '"clear" mid-sentence is not a delete');
+// On a Thursday, "Tuesday to Thursday" ends on the Thursday after that Tuesday, not today.
+r = say("I'm away from Tuesday to Thursday");
+assert.deepEqual([r.name, r.args.startISO, r.args.endISO], ['block_time_off', '2026-10-06', '2026-10-08']);
 
 // ── answers ──
 assert.equal(say('hi').name, 'answer');

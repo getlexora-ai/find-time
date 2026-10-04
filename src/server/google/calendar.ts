@@ -33,6 +33,9 @@ export type GEvent = {
   /** 'transparent' = "show as free" in Google */
   transparency?: 'opaque' | 'transparent';
   attendees?: { email?: string; self?: boolean; responseStatus?: string; resource?: boolean }[];
+  organizer?: { email?: string; self?: boolean };
+  /** 'default' for ordinary events; also 'outOfOffice', 'focusTime', 'workingLocation', 'birthday', … */
+  eventType?: string;
   hangoutLink?: string;
   conferenceData?: { entryPoints?: { entryPointType?: string; uri?: string }[] };
 };

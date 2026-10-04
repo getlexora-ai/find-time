@@ -55,7 +55,6 @@ export async function listAccountsWithCalendars(
   return accounts.map((a) => ({
     id: a.id,
     email: live.get(a.id)?.email ?? 'Google account',
-    displayName: live.get(a.id)?.name ?? '',
     accentColor: a.accent_color,
     syncStatus: a.sync_status,
     syncError: a.sync_error,
@@ -73,16 +72,15 @@ export async function listAccountsWithCalendars(
   }));
 }
 
-/** Email, name and calendar names straight from Google; null when Google can't answer. */
+/** Email and calendar names straight from Google; null when Google can't answer. */
 async function liveAccount(
   accountId: string,
-): Promise<{ email: string; name: string; calendars: Map<string, string> } | null> {
+): Promise<{ email: string; calendars: Map<string, string> } | null> {
   try {
     const token = await getValidAccessToken(accountId);
     const [me, cals] = await Promise.all([userInfo(token), listCalendars(token)]);
     return {
       email: me.email,
-      name: me.name,
       calendars: new Map(cals.map((c) => [c.id, c.summaryOverride || c.summary || c.id])),
     };
   } catch (err) {

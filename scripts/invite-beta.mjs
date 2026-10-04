@@ -37,7 +37,7 @@ if (!Number.isFinite(limit) || limit < 1) {
   process.exit(1);
 }
 
-const SITE_URL = (process.env.EXPO_PUBLIC_SITE_URL || 'https://findtime.ai').replace(/\/$/, '');
+const SITE_URL = (process.env.EXPO_PUBLIC_SITE_URL || 'https://www.usefindtime.com').replace(/\/$/, '');
 const redirectUrl = `${SITE_URL}/login`;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

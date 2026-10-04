@@ -18,13 +18,12 @@ const REVOKE_ENDPOINT = 'https://oauth2.googleapis.com/revoke';
 export const SCOPES = [
   'openid',
   'email',
-  'profile',
+  // calendar.readonly: calendar list + events (calendar.events doesn't cover the list).
   'https://www.googleapis.com/auth/calendar.readonly',
-  // Read-only on connect: the narrowest scope Google verification accepts.
-  // Focus-block write-back (push.ts) needs calendar.events; there is no switch
-  // for it in the app yet. When there is, ask for that scope at that moment
-  // (include_granted_scopes keeps this one); /api/calendar/settings already
-  // refuses pushFocus without it (`canWriteGoogle`).
+  // calendar.events: focus-block write-back (push.ts) creates, updates and deletes
+  // only Find Time's own focus blocks, and only once push_focus is switched on.
+  // ponytail: asked on connect; move to incremental consent when the toggle UI exists.
+  'https://www.googleapis.com/auth/calendar.events',
 ];
 
 const REFRESH_SKEW_MS = 60_000; // refresh a minute before expiry
@@ -131,14 +130,14 @@ export function decodeIdToken(jwt: string): { sub: string } {
   return { sub: claims.sub };
 }
 
-/** The account's email and name, read live — never stored (accounts-repo.ts). */
-export async function userInfo(accessToken: string): Promise<{ email: string; name: string }> {
+/** The account's email, read live — never stored (accounts-repo.ts). Name comes from onboarding. */
+export async function userInfo(accessToken: string): Promise<{ email: string }> {
   const res = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
     headers: { authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) throw new Error(`userinfo ${res.status}`);
-  const u = (await res.json()) as { email?: string; name?: string; given_name?: string };
-  return { email: u.email ?? '', name: u.name ?? u.given_name ?? '' };
+  const u = (await res.json()) as { email?: string };
+  return { email: u.email ?? '' };
 }
 
 export async function storeTokens(

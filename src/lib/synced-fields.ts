@@ -30,6 +30,15 @@ export const PROVIDER_OWNED_FIELDS = ['title', 'start', 'end', 'notes', 'origin'
 
 export const IMPORTED_LOCKED_MESSAGE = 'This event is synced from Google Calendar. Change it there.';
 
+/**
+ * An imported event Google lets you edit here (map.ts editableHere: timed,
+ * one-off, yours, no other guests, and the account granted calendar.events)
+ * may change its times and be deleted; the change is written to Google first
+ * (src/server/google/edit.ts), so sync brings back the same thing. Title and
+ * notes stay Google's: they aren't stored here at all.
+ */
+export const GOOGLE_EDITABLE_FIELDS = ['start', 'end'] as const;
+
 export function isImported(origin: string | null | undefined): boolean {
   return origin === IMPORTED_ORIGIN;
 }
@@ -42,7 +51,14 @@ export function isImported(origin: string | null | undefined): boolean {
 export function lockedFields(
   origin: string | null | undefined,
   patch: Record<string, unknown>,
+  googleEditable = false,
 ): string[] {
   if (!isImported(origin)) return [];
-  return PROVIDER_OWNED_FIELDS.filter((k) => k in patch);
+  const editable: readonly string[] = googleEditable ? GOOGLE_EDITABLE_FIELDS : [];
+  return PROVIDER_OWNED_FIELDS.filter((k) => k in patch && !editable.includes(k));
+}
+
+/** Whether deleting this event is allowed (an imported one is deleted in Google too). */
+export function canDelete(origin: string | null | undefined, googleEditable = false): boolean {
+  return !isImported(origin) || googleEditable;
 }

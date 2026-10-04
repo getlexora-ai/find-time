@@ -2,14 +2,14 @@
  * Privacy Policy + Terms content (issue #2). EN-only for now.
  *
  * First pass, written to match how the product actually works today (Clerk auth,
- * Neon Postgres, Google Calendar read-only, OpenAI for AI features,
+ * Neon Postgres, Google Calendar (read + focus-block write-back), OpenAI for AI features,
  * Railway hosting, waitlist email capture). Plain prose, no claims the product
  * can't back. NOT yet counsel-reviewed — that review, and the EN-only vs EN/DE
  * call, are the user's (see the issue). If a DE entity operates the service, an
  * Impressum (§5 DDG) is still owed separately.
  */
 
-export const LEGAL_UPDATED = '9 September 2026';
+export const LEGAL_UPDATED = '4 October 2026'; // same day: added editing your own Google events
 // TODO(user): confirm the operating entity + a real contact address before launch.
 export const LEGAL_CONTACT = 'privacy@usefindtime.com';
 
@@ -31,9 +31,12 @@ export const PRIVACY: { title: string; intro: string; sections: LegalSection[] }
       heading: '2. What we collect',
       body: [
         'Waitlist: your email address, the page the sign-up came from (a short "source" label), and a salted, irreversible hash of your IP address used only for spam and rate-limit protection. Your raw IP is not stored.',
-        'Account: when you sign in, identity and session data are handled by our authentication provider (Clerk) — typically your email address and name. Our database keeps only your Clerk user id, so the app can attach your calendars and events to you; your name and email stay with Clerk. For a connected Google account we keep Google’s anonymous account id, not its email address.',
-        'Google Calendar (optional): if you connect a Google account, we request read-only access to your calendars. We store only when your events are (start and end, whether they show as busy, your RSVP and the number of guests) plus encrypted OAuth tokens. Event titles, notes, locations, guest names and video links are not stored: they are read from Google each time you open your calendar, used for that request and discarded. We never request write access without asking.',
-        'Find Time’s use and transfer of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements. We do not sell this data or use it for advertising.',
+        'Account: when you sign in, identity and session data are handled by our authentication provider (Clerk) — typically your email address and name. Our database keeps only your Clerk user id, so the app can attach your calendars and events to you; your name and email stay with Clerk. For a connected Google account we keep Google’s anonymous account id, not its email address; the email is read from Google only to show you which account is connected.',
+        'What you create in Find Time: tasks, habits, events you add, your planning preferences and your Plan with AI conversations are stored so the app can work for you.',
+        'Google Calendar (optional): if you connect a Google account, we request access to read your calendars and to manage events. We store only when your events are (start and end, whether they show as busy, your RSVP and the number of guests) plus encrypted OAuth tokens. Event titles, notes, locations, guest names and video links are not stored: they are read from Google each time you open your calendar, used for that request and discarded. We write to your calendar only when you ask us to, in two cases. First, if you turn on focus-block sync, we add, update and remove Find Time’s own focus blocks as private busy events. Second, when you move, resize or delete one of your own events in Find Time, we make that same change in Google Calendar; this is offered only for one-off events you organise with no other guests, and no one is notified. Find Time never changes your Google events on its own, and never changes meetings with other guests, repeating events or events someone else organised.',
+        'Find Time’s use and transfer of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements. We do not sell this data or use it for advertising, and we do not use it to develop, improve or train generalized AI or machine-learning models.',
+        'You can disconnect Google at any time in Find Time’s calendar settings, which revokes our access and deletes the stored event times for that account. You can also remove access from your Google Account under Security → Third-party apps & services.',
+        'Security: OAuth tokens are encrypted at rest, and all traffic between your browser, our servers and Google is encrypted in transit (TLS).',
         'AI features: when a feature uses an AI model, the text you type is sent to OpenAI, with only the busy/free times needed to answer. OpenAI does not use it for training and keeps it for up to 30 days for abuse monitoring only.',
         'Operational logs: standard security and error logs (timestamps, coarse request metadata) generated by our host.',
       ],
@@ -70,7 +73,7 @@ export const PRIVACY: { title: string; intro: string; sections: LegalSection[] }
     {
       heading: '6. International transfers',
       body: [
-        'Data is stored in the EU where possible (Neon EU region). Some processors (Google, Clerk) may process data outside the EU under Standard Contractual Clauses or an adequacy decision.',
+        'Data is stored in the EU where possible (Neon EU region). Some processors (Google, Clerk, OpenAI, Railway) may process data outside the EU under Standard Contractual Clauses or an adequacy decision.',
       ],
     },
     {

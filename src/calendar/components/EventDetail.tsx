@@ -98,8 +98,25 @@ export function EventDetail({
       {ev.imported && (
         <View style={styles.box}>
           <Txt style={styles.boxTxt}>
-            From Google Calendar. Change its title or time there — Find Time reads it and plans around it.
+            {ev.googleEditable
+              ? 'From Google Calendar. Moving, resizing or deleting it here changes it in Google too. Change its title there.'
+              : 'From Google Calendar. Meetings with guests, repeating events and other people’s events are changed there — Find Time reads them and plans around them.'}
           </Txt>
+        </View>
+      )}
+      {ev.googleEditable && (
+        <View style={styles.row}>
+          <Button
+            variant="secondary"
+            label="Delete from Google Calendar"
+            style={{ flex: 1 }}
+            icon={<Icon name="trash" size={14} color={N.ink2} />}
+            onPress={() => {
+              if (typeof window !== 'undefined' && window.confirm && !window.confirm(`Delete “${ev.title}” from your Google Calendar?`)) return;
+              onClose();
+              void deleteEvent(ev.id).then((ok) => toast(ok ? 'Deleted from Google Calendar' : SAVE_FAILED));
+            }}
+          />
         </View>
       )}
       {clash && (
@@ -189,7 +206,9 @@ export function EventDetail({
       )}
       {!ev.allDay && (
         <Txt style={styles.tip}>
-          {ev.imported ? 'Read-only on the grid' : 'Drag the tile to move it, its edges to resize'}
+          {ev.imported && !ev.googleEditable
+            ? 'Read-only on the grid'
+            : `Drag the tile to move it, its edges to resize${ev.googleEditable ? ' — Google updates too' : ''}`}
         </Txt>
       )}
     </Popover>

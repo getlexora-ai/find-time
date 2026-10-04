@@ -86,7 +86,6 @@ export function previewAccounts(): ApiAccount[] {
     {
       id: 'acct_1',
       email: 'you@example.com',
-      displayName: 'You',
       accentColor: 'lime',
       syncStatus: 'ok',
       syncError: null,
