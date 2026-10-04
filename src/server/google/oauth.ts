@@ -18,7 +18,6 @@ const REVOKE_ENDPOINT = 'https://oauth2.googleapis.com/revoke';
 export const SCOPES = [
   'openid',
   'email',
-  'profile',
   // calendar.readonly: calendar list + events (calendar.events doesn't cover the list).
   'https://www.googleapis.com/auth/calendar.readonly',
   // calendar.events: focus-block write-back (push.ts) creates, updates and deletes
