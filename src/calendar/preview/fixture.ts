@@ -120,9 +120,9 @@ export function previewChat(): { history: ChatMessage[]; reply: (text: string) =
         text: 'The best fit is **tomorrow, 09:30 – 11:30**. Your morning is clear and it lands before Friday\'s review. I haven\'t booked anything yet.',
         createdAt: now,
         trace: [
-          { tool: 'read_calendar', label: 'Read your calendar', detail: '41 blocks · next 14 days · 33 fixed', ms: 180 },
+          { tool: 'read_calendar', label: 'Checked your next 3 weeks', detail: '12 fixed blocks this week · freest Sat · busiest Tue', ms: 180 },
           { tool: 'apply_rules', label: 'Applied your rules', detail: '2 rules · 3 learned habits' },
-          { tool: 'propose_blocks', label: 'Chose: find time', ms: 1640 },
+          { tool: 'propose_blocks', label: 'Read “Make room for 2h of deep work on the…”', detail: 'launch plan · 120 min · before Fri', ms: 1640 },
           { tool: 'rank_slots', label: 'Scored free slots', detail: '27 candidates · 120 min · picked 1' },
         ],
         proposals: [
@@ -148,9 +148,9 @@ export function previewChat(): { history: ChatMessage[]; reply: (text: string) =
         createdAt: now,
         savedRule: { id: 'r1', label: 'No bookings before 09:00' },
         trace: [
-          { tool: 'read_calendar', label: 'Read your calendar', detail: '41 blocks · next 14 days · 33 fixed', ms: 150 },
+          { tool: 'read_calendar', label: 'Checked your next 3 weeks', detail: '12 fixed blocks this week · freest Sat · busiest Tue', ms: 150 },
           { tool: 'apply_rules', label: 'Applied your rules', detail: '2 rules · 3 learned habits' },
-          { tool: 'record_rule', label: 'Chose: save a rule', ms: 920 },
+          { tool: 'record_rule', label: 'Read “And never book me before 9”', detail: 'rule · nothing before 09:00', ms: 920 },
           { tool: 'save_rule', label: 'Saved a rule', detail: 'No bookings before 09:00' },
         ],
       },
@@ -162,10 +162,10 @@ export function previewChat(): { history: ChatMessage[]; reply: (text: string) =
       createdAt: new Date().toISOString(),
       question: { text: 'How long should it be?', options: ['30 min', '1 hour', '2 hours'] },
       trace: [
-        { tool: 'read_calendar', label: 'Read your calendar', detail: '42 blocks · next 14 days · 34 fixed', ms: 160 },
+        { tool: 'read_calendar', label: 'Checked your next 3 weeks', detail: '13 fixed blocks this week · freest Sat · busiest Tue', ms: 160 },
         { tool: 'apply_rules', label: 'Applied your rules', detail: '3 rules · 3 learned habits' },
-        { tool: 'propose_blocks', label: 'Chose: find time', ms: 1210 },
-        { tool: 'ask', label: 'Needs a length first', detail: 'I never guess a time' },
+        { tool: 'propose_blocks', label: 'Read “gym at 6”', detail: 'Gym · 18:00 · length missing', ms: 1210 },
+        { tool: 'ask', label: 'Needs one detail', detail: 'asked rather than guessed' },
       ],
     }),
   };

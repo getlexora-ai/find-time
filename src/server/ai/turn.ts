@@ -29,6 +29,33 @@ import { type Draft, NOT_UNDERSTOOD, understand } from './understand';
  */
 
 const HORIZON_DAYS = 21;
+
+const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/**
+ * The coming week in a few words, from the busy blocks: "6 fixed blocks this
+ * week · freest Sat · busiest Tue". The seven days start tomorrow — late in the
+ * evening, today would always look "freest". Times are naive wall-clock ISO, so
+ * the date is the first ten characters and the weekday comes from UTC fields.
+ */
+export function weekShape(busy: { start: string; end: string }[], nowISO: string): string {
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(Date.parse(`${nowISO.slice(0, 10)}T00:00:00Z`) + (i + 1) * 86_400_000);
+    return { key: d.toISOString().slice(0, 10), name: i === 0 ? 'tomorrow' : WEEKDAY[d.getUTCDay()], min: 0 };
+  });
+  let fixed = 0;
+  for (const b of busy) {
+    const day = days.find((d) => d.key === b.start.slice(0, 10));
+    if (!day) continue;
+    fixed++;
+    day.min += Math.max(0, (Date.parse(b.end) - Date.parse(b.start)) / 60_000);
+  }
+  if (!fixed) return 'nothing fixed this week · wide open';
+  const sorted = [...days].sort((a, b) => a.min - b.min);
+  const freest = sorted[0];
+  const busiest = sorted[sorted.length - 1];
+  return `${plural(fixed, 'fixed block')} this week · freest ${freest.name} · busiest ${busiest.name}`;
+}
 export const MAX_TURNS = 16;
 
 export type Emit = (e: ChatStreamEvent) => void;
@@ -118,20 +145,19 @@ export async function runTurn(
 
   step({
     tool: STEP.read,
-    label: doneLabel(STEP.read, 'Read your calendar'),
-    detail: `${plural(events.length, 'block')} · next ${HORIZON_DAYS} days · ${busy.length} fixed`,
+    label: `Checked your next ${Math.round(HORIZON_DAYS / 7)} weeks`,
+    detail: weekShape(busy, nowISO),
     ms: Date.now() - t0,
   });
+  // A rules step only when there are rules: "No rules yet" on every turn was filler.
   const card = preferenceCard(profile);
   const ruleBits = [
     card.rules.length && plural(card.rules.length, 'rule'),
     card.learned.length && plural(card.learned.length, 'learned habit'),
   ].filter(Boolean);
-  step({
-    tool: STEP.rules,
-    label: ruleBits.length ? doneLabel(STEP.rules, 'Applied your rules') : 'No rules yet',
-    detail: ruleBits.length ? ruleBits.join(' · ') : 'tell me one any time',
-  });
+  if (ruleBits.length) {
+    step({ tool: STEP.rules, label: doneLabel(STEP.rules, 'Applied your rules'), detail: ruleBits.join(' · ') });
+  }
 
   // The previous assistant turn carries what was understood so far, and the
   // blocks it proposed (for "why that slot?").
@@ -160,7 +186,9 @@ export async function runTurn(
       read = rewritten;
     }
   }
-  step({ tool: choice.name, label: `Chose: ${doneLabel(choice.name, choice.name).toLowerCase()}`, detail: choice.summary, ms: Date.now() - readT0 });
+  // Echo the person's own words: the step is about this sentence, not a tool.
+  const quoted = text.length > 42 ? `${text.slice(0, 40).trimEnd()}…` : text;
+  step({ tool: choice.name, label: `Read “${quoted}”`, detail: choice.summary, ms: Date.now() - readT0 });
 
   const ctx: TurnCtx = { userId, sessionId, text: read, summary: choice.summary, now, nowISO, horizonISO, profile, events, busy, shown, openTasks, habits, begin, step };
   const handler = toolFor(choice.name);
