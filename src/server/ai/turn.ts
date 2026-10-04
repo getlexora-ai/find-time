@@ -11,7 +11,8 @@ import { appendMessage, createSession, listMessages, loadProfile, sessionExists,
 import { doneLabel, iso, plural, runningLabel, type TurnCtx } from './tools/context';
 import { toolFor } from './tools';
 import { asString } from './tools/names';
-import { type Draft, understand } from './understand';
+import { rewriteForRules, weakRead } from './rewrite';
+import { type Draft, NOT_UNDERSTOOD, understand } from './understand';
 
 /**
  * One turn of Plan with AI, after the route has authenticated the user and
@@ -21,7 +22,8 @@ import { type Draft, understand } from './understand';
  *   one tool + arguments → that tool's handler (tools/index.ts) carries it out →
  *   the reply is stored with the draft the next turn continues from.
  *
- * No model runs here. What has been understood so far rides on each assistant
+ * The rules read first; only a sentence they can't read goes to the model,
+ * which rewrites it for the rules to read again (rewrite.ts). What has been understood so far rides on each assistant
  * message as `parsed.draft`, so "make it 90 minutes" or the answer to its own
  * question continues the plan.
  */
@@ -134,16 +136,28 @@ export async function runTurn(
 
   begin(STEP.model);
   const readT0 = Date.now();
-  const choice = understand(text, {
+  const readCtx = {
     nowISO,
     previous: lastParsed.draft ?? null,
     lastProposals: (lastParsed.proposals ?? []).map((p) => ({ startISO: p.startISO, reason: p.reason })),
     taskTitles: openTasks.map((t) => t.title),
     habitTitles: habits.map((h) => h.title),
-  });
+  };
+  let choice = understand(text, readCtx);
+  // The rules couldn't read it, or read it badly (rewrite.ts weakRead): the model rewrites it into phrasing they do read, and
+  // the rules decide again. A rewrite they still can't read changes nothing.
+  let read = text;
+  if (weakRead(choice)) {
+    const rewritten = await rewriteForRules(text, nowISO);
+    const again = rewritten ? understand(rewritten, readCtx) : null;
+    if (rewritten && again && again.summary !== NOT_UNDERSTOOD) {
+      choice = { ...again, summary: `${again.summary} · read by AI as "${rewritten}"` };
+      read = rewritten;
+    }
+  }
   step({ tool: choice.name, label: `Chose: ${doneLabel(choice.name, choice.name).toLowerCase()}`, detail: choice.summary, ms: Date.now() - readT0 });
 
-  const ctx: TurnCtx = { userId, sessionId, text, summary: choice.summary, now, nowISO, horizonISO, profile, events, busy, shown, openTasks, habits, begin, step };
+  const ctx: TurnCtx = { userId, sessionId, text: read, summary: choice.summary, now, nowISO, horizonISO, profile, events, busy, shown, openTasks, habits, begin, step };
   const handler = toolFor(choice.name);
   const result = handler ? await handler(choice.args, ctx) : {};
   if ('fail' in result) return Response.json({ sessionId, error: result.fail }, { status: 500 });

@@ -1249,6 +1249,10 @@ const isQuestion = (raw: string, namesDay: boolean) =>
 const REVISION_CUE =
   /^\s*(?:no\b|nope|actually|instead|make\s+(?:it|them)|can\s+you\s+make|could\s+you\s+make|move\s+(?:it|them)|not\b|what\s+about|how\s+about|try\b|shorter|longer|earlier|later\b|sooner|too\s+(?:early|late|long|short))/i;
 
+/** Summary of a turn the rules could not read at all: turn.ts may hand it to the model (rewrite.ts). */
+export const NOT_UNDERSTOOD = 'not understood';
+const giveUp = (reply: string, keep: Draft | null): Understood => ({ ...answer(reply, keep), summary: NOT_UNDERSTOOD });
+
 const answer = (reply: string, keep: Draft | null): Understood => ({
   name: TOOL_ANSWER,
   args: { reply },
@@ -1335,7 +1339,7 @@ export function understand(text: string, ctx: UnderstandContext): Understood {
   }
 
   const rule = readRule(raw);
-  if (rule === 'unclear') return answer(RULE_HELP, prev);
+  if (rule === 'unclear') return giveUp(RULE_HELP, prev);
   if (rule) return { name: TOOL_RULE, args: rule, draft: null, summary: `rule · ${String(rule.kind)}` };
 
   if (looksAway(raw)) {
@@ -1352,7 +1356,7 @@ export function understand(text: string, ctx: UnderstandContext): Understood {
   if (!followUp && isQuestion(raw, Boolean(f.when)) && !f.durationMin && !f.at) {
     return answer(`I can't answer questions about your calendar yet — I can place time on it. ${HELP}`, prev);
   }
-  if (!followUp && !title && !f.when && !f.durationMin && !f.at && !f.part) return answer(HELP, prev);
+  if (!followUp && !title && !f.when && !f.durationMin && !f.at && !f.part) return giveUp(HELP, prev);
 
   const d: Draft = followUp ? { ...prev!, placed: false } : { tool: TOOL_PROPOSE };
   const changed: string[] = [];
