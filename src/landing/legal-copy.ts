@@ -89,7 +89,7 @@ export const PRIVACY: { title: string; intro: string; sections: LegalSection[] }
     {
       heading: '8. Cookies',
       body: [
-        'Find Time stores only what is strictly necessary on your device: cookies that keep you signed in and protect sign-in from bots, plus a few settings in your browser’s storage (for example the calendar background you picked). These need no consent under §25(2) TDDDG / Art. 5(3) ePrivacy Directive. There are no analytics, advertising or tracking cookies.',
+        'Find Time stores only what is strictly necessary on your device: cookies that keep you signed in, plus a few settings in your browser’s storage (for example the calendar background you picked). Sign-in cookies are set only on the sign-in pages and inside the app, never while you just read this site. These need no consent under §25(2) TDDDG / Art. 5(3) ePrivacy Directive. There are no analytics, advertising or tracking cookies.',
         'Fonts are served from our own server, so no request goes to Google Fonts when you load a page.',
         'If we ever add anything optional, it stays off until you agree in the cookie banner, and you can change or withdraw your choice at any time with “Cookie settings” at the bottom of every page or the button below. The full list of what is stored, by whom and for how long:',
       ],

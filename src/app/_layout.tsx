@@ -1,6 +1,7 @@
-import { Stack } from 'expo-router';
+import { Stack, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { Platform } from 'react-native';
 
 import { ConsentManager } from '@/consent/ConsentManager';
 import { setTokenGetter } from '@/lib/api';
@@ -24,6 +25,12 @@ import '../global.css';
  * The calendar's theme/toast providers still live in `app/_layout.tsx`, not here.
  * `ConsentManager` is the site-wide cookie banner + settings dialog (web only;
  * src/consent).
+ *
+ * Auth is NOT touched on the public web pages (PUBLIC_WEB): no session lookup,
+ * so nothing auth-related is requested or stored. Someone just reading the
+ * landing or the legal pages hasn't asked to sign in, so sign-in cookies aren't
+ * strictly necessary there (§25(2) TDDDG). These pages link onward with plain
+ * <a href>, so the choice never changes mid-session.
  */
 function AuthBridge() {
   const { isLoaded, user } = useAuthState();
@@ -37,10 +44,14 @@ function AuthBridge() {
   return null;
 }
 
+const PUBLIC_WEB = new Set(['/', '/privacy', '/terms']);
+
 export default function RootLayout() {
+  const pathname = usePathname();
+  const isPublic = Platform.OS === 'web' && PUBLIC_WEB.has(pathname);
   return (
     <>
-      <AuthBridge />
+      {isPublic ? null : <AuthBridge />}
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#FAFAFA' } }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="login" />
