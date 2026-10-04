@@ -1,7 +1,6 @@
 import { formatRule, RULE_DAYS, type Rule } from '../../lib/repeats.ts';
-import { aiConfigured, chatWithTools, type ToolDef } from './llm.ts';
+import type { ToolDef } from './llm.ts';
 import { ambiguousTime } from './place-at.ts';
-import { addSpend, underBudget, USD_IN, USD_OUT } from './rewrite.ts';
 import { TOOL_PLACE_AT } from './tools/names.ts';
 import { categoryOf, type Draft, placeAtDraft, type Understood } from './understand.ts';
 
@@ -15,11 +14,8 @@ import { categoryOf, type Draft, placeAtDraft, type Understood } from './underst
  * Friday" or "monthly on the 5th, 6 times" need no new code: the shared
  * engine (src/lib/repeats.ts) reads them, and the grid draws them.
  *
- * Anything else (find me time, tasks, habits, rules, time off) is kind
- * "other": the rules and the rewrite path keep those.
- *
- * Sent to OpenAI: the sentence and today's date — nothing from the calendar,
- * as with rewrite.ts. Same monthly budget (AI_BUDGET_USD).
+ * The agent (agent.ts) offers this form as its place_at tool and calls
+ * fromForm on what the model fills.
  */
 
 export type Form = {
@@ -152,40 +148,4 @@ export function fromForm(form: Form, text: string, nowISO: string): Understood |
     [d.from, d.to, d.single] = [date, nextDay(date), true];
   }
   return placeAtDraft(d, Date.parse(nowISO));
-}
-
-/** The model's form, or null (no key, over budget, timeout, any failure). */
-export async function fillForm(text: string, nowISO: string): Promise<Form | null> {
-  if (!aiConfigured()) return null;
-  try {
-    if (!(await underBudget())) return null;
-    const r = await chatWithTools({
-      system: formSystem(nowISO),
-      history: [{ role: 'user', text: text.slice(0, 500) }],
-      tools: [FORM_TOOL],
-      signal: AbortSignal.timeout(8000),
-    });
-    await addSpend((r.promptTokens ?? 0) * USD_IN + (r.outputTokens ?? 0) * USD_OUT);
-    return r.args as unknown as Form;
-  } catch (err) {
-    console.warn('[ai] form failed:', err instanceof Error ? err.message.slice(0, 120) : err);
-    return null;
-  }
-}
-
-/** Words that mean "this repeats". A reading without a repeat is worth a second look by the form. */
-const REPEAT_CUE =
-  /\b(?:every|each|daily|weekly|monthly|fortnightly|biweekly|weekdays|(?:mon|tues|wednes|thurs|fri|satur|sun)days|jede[nrs]?|täglich|wöchentlich|monatlich)\b|\b(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*\s*(?:-|–|till|until|to|through|bis)\s*(?:mon|tue|wed|thu|fri|sat|sun)/i;
-
-/**
- * Does a fresh request (not an answer to a question) deserve the form? When
- * the rules gave up, asked for a day or an end that is likely in the sentence,
- * or read a one-off where the words say it repeats.
- */
-export function wantsForm(c: Understood, text: string, weak: boolean): boolean {
-  if (weak) return true;
-  if (/· (?:day|end) missing$/.test(c.summary)) return true;
-  // "Yoga every other Tuesday at 6pm" read as one Tuesday (placed, or asked "how long?").
-  const oneOff = c.draft?.tool === TOOL_PLACE_AT && !c.draft.days?.length && !c.draft.rule;
-  return REPEAT_CUE.test(text) && oneOff;
 }

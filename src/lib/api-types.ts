@@ -200,11 +200,32 @@ export type ChatMessage = {
   timeOff?: { title: string; startISO: string; endISO: string; days: number };
   /** present when the turn deleted blocks, after the user said yes to the list */
   deleted?: { count: number };
+  /** several linked changes (move / add / delete) checked together; nothing applies until the user taps Apply */
+  changes?: ChangeSet;
   /** the user has reported this reply (POST /api/ai/report) */
   reported?: boolean;
   /** what the agent actually did for this turn, in order — never invented client-side */
   trace?: TraceStep[];
 };
+
+/**
+ * One change in a ChangeSet. Times are wall-clock ISO. `eventId` is the server
+ * id of the event moved or deleted; the client shows that event's own title
+ * (a Google title is never stored here).
+ */
+export type ChangeItem = {
+  op: 'move' | 'add' | 'delete';
+  eventId?: string;
+  /** add: the new block's title; move/delete of a Find Time block: its title */
+  title?: string;
+  category?: string;
+  fromStartISO?: string;
+  fromEndISO?: string;
+  startISO?: string;
+  endISO?: string;
+};
+
+export type ChangeSet = { id: string; items: ChangeItem[] };
 
 /**
  * One real step of a turn, as the server ran it: reading the calendar, applying

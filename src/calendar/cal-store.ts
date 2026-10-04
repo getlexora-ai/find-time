@@ -386,6 +386,14 @@ function takeReadyWrites(): (() => Promise<void>)[] {
 
 // ── mutations ──────────────────────────────────────────────────────────────
 
+/** The local id of the event the server knows as `serverId` (Plan with AI's change cards name server ids). */
+export function localIdFor(serverId: string): number | undefined {
+  for (const [local, server] of idMap) if (server === serverId) return local;
+  // In /preview there is no server: fixture events are named by their own id.
+  const n = Number(serverId);
+  return events.some((e) => e.id === n) ? n : undefined;
+}
+
 /** Resolves true once the server has the change, false if it does not. */
 export function updateEvent(id: number, patch: Partial<CalEvent>): Promise<boolean> {
   const cur = events.find((e) => e.id === id);

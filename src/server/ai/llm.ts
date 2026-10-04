@@ -44,7 +44,7 @@ type Response = {
   model?: string;
   status?: string;
   incomplete_details?: { reason?: string } | null;
-  output?: { type?: string; name?: string; arguments?: string }[];
+  output?: { type?: string; name?: string; arguments?: string; call_id?: string }[];
   usage?: { input_tokens?: number; output_tokens?: number };
 };
 
@@ -152,6 +152,78 @@ export async function extractWithTool(opts: {
     signal: opts.signal,
   });
   return r.args;
+}
+
+/* ── the agent loop: several steps, each one tool call, results fed back ── */
+
+/** One item of a stateless Responses conversation: a message, the model's own output, or a tool result. */
+export type AgentItem = Record<string, unknown>;
+
+export type AgentStep = {
+  name: string;
+  args: Record<string, unknown> | null;
+  callId: string;
+  /** the model's output items, to send back next step (reasoning included, encrypted) */
+  output: AgentItem[];
+  promptTokens: number;
+  outputTokens: number;
+};
+
+/**
+ * One step: the model must call one of `tools`. `store: false` keeps nothing at
+ * OpenAI, so each step resends the conversation, including the model's own
+ * earlier output (its reasoning comes back encrypted and is passed through).
+ * Malformed arguments come back as `args: null` — the caller tells the model.
+ */
+export async function agentStep(opts: {
+  system: string;
+  input: AgentItem[];
+  tools: ToolDef[];
+  maxTokens?: number;
+  signal?: AbortSignal;
+}): Promise<AgentStep> {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) throw new Error('OPENAI_API_KEY is not set.');
+  const res = await fetch(URL_, {
+    method: 'POST',
+    signal: opts.signal,
+    headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: model(),
+      instructions: opts.system,
+      input: opts.input,
+      tools: opts.tools.map((t) => ({ type: 'function', name: t.name, description: t.description, parameters: t.input_schema, strict: t.strict ?? false })),
+      tool_choice: 'required',
+      parallel_tool_calls: false,
+      reasoning: { effort: 'low' },
+      include: ['reasoning.encrypted_content'],
+      max_output_tokens: opts.maxTokens ?? 2048,
+      store: false,
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new LlmError(`OpenAI ${res.status}: ${body.slice(0, 300)}`, res.status === 429 || res.status >= 500);
+  }
+  const data = (await res.json()) as Response;
+  const call = data.output?.find((o) => o.type === 'function_call');
+  if (!call?.name || !call.call_id) {
+    throw new LlmError(`Model returned no tool call (${data.incomplete_details?.reason ?? data.status ?? 'unknown'}).`, true);
+  }
+  let args: Record<string, unknown> | null = null;
+  try {
+    args = JSON.parse(call.arguments ?? '') as Record<string, unknown>;
+  } catch {
+    // reported back to the model by the caller
+  }
+  return {
+    name: call.name,
+    args,
+    callId: call.call_id,
+    output: (data.output ?? []) as AgentItem[],
+    promptTokens: data.usage?.input_tokens ?? 0,
+    outputTokens: data.usage?.output_tokens ?? 0,
+  };
 }
 
 /** The conversational counterpart: carries history, offers several tools, the model picks exactly one. */

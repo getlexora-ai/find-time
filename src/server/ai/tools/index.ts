@@ -1,6 +1,7 @@
 import { STEP } from '@/lib/agent-tools';
 import { addHabit, addTask, listTasks, planWeek, postponeTask, taskDone, updateHabit, updateTask } from './backlog';
 import { deleteBlocks, placeAt, propose, timeOff } from './blocks';
+import { changePlan } from './changes';
 import { doneLabel, type ToolHandler } from './context';
 import { planSettings, recordRule, setTravel } from './settings';
 import {
@@ -8,6 +9,7 @@ import {
   TOOL_ADD_TASK,
   TOOL_ANSWER,
   TOOL_ASK,
+  TOOL_CHANGES,
   TOOL_DELETE,
   TOOL_HABIT_UPDATE,
   TOOL_LIST_TASKS,
@@ -63,6 +65,7 @@ export const TOOLS: Record<ToolName, ToolHandler> = {
   [TOOL_PLAN_WEEK]: planWeek,
   [TOOL_ADD_HABIT]: addHabit,
   [TOOL_HABIT_UPDATE]: updateHabit,
+  [TOOL_CHANGES]: changePlan,
 };
 
 export const toolFor = (name: string): ToolHandler | undefined => TOOLS[name as ToolName];
