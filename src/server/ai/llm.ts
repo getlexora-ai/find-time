@@ -26,7 +26,8 @@ export function aiConfigured(): boolean {
   return Boolean(process.env.OPENAI_API_KEY);
 }
 
-export type ToolDef = { name: string; description: string; input_schema: Record<string, unknown> };
+/** `strict`: OpenAI enforces the schema exactly (every property required, no extras) — for forms code reads field by field. */
+export type ToolDef = { name: string; description: string; input_schema: Record<string, unknown>; strict?: boolean };
 export type ChatTurn = { role: 'user' | 'assistant'; text: string };
 
 /** The model's choice and what it cost. */
@@ -85,7 +86,7 @@ async function callOnce(opts: {
         name: t.name,
         description: t.description,
         parameters: t.input_schema,
-        strict: false,
+        strict: t.strict ?? false,
       })),
       tool_choice: opts.force ? { type: 'function', name: opts.force } : 'required',
       parallel_tool_calls: false,

@@ -12,6 +12,7 @@ import { appendMessage, createSession, listMessages, loadProfile, sessionExists,
 import { doneLabel, iso, plural, runningLabel, type TurnCtx } from './tools/context';
 import { toolFor } from './tools';
 import { asString } from './tools/names';
+import { fillForm, fromForm, wantsForm } from './form';
 import { rewriteForRules, weakRead } from './rewrite';
 import { type Draft, NOT_UNDERSTOOD, understand } from './understand';
 
@@ -184,10 +185,23 @@ export async function runTurn(
     habitTitles: habits.map((h) => h.title),
   };
   let choice = understand(text, readCtx);
+  let read = text;
+  // A fresh request the rules couldn't read, or read as a one-off where the words
+  // say it repeats: the model fills a strict form and code checks it (form.ts).
+  // Answers to a question stay with the rules, which hold the draft being answered.
+  const answering = lastReply?.kind === 'question';
+  let formed = false;
+  if (!answering && wantsForm(choice, text, weakRead(choice, null))) {
+    const form = await fillForm(text, nowISO);
+    const fromModel = form ? fromForm(form, text, nowISO) : null;
+    if (fromModel) {
+      choice = { ...fromModel, summary: `${fromModel.summary} · read by AI` };
+      formed = true;
+    }
+  }
   // The rules couldn't read it, or read it badly (rewrite.ts weakRead): the model rewrites it into phrasing they do read, and
   // the rules decide again. A rewrite they still can't read changes nothing.
-  let read = text;
-  if (weakRead(choice, readCtx.previous)) {
+  if (!formed && weakRead(choice, readCtx.previous)) {
     const lastQuestion = lastReply?.kind === 'question' ? lastReply.content : undefined;
     const rewritten = await rewriteForRules(text, nowISO, lastQuestion);
     const again = rewritten ? understand(rewritten, readCtx) : null;
