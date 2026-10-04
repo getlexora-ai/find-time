@@ -45,7 +45,7 @@ That's the whole dashboard side.
 |---|---|---|
 | `CLERK_SECRET_KEY` | create invitations | Clerk Dashboard → API keys (matches the instance you restricted) |
 | `DATABASE_URL` | read the waitlist (only when you don't pass emails) | Neon, pooled URL |
-| `EXPO_PUBLIC_SITE_URL` | build the redirect link | your deployed origin, no trailing slash (defaults to `https://findtime.ai`) |
+| `EXPO_PUBLIC_SITE_URL` | build the redirect link | your deployed origin, no trailing slash (defaults to `https://www.usefindtime.com`) |
 
 ## 3. Sending invites
 
