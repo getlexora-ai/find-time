@@ -18,7 +18,7 @@ import type { CalEvent } from './types';
  * Reads:  the signed-in user's own cache instantly, then server truth. A
  *         failed load is reported (useCalLoad), never papered over: no sample
  *         week, and never another account's cache — the cache is keyed by the
- *         Clerk user, because two accounts on one browser share its storage.
+ *         signed-in user, because two accounts on one browser share its storage.
  * Writes: optimistic local update + emit immediately, network in the
  *         background. Every mutation returns a promise of whether the server
  *         actually took the write, so callers confirm once it has landed

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { deleteClerkUser, needsClerk, open, PASSWORD, signUp, testEmail } from './helpers';
+import { deleteTestUser, needsAuth, open, PASSWORD, signUp, testEmail } from './helpers';
 
 /**
  * The whole first-run path, then the return visit:
@@ -8,9 +8,9 @@ import { deleteClerkUser, needsClerk, open, PASSWORD, signUp, testEmail } from '
  *   sign out → /login → /app directly (onboarded), /welcome bounces to /app
  */
 test.describe('sign up → onboarding → app', () => {
-  needsClerk();
+  needsAuth();
   const email = testEmail('flow');
-  test.afterAll(async () => deleteClerkUser(email));
+  test.afterAll(async () => deleteTestUser(email));
 
   test('a new account is set up and lands in the app', async ({ page }) => {
     await signUp(page, email);
@@ -64,9 +64,9 @@ test.describe('sign up → onboarding → app', () => {
 });
 
 test.describe('skipping', () => {
-  needsClerk();
+  needsAuth();
   const email = testEmail('skip');
-  test.afterAll(async () => deleteClerkUser(email));
+  test.afterAll(async () => deleteTestUser(email));
 
   test('"Skip for now" finishes setup and keeps this device\'s time zone', async ({ page }) => {
     await signUp(page, email);
@@ -86,7 +86,7 @@ test.describe('skipping', () => {
 });
 
 test.describe('sign-in errors', () => {
-  needsClerk();
+  needsAuth();
 
   test('bad email and wrong password explain themselves', async ({ page }) => {
     await open(page, '/login');
@@ -97,13 +97,13 @@ test.describe('sign-in errors', () => {
     await page.getByLabel('Email').fill(testEmail('nobody'));
     await page.getByLabel('Password', { exact: true }).fill('whatever-123');
     await page.getByRole('button', { name: /^Sign in/ }).click();
-    await expect(page.getByText(/No account uses that email|password is not right/)).toBeVisible();
+    await expect(page.getByText(/No account uses that email|password is not right|email or password/)).toBeVisible();
     // "No account" carries its way out, with the email kept.
     const create = page.getByRole('link', { name: 'Create an account' });
     if (await create.isVisible()) {
       await create.click();
       await expect(page).toHaveURL(/\/signup\?email=/);
-      await expect(page.getByLabel('Email')).toHaveValue(/clerk_test@example\.com/);
+      await expect(page.getByLabel('Email')).toHaveValue(/@example\.com/);
     }
   });
 
@@ -114,9 +114,9 @@ test.describe('sign-in errors', () => {
 });
 
 test.describe('phone layout @phone', () => {
-  needsClerk();
+  needsAuth();
   const email = testEmail('phone');
-  test.afterAll(async () => deleteClerkUser(email));
+  test.afterAll(async () => deleteTestUser(email));
 
   test('the sticky strip shows the week while answering', async ({ page }) => {
     await signUp(page, email);

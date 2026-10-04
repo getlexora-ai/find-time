@@ -1,4 +1,4 @@
-import { requireUserId, unauthorized } from '@/server/auth/clerk';
+import { requireUserId, unauthorized } from '@/server/auth/user';
 import { isConfigured } from '@/server/db';
 import { listAccountsWithCalendars } from '@/server/accounts-repo';
 import { syncAccount } from '@/server/google/sync';

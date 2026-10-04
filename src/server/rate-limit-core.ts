@@ -1,6 +1,6 @@
 /**
  * Pure fixed-window rate-limit math — no imports, so `rate-limit.check.mjs` can
- * exercise it without pulling in pg / Clerk. Adapted from the sibling Lexora repo.
+ * exercise it without pulling in pg / Better Auth. Adapted from the sibling Lexora repo.
  */
 
 export type Pair = { hour: number; day: number };

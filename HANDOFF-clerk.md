@@ -1,5 +1,7 @@
 # HANDOFF — Clerk auth + Neon (settings + delete account)
 
+> **Superseded:** Clerk was replaced by Better Auth — see `HANDOFF-better-auth.md`. Kept for history.
+
 Companion to `HANDOFF-mvp.md`. Replaces the homegrown email/password + signed
 `ft_session` cookie with **Clerk** as the identity provider. Neon Postgres is
 unchanged; `users` becomes a thin mirror of Clerk.

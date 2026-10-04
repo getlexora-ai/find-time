@@ -1,4 +1,3 @@
-import { useAuth, useUser } from '@clerk/clerk-expo';
 import { Redirect } from 'expo-router';
 import { useEffect } from 'react';
 import { View } from 'react-native';
@@ -6,6 +5,7 @@ import { View } from 'react-native';
 import { refreshAccounts } from '@/calendar/account-store';
 import { CalendarScreen } from '@/calendar/CalendarScreen';
 import { useMounted } from '@/design/useMounted';
+import { useAuthState } from '@/lib/session';
 
 /**
  * `/app` — the full Find time calendar (Month / Week / Day, 7 switchable
@@ -17,16 +17,14 @@ import { useMounted } from '@/design/useMounted';
  * desktop viewport, and there is nothing here for a crawler. So it paints a
  * plain box on the server and mounts for real on the client.
  *
- * Also gated on Clerk: no session → redirect to `/login`; a user who
- * hasn't finished onboarding (`publicMetadata.onboarded`, set by
- * `/api/onboarding`) → `/welcome`. Once signed in we
- * prime the account store (its fetch needs the session token, which only exists
- * after ClerkProvider has loaded).
+ * Also gated on the session: none → redirect to `/login`; a user who
+ * hasn't finished onboarding (`user.onboarded`, set by `/api/onboarding`) →
+ * `/welcome`. Once signed in we prime the account store (its fetch needs the
+ * session, which only exists once it has loaded).
  */
 export default function CalendarRoute() {
   const mounted = useMounted();
-  const { isLoaded, isSignedIn } = useAuth();
-  const { user, isLoaded: userLoaded } = useUser();
+  const { isLoaded, isSignedIn, user } = useAuthState();
 
   useEffect(() => {
     if (isLoaded && isSignedIn) void refreshAccounts();
@@ -34,7 +32,6 @@ export default function CalendarRoute() {
 
   if (!mounted || !isLoaded) return <View style={{ flex: 1, backgroundColor: '#FAFAFA' }} />;
   if (!isSignedIn) return <Redirect href="/login" />;
-  if (!userLoaded || !user) return <View style={{ flex: 1, backgroundColor: '#FAFAFA' }} />;
-  if (!user.publicMetadata?.onboarded) return <Redirect href="/welcome" />;
+  if (!user?.onboarded) return <Redirect href="/welcome" />;
   return <CalendarScreen />;
 }

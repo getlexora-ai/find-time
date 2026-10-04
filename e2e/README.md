@@ -1,24 +1,25 @@
 # e2e — sign up, sign in, onboarding
 
 Playwright tests for `/signup`, `/login`, `/welcome` and the `/app` gate, run
-against a real Clerk **development** instance in test mode
-(`+clerk_test` emails, code `424242` — no email is sent). Each test user is
-deleted afterwards through the Clerk Backend API.
+against a real Find Time with Better Auth and a database. With
+`E2E_FIXED_OTP` set (never in production) every emailed code is that value,
+so the tests can type it; without `RESEND_API_KEY` no email is sent. Each test
+user is deleted afterwards (sign in, then `DELETE /api/me`).
 
 Separate `package.json` on purpose: the app's lockfile never moves for test tooling.
 
 ```sh
-# 1. the app, wired to a Clerk dev instance (and a DB if you want answers saved)
-EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_… CLERK_SECRET_KEY=sk_test_… npx expo start --web
+# 1. the app, with a database (db/027 applied) and the fixed code
+E2E_FIXED_OTP=123456 npx expo start --web
 
-# 2. the tests
+# 2. the tests, with the same code
 cd e2e && npm install
-EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_… CLERK_SECRET_KEY=sk_test_… npm test
+E2E_FIXED_OTP=123456 npm test
 ```
 
 | env | |
 |---|---|
-| `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` + `CLERK_SECRET_KEY` | dev instance keys. Without them every spec is skipped. |
+| `E2E_FIXED_OTP` | the same 6 digits for the app and the tests. Without it every spec is skipped. |
 | `E2E_BASE_URL` | default `http://localhost:8081` |
 | `E2E_CHROMIUM` | path to a Chromium binary, if Playwright's own isn't installed |
 

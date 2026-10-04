@@ -5,7 +5,7 @@
  * or a create has come back. Two ordinary situations break that:
  *
  *   - the store's first load runs at import, before AuthBridge has installed
- *     the Clerk token, so it 401s and the id map stays empty until a later
+ *     the session, so it 401s and the id map stays empty until a later
  *     refresh; and
  *   - a block created a moment ago is still waiting on its POST.
  *

@@ -65,7 +65,7 @@ src/
 
 The MVP deliberately stops short of these; the code has plug points marked:
 
-- **Auth** — Clerk, replacing the session-only store with a real user identity.
+- **Auth** — Better Auth (self-hosted in the API, on Postgres), replacing the session-only store with a real user identity.
 - **Database** — Postgres, persisting events per user behind an API layer that the
   `useEvents` / `addEvents` hooks already abstract.
 - **Real AI planning** — swap `parseRequest` in `src/lib/planner.ts` for an LLM call

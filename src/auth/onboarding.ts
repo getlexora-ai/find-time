@@ -6,7 +6,7 @@
  * (`scheduler_profiles`, see src/server/ai/preferences.ts `AgentProfile`), in
  * groups so a returning user only overwrites what they actually changed:
  *
- *   name      firstName                 → the Clerk user
+ *   name      firstName                 → auth_user.name
  *   hours     days + start/end          → work_hours
  *   peak      peak                      → energy_curve  (replaces a learned curve —
  *                                          only written when the user picks a peak)

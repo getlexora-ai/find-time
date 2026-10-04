@@ -1,15 +1,15 @@
-import { requireUserId, unauthorized } from '@/server/auth/clerk';
+import { requireUserId, unauthorized } from '@/server/auth/user';
 import { asReturnPath, makeOAuthState, returnCookie } from '@/server/auth/session';
 import { authUrl, oauthConfigured } from '@/server/google/oauth';
 import { enforceRateLimit } from '@/server/rate-limit';
 
 /**
  * POST /api/auth/google/start — begin a Google Calendar connect for the
- * signed-in Clerk user.
+ * signed-in user.
  *
  * Google no longer logs anyone in; this only grants Calendar access (oauth.ts SCOPES). Returns
  * `{ url }` for the client to redirect to, and sets a short-lived
- * `ft_oauth_state` nonce cookie. The signed `state` carries the Clerk user id so
+ * `ft_oauth_state` nonce cookie. The signed `state` carries the user id so
  * the callback knows who owns the new connection.
  *
  * Optional body `{ returnTo: '/welcome' }` (onboarding) sends the browser back

@@ -14,16 +14,17 @@
  * settings, and only the groups they touch are written back — a learned energy
  * curve isn't replaced unless they pick a peak.
  *
- * Finishing or skipping posts to `/api/onboarding`, which marks the Clerk
+ * Finishing or skipping posts to `/api/onboarding`, which marks the
  * user `onboarded` so `/app` stops sending them here. Each step seen, connect,
  * skip and finish is logged for the drop-off funnel (db/022).
  */
-import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
 import { gsap } from 'gsap';
 import { type CSSProperties, type ReactNode, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { apiFetch } from '@/lib/api';
+import { authClient } from '@/lib/auth-client';
+import { useAuthState } from '@/lib/session';
 
 import { loadOnboarding, type OnboardingState, saveOnboarding, syncCalendars, track } from '../client';
 import {
@@ -92,8 +93,9 @@ function writeSaved(key: string | null, v: Saved | null) {
 
 export default function Onboarding() {
   const router = useRouter();
-  const { isLoaded: authLoaded, isSignedIn } = useAuth();
-  const { user, isLoaded: userLoaded } = useUser();
+  const { isLoaded: authLoaded, isSignedIn, user, firstName, refetch } = useAuthState();
+  /** signed in with Google — the calendar step's copy differs */
+  const [googleUser, setGoogleUser] = useState(false);
 
   const storeKey = user ? `ft-onboarding:${user.id}` : null;
   const env = useMemo(() => browserEnv(), []);
@@ -161,9 +163,9 @@ export default function Onboarding() {
         setStep(at);
         setSeen(Math.max(at, saved.step));
       } else if (st?.existing && st.answers) {
-        setA({ ...st.answers, firstName: st.answers.firstName || user.firstName || '' });
+        setA({ ...st.answers, firstName: st.answers.firstName || firstName });
       } else {
-        setA({ ...defaultAnswers(env), firstName: user.firstName ?? '' });
+        setA({ ...defaultAnswers(env), firstName });
       }
       if (connect === 'ok') {
         const n = st?.meetings?.length ?? 0;
@@ -178,7 +180,7 @@ export default function Onboarding() {
       setBusy(null);
       setReady(true);
     })();
-  }, [user, env]);
+  }, [user, firstName, env]);
 
   useEffect(() => {
     if (ready && !done) writeSaved(storeKey, { a, step, changed: [...changed] });
@@ -189,8 +191,15 @@ export default function Onboarding() {
     if (authLoaded && !isSignedIn) router.replace('/login');
   }, [authLoaded, isSignedIn, router]);
   useEffect(() => {
-    if (userLoaded && user?.publicMetadata?.onboarded && !busy && !done && !redo) router.replace('/app');
-  }, [userLoaded, user, busy, done, redo, router]);
+    if (user?.onboarded && !busy && !done && !redo) router.replace('/app');
+  }, [user, busy, done, redo, router]);
+  useEffect(() => {
+    if (!user) return;
+    void authClient
+      .listAccounts()
+      .then(({ data }) => setGoogleUser(Boolean(data?.some((x) => x.providerId === 'google'))))
+      .catch(() => {});
+  }, [user]);
 
   // Browser Back steps back through setup instead of leaving it.
   useEffect(() => {
@@ -320,7 +329,7 @@ export default function Onboarding() {
       }
       track(kind === 'skip' ? TRACK[step] : 'done', kind);
       writeSaved(storeKey, null);
-      await user?.reload();
+      await refetch();
       if (kind === 'finish') {
         setDone(true);
         return;
@@ -332,7 +341,7 @@ export default function Onboarding() {
     }
   }
 
-  if (!authLoaded || !userLoaded || !user || !ready) {
+  if (!authLoaded || !user || !ready) {
     return (
       <div className="au" data-page="onboarding">
         <p className="au-wait" role="status">
@@ -358,9 +367,6 @@ export default function Onboarding() {
 
   const name = a.firstName.trim();
   const isLast = step === STEPS.length - 1;
-  const googleUser = Boolean(
-    (user as { externalAccounts?: { provider?: string }[] }).externalAccounts?.some((x) => x.provider?.includes('google')),
-  );
 
   return (
     <div className="au" data-page="onboarding">

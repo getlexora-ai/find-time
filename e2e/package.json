@@ -8,7 +8,6 @@
     "cookies:check": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON cookie-scan.mjs"
   },
   "devDependencies": {
-    "@clerk/testing": "1.14.10",
     "@playwright/test": "1.56.1"
   }
 }

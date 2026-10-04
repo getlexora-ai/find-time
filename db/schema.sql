@@ -33,12 +33,12 @@ $$ language plpgsql;
 
 
 -- ── users ───────────────────────────────────────────────────────────────────
--- Identity only, and a thin mirror of Clerk (db/012): `id` is the Clerk user id
--- (`user_...`), `email` / `name` are backfilled lazily on first authed request.
+-- The thin row every calendar table FKs to. `id` is the Better Auth user id
+-- (`auth_user.id`, db/027); name and email live in `auth_user`.
 -- Connected mailboxes/calendars are a SEPARATE system (connected_accounts).
 create table if not exists users (
-  id                      text primary key,          -- Clerk user id ("user_...")
-  email                   text not null,
+  id                      text primary key,          -- auth_user.id (db/027)
+  email                   text not null default '',
   name                    text not null default '',
   avatar_color            text not null default 'lime',
   timezone                text not null default 'Europe/Berlin',
@@ -49,7 +49,7 @@ create table if not exists users (
   updated_at              timestamptz not null default now()
 );
 
--- Non-unique: Clerk owns email uniqueness; the lazy upsert must not fail on a clash.
+-- Non-unique: auth_user owns email uniqueness; the lazy upsert must not fail on a clash.
 create index if not exists users_email_idx on users (lower(email));
 
 drop trigger if exists users_updated_at on users;

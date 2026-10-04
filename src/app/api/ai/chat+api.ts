@@ -1,5 +1,5 @@
 import type { ChatHistoryResponse, ChatMessage, ChatResponse } from '@/lib/api-types';
-import { requireUserId, unauthorized } from '@/server/auth/clerk';
+import { requireUserId, unauthorized } from '@/server/auth/user';
 import { listMessages, sessionExists } from '@/server/ai/repo';
 import { MAX_TURNS, runTurn, type Emit } from '@/server/ai/turn';
 import { isConfigured } from '@/server/db';

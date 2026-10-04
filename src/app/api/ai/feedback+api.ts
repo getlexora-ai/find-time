@@ -1,5 +1,5 @@
 import type { FeedbackResponse, RejectReason } from '@/lib/api-types';
-import { requireUserId, unauthorized } from '@/server/auth/clerk';
+import { requireUserId, unauthorized } from '@/server/auth/user';
 import { type Feedback, type Outcome, learnFrom } from '@/server/ai/learn';
 import { blocksTime } from '@/server/ai/find-time';
 import { type ScoreContext, type SlotFeatures, ZERO_FEATURES, slotFeatures } from '@/server/ai/scoring';

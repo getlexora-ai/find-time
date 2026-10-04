@@ -1,25 +1,25 @@
 /**
- * `/login` and `/signup` on web — our own pages on Clerk's headless hooks
- * (`useSignIn` / `useSignUp`), drawn in the landing's Nexus light language
- * instead of Clerk's prebuilt card.
+ * `/login` and `/signup` on web — our own pages on Better Auth
+ * (`src/lib/auth-client.ts`), drawn in the landing's Nexus light language.
  *
  * Flows:
- *   sign in   email + password → done, or → a 6-digit code when Clerk asks for
- *             a second factor (new device) → done
+ *   sign in   email + password → done, or → a 6-digit code when the email
+ *             was never verified (the server emails one on the attempt) → done
  *   sign up   email + password → 6-digit code → done → /welcome (onboarding)
  *   reset     email → 6-digit code + new password → done
- *   Google    authenticateWithRedirect → /sso-callback → /app (which sends
- *             first-timers on to /welcome)
+ *   Google    signIn.social → /api/auth/callback/google → /app, or /welcome
+ *             for a new account. Failures come back here as `?error=`.
  *
  * The right-hand stage is the product, not decoration: the example week a new
  * account starts from (the same `previewWeek` the onboarding drives). For sign
  * up it also shows where you are in the three steps, ticking as you go.
  */
-import { useAuth, useSignIn, useSignUp } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
 import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useMounted } from '@/design/useMounted';
+import { authClient } from '@/lib/auth-client';
+import { useAuthState } from '@/lib/session';
 
 import { defaultAnswers, previewWeek } from '../onboarding';
 import { MiniWeek } from './MiniWeek';
@@ -28,35 +28,42 @@ import { WeekBoard3D } from './WeekBoard3D';
 import './auth.css';
 
 type Mode = 'sign-in' | 'sign-up';
-type Phase = 'form' | 'code' | 'more' | 'reset-request' | 'reset-code';
-/** second-factor methods we can finish here, best first */
-type Factor = 'email_code' | 'phone_code' | 'totp' | 'backup_code';
-const FACTOR_ORDER: Factor[] = ['email_code', 'phone_code', 'totp', 'backup_code'];
-/** sign-up fields Clerk may still ask for after the email is verified */
-type MoreField = 'first_name' | 'last_name' | 'username' | 'legal_accepted';
-const MORE_FIELDS: MoreField[] = ['first_name', 'last_name', 'username', 'legal_accepted'];
+type Phase = 'form' | 'code' | 'reset-request' | 'reset-code';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RESEND_S = 30;
 
-const NO_ACCOUNT = 'No account uses that email.';
 const HAS_ACCOUNT = 'An account already uses that email.';
 
-function clerkError(err: unknown): string {
-  const e = err as { errors?: { message?: string; longMessage?: string; code?: string }[] };
-  const first = e?.errors?.[0];
-  if (first?.code === 'form_password_incorrect') return 'That password is not right. Try again or reset it.';
-  if (first?.code === 'form_identifier_not_found') return NO_ACCOUNT;
-  if (first?.code === 'form_code_incorrect') return 'That code is not right. Check the latest email.';
-  if (first?.code === 'form_identifier_exists') return HAS_ACCOUNT;
-  return first?.longMessage ?? first?.message ?? 'Something went wrong. Try again.';
+type AuthError = { code?: string; message?: string; status?: number } | null | undefined;
+
+function authError(err: AuthError): string {
+  switch (err?.code) {
+    case 'INVALID_EMAIL_OR_PASSWORD':
+      return 'That email or password is not right. Try again or reset your password.';
+    case 'INVALID_OTP':
+      return 'That code is not right. Check the latest email.';
+    case 'OTP_EXPIRED':
+      return 'That code has expired. Send a new one.';
+    case 'TOO_MANY_ATTEMPTS':
+      return 'Too many tries with that code. Send a new one.';
+    case 'USER_ALREADY_EXISTS':
+    case 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL':
+      return HAS_ACCOUNT;
+  }
+  if (err?.status === 429) return 'Too many attempts. Wait a minute and try again.';
+  return err?.message || 'Something went wrong. Try again.';
+}
+
+/** `?error=` from a Google sign-in that didn't finish (Better Auth's errorCallbackURL). */
+function googleError(code: string, description: string | null): string {
+  if (code === 'NOT_INVITED' && description) return description;
+  return 'Google sign-in didn’t finish. Try again.';
 }
 
 export default function AuthPage({ mode }: { mode: Mode }) {
   const router = useRouter();
-  const { isLoaded: authLoaded, isSignedIn } = useAuth();
-  const { signIn, setActive: setSignInActive, isLoaded: inLoaded } = useSignIn();
-  const { signUp, setActive: setSignUpActive, isLoaded: upLoaded } = useSignUp();
+  const { isLoaded: authLoaded, isSignedIn, refetch } = useAuthState();
 
   const [phase, setPhase] = useState<Phase>('form');
   const mounted = useMounted();
@@ -72,12 +79,6 @@ export default function AuthPage({ mode }: { mode: Mode }) {
   const [touched, setTouched] = useState(false);
   const [shake, setShake] = useState(0);
   const [resendIn, setResendIn] = useState(0);
-  /** sign-in second factor vs sign-up email verification */
-  const [codeFor, setCodeFor] = useState<'sign-up' | 'second-factor'>('sign-up');
-  const [factor, setFactor] = useState<Factor>('email_code');
-  const [factors, setFactors] = useState<Factor[]>([]);
-  const [missing, setMissing] = useState<string[]>([]);
-  const [more, setMore] = useState({ firstName: '', lastName: '', username: '', legal: false });
   /** set once a flow has picked its destination, so the redirect below doesn't race it */
   const leaving = useRef(false);
 
@@ -92,19 +93,12 @@ export default function AuthPage({ mode }: { mode: Mode }) {
     return () => clearTimeout(t);
   }, [resendIn]);
 
-  const ready = inLoaded && upLoaded;
+  // A Google sign-in that came back with ?error= (e.g. not invited yet): shown
+  // on the untouched form; read after hydration, like ?email=.
+  const q = mounted ? new URLSearchParams(window.location.search) : null;
+  const googleFailed = q?.get('error') ? googleError(q.get('error')!, q.get('error_description')) : null;
+  const formError = error ?? (phase === 'form' && !touched && !busy ? googleFailed : null);
 
-  // Google sign-up that Clerk sent back for more details (sso-callback's
-  // continueSignUpUrl): open straight on the "a few more details" step.
-  const continuing =
-    mode === 'sign-up' &&
-    phase === 'form' &&
-    typeof window !== 'undefined' &&
-    new URLSearchParams(window.location.search).has('continue') &&
-    signUp?.status === 'missing_requirements';
-  const view: Phase = continuing ? 'more' : phase;
-  const need = (continuing ? (signUp?.missingFields ?? []) : missing) as string[];
-  const unsupported = need.filter((f) => !(MORE_FIELDS as string[]).includes(f));
   const emailOk = EMAIL_RE.test(email.trim());
   const pwLong = password.length >= 8;
 
@@ -113,16 +107,24 @@ export default function AuthPage({ mode }: { mode: Mode }) {
     setShake((n) => n + 1);
   }
 
+  /** The session cookie is set by now; load it, then go. */
   async function finish(target: '/app' | '/welcome') {
     leaving.current = true;
+    await refetch();
     router.replace(target);
+  }
+
+  function toCode() {
+    setCode('');
+    setPhase('code');
+    setResendIn(RESEND_S);
   }
 
   // ── sign in / sign up ────────────────────────────────────────────────
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setTouched(true);
-    if (!ready || busy) return;
+    if (busy) return;
     setError(null);
     if (!emailOk) return fail('Enter a valid email address.');
     if (mode === 'sign-up' && !pwLong) return fail('Use at least 8 characters for your password.');
@@ -131,53 +133,19 @@ export default function AuthPage({ mode }: { mode: Mode }) {
     setBusy('submit');
     try {
       if (mode === 'sign-up') {
-        await signUp!.create({ emailAddress: email.trim(), password });
-        await signUp!.prepareEmailAddressVerification({ strategy: 'email_code' });
-        setCodeFor('sign-up');
-        setCode('');
-        setPhase('code');
-        setResendIn(RESEND_S);
+        // Verification is required, so this never signs in: the server emails a code.
+        const { error: err } = await authClient.signUp.email({ email: email.trim(), password, name: '' });
+        if (err) return fail(authError(err));
+        toCode();
       } else {
-        const res = await signIn!.create({ identifier: email.trim(), password });
-        if (res.status === 'complete') {
-          await setSignInActive!({ session: res.createdSessionId });
-          await finish('/app');
-          return;
-        }
-        if ((res.status as string) === 'needs_second_factor' || (res.status as string) === 'needs_client_trust') {
-          const offered = FACTOR_ORDER.filter((f) => res.supportedSecondFactors?.some((x) => x.strategy === f));
-          if (!offered.length) return fail('This account needs a sign-in method we don’t support here yet. Try Google.');
-          setFactors(offered);
-          await startFactor(offered[0]);
-          return;
-        }
-        fail('Signing in needs one more step we could not finish. Try Google, or reset your password.');
+        const { error: err } = await authClient.signIn.email({ email: email.trim(), password });
+        if (!err) return await finish('/app');
+        // Never verified: the server just emailed a code — finish verifying here.
+        if (err.code === 'EMAIL_NOT_VERIFIED') return toCode();
+        fail(authError(err));
       }
     } catch (err) {
-      fail(clerkError(err));
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  /** Switch to a second-factor method; email and SMS codes are sent first. */
-  async function startFactor(f: Factor) {
-    if (f === 'email_code' || f === 'phone_code') await signIn!.prepareSecondFactor({ strategy: f });
-    setCodeFor('second-factor');
-    setFactor(f);
-    setCode('');
-    setError(null);
-    setPhase('code');
-    setResendIn(f === 'email_code' || f === 'phone_code' ? RESEND_S : 0);
-  }
-
-  async function switchFactor(f: Factor) {
-    if (busy) return;
-    setBusy('resend');
-    try {
-      await startFactor(f);
-    } catch (err) {
-      fail(clerkError(err));
+      fail(authError(err as AuthError));
     } finally {
       setBusy(null);
     }
@@ -185,90 +153,39 @@ export default function AuthPage({ mode }: { mode: Mode }) {
 
   // ── the code ─────────────────────────────────────────────────────────
   async function verify(value = code) {
-    if (!ready || busy === 'submit') return;
-    const backup = codeFor === 'second-factor' && factor === 'backup_code';
-    if (backup ? value.trim().length < 6 : value.length !== 6) return fail(backup ? 'Enter one of your backup codes.' : 'Enter all 6 digits.');
+    if (busy === 'submit') return;
+    if (value.length !== 6) return fail('Enter all 6 digits.');
     setError(null);
     setBusy('submit');
     try {
-      if (codeFor === 'sign-up') {
-        const res = await signUp!.attemptEmailAddressVerification({ code: value });
-        if (res.status === 'complete') {
-          await setSignUpActive!({ session: res.createdSessionId });
-          await finish('/welcome');
-          return;
-        }
-        if (res.status === 'missing_requirements') {
-          setMissing(res.missingFields as string[]);
-          setPhase('more');
-          return;
-        }
-        fail('Your email is verified, but the account isn’t finished. Try again.');
-      } else {
-        const res = await signIn!.attemptSecondFactor({ strategy: factor, code: value.trim() });
-        if (res.status === 'complete') {
-          await setSignInActive!({ session: res.createdSessionId });
-          await finish('/app');
-          return;
-        }
-        fail('That did not finish signing you in. Try again.');
+      // Verifying also signs in (autoSignInAfterVerification).
+      const { error: err } = await authClient.emailOtp.verifyEmail({ email: email.trim(), otp: value });
+      if (err) {
+        setCode('');
+        return fail(authError(err));
       }
+      await finish(mode === 'sign-up' ? '/welcome' : '/app');
     } catch (err) {
       setCode('');
-      fail(clerkError(err));
+      fail(authError(err as AuthError));
     } finally {
       setBusy(null);
     }
   }
 
   async function resend() {
-    if (!ready || busy || resendIn > 0) return;
+    if (busy || resendIn > 0) return;
     setBusy('resend');
     setError(null);
     try {
-      if (phase === 'reset-code') {
-        await signIn!.create({ strategy: 'reset_password_email_code', identifier: email.trim() });
-      } else if (codeFor === 'sign-up') {
-        await signUp!.prepareEmailAddressVerification({ strategy: 'email_code' });
-      } else if (factor === 'email_code' || factor === 'phone_code') {
-        await signIn!.prepareSecondFactor({ strategy: factor });
-      }
+      const { error: err } =
+        phase === 'reset-code'
+          ? await authClient.emailOtp.requestPasswordReset({ email: email.trim() })
+          : await authClient.emailOtp.sendVerificationOtp({ email: email.trim(), type: 'email-verification' });
+      if (err) return fail(authError(err));
       setResendIn(RESEND_S);
     } catch (err) {
-      fail(clerkError(err));
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  // ── sign-up details Clerk still needs ───────────────────────────────
-  async function submitMore(e: FormEvent) {
-    e.preventDefault();
-    if (!ready || busy) return;
-    setError(null);
-    if (unsupported.length) return fail('This sign-up needs details we can’t collect here yet. Try signing up with email instead.');
-    if (need.includes('first_name') && !more.firstName.trim()) return fail('Enter your first name.');
-    if (need.includes('last_name') && !more.lastName.trim()) return fail('Enter your last name.');
-    if (need.includes('username') && !more.username.trim()) return fail('Choose a username.');
-    if (need.includes('legal_accepted') && !more.legal) return fail('Please accept the Terms and Privacy policy to continue.');
-    setBusy('submit');
-    try {
-      const res = await signUp!.update({
-        ...(need.includes('first_name') ? { firstName: more.firstName.trim() } : {}),
-        ...(need.includes('last_name') ? { lastName: more.lastName.trim() } : {}),
-        ...(need.includes('username') ? { username: more.username.trim() } : {}),
-        ...(need.includes('legal_accepted') ? { legalAccepted: true } : {}),
-      });
-      if (res.status === 'complete') {
-        await setSignUpActive!({ session: res.createdSessionId });
-        await finish('/welcome');
-        return;
-      }
-      setMissing(res.missingFields as string[]);
-      setPhase('more');
-      fail('A little more is needed to finish your account.');
-    } catch (err) {
-      fail(clerkError(err));
+      fail(authError(err as AuthError));
     } finally {
       setBusy(null);
     }
@@ -278,18 +195,19 @@ export default function AuthPage({ mode }: { mode: Mode }) {
   async function requestReset(e: FormEvent) {
     e.preventDefault();
     setTouched(true);
-    if (!ready || busy) return;
+    if (busy) return;
     setError(null);
     if (!emailOk) return fail('Enter the email you signed up with.');
     setBusy('submit');
     try {
-      await signIn!.create({ strategy: 'reset_password_email_code', identifier: email.trim() });
+      const { error: err } = await authClient.emailOtp.requestPasswordReset({ email: email.trim() });
+      if (err) return fail(authError(err));
       setCode('');
       setNewPassword('');
       setPhase('reset-code');
       setResendIn(RESEND_S);
     } catch (err) {
-      fail(clerkError(err));
+      fail(authError(err as AuthError));
     } finally {
       setBusy(null);
     }
@@ -297,23 +215,20 @@ export default function AuthPage({ mode }: { mode: Mode }) {
 
   async function resetPassword(e: FormEvent) {
     e.preventDefault();
-    if (!ready || busy) return;
+    if (busy) return;
     setError(null);
     if (code.length !== 6) return fail('Enter all 6 digits from the email.');
     if (newPassword.length < 8) return fail('Use at least 8 characters for your new password.');
     setBusy('submit');
     try {
-      const first = await signIn!.attemptFirstFactor({ strategy: 'reset_password_email_code', code });
-      const res = first.status === 'needs_new_password' ? await signIn!.resetPassword({ password: newPassword }) : first;
-      if (res.status === 'complete') {
-        await setSignInActive!({ session: res.createdSessionId });
-        await finish('/app');
-        return;
-      }
+      const reset = await authClient.emailOtp.resetPassword({ email: email.trim(), otp: code, password: newPassword });
+      if (reset.error) return fail(authError(reset.error));
+      const signedIn = await authClient.signIn.email({ email: email.trim(), password: newPassword });
+      if (!signedIn.error) return await finish('/app');
       fail('Your password changed, but signing in needs another step. Sign in again.');
       setPhase('form');
     } catch (err) {
-      fail(clerkError(err));
+      fail(authError(err as AuthError));
     } finally {
       setBusy(null);
     }
@@ -321,15 +236,23 @@ export default function AuthPage({ mode }: { mode: Mode }) {
 
   // ── Google ───────────────────────────────────────────────────────────
   async function google() {
-    if (!ready || busy) return;
+    if (busy) return;
     setError(null);
     setBusy('google');
     try {
-      const params = { strategy: 'oauth_google' as const, redirectUrl: '/sso-callback', redirectUrlComplete: '/app' };
-      if (mode === 'sign-up') await signUp!.authenticateWithRedirect(params);
-      else await signIn!.authenticateWithRedirect(params);
+      // Redirects away to Google; we only get past this on failure.
+      const { error: err } = await authClient.signIn.social({
+        provider: 'google',
+        callbackURL: '/app',
+        newUserCallbackURL: '/welcome',
+        errorCallbackURL: mode === 'sign-up' ? '/signup' : '/login',
+      });
+      if (err) {
+        fail(authError(err));
+        setBusy(null);
+      }
     } catch (err) {
-      fail(clerkError(err));
+      fail(authError(err as AuthError));
       setBusy(null);
     }
   }
@@ -341,15 +264,9 @@ export default function AuthPage({ mode }: { mode: Mode }) {
 
   // ── view ─────────────────────────────────────────────────────────────
   const isUp = mode === 'sign-up';
+  const view = phase;
   let head: { eyebrow: string; title: string; lede: ReactNode };
-  const second = codeFor === 'second-factor';
-  if (view === 'code' && second && factor === 'phone_code') {
-    head = { eyebrow: 'One more step', title: 'Check your phone', lede: 'We texted a 6-digit code to the number on your account.' };
-  } else if (view === 'code' && second && factor === 'totp') {
-    head = { eyebrow: 'One more step', title: 'Enter your authenticator code', lede: 'Open your authenticator app and enter the 6-digit code for Find Time.' };
-  } else if (view === 'code' && second && factor === 'backup_code') {
-    head = { eyebrow: 'One more step', title: 'Use a backup code', lede: 'Enter one of the backup codes you saved when you turned on two-step sign-in.' };
-  } else if (view === 'code') {
+  if (view === 'code') {
     head = {
       eyebrow: isUp ? 'Verify email' : 'One more step',
       title: 'Check your email',
@@ -359,8 +276,6 @@ export default function AuthPage({ mode }: { mode: Mode }) {
         </>
       ),
     };
-  } else if (view === 'more') {
-    head = { eyebrow: 'Almost done', title: 'A few more details', lede: 'Your account needs these before it can be created.' };
   } else if (phase === 'reset-request') {
     head = { eyebrow: 'Reset password', title: 'Forgot your password?', lede: 'We’ll email you a code to set a new one.' };
   } else if (phase === 'reset-code') {
@@ -383,7 +298,7 @@ export default function AuthPage({ mode }: { mode: Mode }) {
     head = { eyebrow: 'Sign in', title: 'Welcome back.', lede: 'Pick up your week where you left it.' };
   }
 
-  const pathStep = view === 'code' || view === 'more' ? 1 : 0;
+  const pathStep = view === 'code' ? 1 : 0;
 
   return (
     <div className="au" data-page="auth">
@@ -401,7 +316,7 @@ export default function AuthPage({ mode }: { mode: Mode }) {
           </p>
         </header>
 
-        <div className="au-body" key={`${mode}-${view}-${factor}`}>
+        <div className="au-body" key={`${mode}-${view}`}>
           <p className="au-eyebrow au-in" style={{ '--i': 0 } as React.CSSProperties}>
             {head.eyebrow}
           </p>
@@ -414,7 +329,7 @@ export default function AuthPage({ mode }: { mode: Mode }) {
 
           {view === 'form' ? (
             <form className="au-form au-in" style={{ '--i': 3 } as React.CSSProperties} onSubmit={onSubmit} noValidate>
-              <button type="button" className="au-btn au-ghost au-wide" onClick={google} disabled={!ready || !!busy} aria-busy={busy === 'google'}>
+              <button type="button" className="au-btn au-ghost au-wide" onClick={google} disabled={!!busy} aria-busy={busy === 'google'}>
                 {busy === 'google' ? <i className="au-spin" aria-hidden="true" /> : <GoogleG />}
                 Continue with Google
               </button>
@@ -463,7 +378,7 @@ export default function AuthPage({ mode }: { mode: Mode }) {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     aria-invalid={touched && (isUp ? !pwLong : !password)}
-                    aria-describedby={[isUp ? 'au-pw-hint' : '', error ? 'au-err' : ''].filter(Boolean).join(' ') || undefined}
+                    aria-describedby={[isUp ? 'au-pw-hint' : '', formError ? 'au-err' : ''].filter(Boolean).join(' ') || undefined}
                   />
                   <button
                     type="button"
@@ -481,8 +396,8 @@ export default function AuthPage({ mode }: { mode: Mode }) {
                   </p>
                 ) : null}
               </div>
-              <ErrorLine error={error} email={email.trim()} />
-              <button type="submit" className="au-btn au-ink au-wide" disabled={!ready || !!busy} aria-busy={busy === 'submit'}>
+              <ErrorLine error={formError} email={email.trim()} />
+              <button type="submit" className="au-btn au-ink au-wide" disabled={!!busy} aria-busy={busy === 'submit'}>
                 {busy === 'submit' ? <i className="au-spin" aria-hidden="true" /> : null}
                 {isUp ? 'Create account' : 'Sign in'}
                 {busy !== 'submit' ? (
@@ -491,8 +406,6 @@ export default function AuthPage({ mode }: { mode: Mode }) {
                   </span>
                 ) : null}
               </button>
-              {/* Clerk's bot protection mounts here when it is on for the instance */}
-              <div id="clerk-captcha" />
             </form>
           ) : null}
 
@@ -504,37 +417,19 @@ export default function AuthPage({ mode }: { mode: Mode }) {
                 e.preventDefault();
                 void verify();
               }}>
-              {second && factor === 'backup_code' ? (
-                <div className="au-field">
-                  <label htmlFor="au-backup">Backup code</label>
-                  <div className="au-input" data-invalid={!!error}>
-                    <input
-                      id="au-backup"
-                      className="mono"
-                      autoComplete="one-time-code"
-                      autoCapitalize="off"
-                      spellCheck={false}
-                      value={code}
-                      onChange={(e) => setCode(e.target.value)}
-                      autoFocus
-                    />
-                  </div>
-                </div>
-              ) : (
-                <Otp
-                  value={code}
-                  onChange={setCode}
-                  onComplete={(v) => void verify(v)}
-                  invalid={!!error}
-                  shake={shake}
-                  disabled={busy === 'submit'}
-                />
-              )}
+              <Otp
+                value={code}
+                onChange={setCode}
+                onComplete={(v) => void verify(v)}
+                invalid={!!error}
+                shake={shake}
+                disabled={busy === 'submit'}
+              />
               <ErrorLine error={error} email={email.trim()} />
               <button
                 type="submit"
                 className="au-btn au-ink au-wide"
-                disabled={busy === 'submit' || (second && factor === 'backup_code' ? !code.trim() : code.length !== 6)}
+                disabled={busy === 'submit' || code.length !== 6}
                 aria-busy={busy === 'submit'}>
                 {busy === 'submit' ? <i className="au-spin" aria-hidden="true" /> : null}
                 {isUp ? 'Verify email' : 'Verify and sign in'}
@@ -547,94 +442,10 @@ export default function AuthPage({ mode }: { mode: Mode }) {
                     setPhase('form');
                     setError(null);
                   }}>
-                  {second ? 'Back to sign in' : 'Use a different email'}
+                  {isUp ? 'Use a different email' : 'Back to sign in'}
                 </button>
-                {!second || factor === 'email_code' || factor === 'phone_code' ? (
-                  <ResendButton resendIn={resendIn} busy={busy === 'resend'} onClick={resend} />
-                ) : null}
+                <ResendButton resendIn={resendIn} busy={busy === 'resend'} onClick={resend} />
               </div>
-              {second && factors.length > 1 ? (
-                <p className="au-alt">
-                  Other ways:{' '}
-                  {factors
-                    .filter((f) => f !== factor)
-                    .map((f, i) => (
-                      <span key={f}>
-                        {i ? ' · ' : ''}
-                        <button type="button" className="au-link-btn" onClick={() => void switchFactor(f)} disabled={!!busy}>
-                          {FACTOR_LABEL[f]}
-                        </button>
-                      </span>
-                    ))}
-                </p>
-              ) : null}
-            </form>
-          ) : null}
-
-          {view === 'more' ? (
-            <form className="au-form au-in" style={{ '--i': 3 } as React.CSSProperties} onSubmit={submitMore} noValidate>
-              {need.includes('first_name') || need.includes('last_name') ? (
-                <div className="au-two">
-                  {need.includes('first_name') ? (
-                    <div className="au-field">
-                      <label htmlFor="au-fn">First name</label>
-                      <div className="au-input">
-                        <input
-                          id="au-fn"
-                          autoComplete="given-name"
-                          value={more.firstName}
-                          onChange={(e) => setMore((m) => ({ ...m, firstName: e.target.value }))}
-                          autoFocus
-                        />
-                      </div>
-                    </div>
-                  ) : null}
-                  {need.includes('last_name') ? (
-                    <div className="au-field">
-                      <label htmlFor="au-ln">Last name</label>
-                      <div className="au-input">
-                        <input
-                          id="au-ln"
-                          autoComplete="family-name"
-                          value={more.lastName}
-                          onChange={(e) => setMore((m) => ({ ...m, lastName: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-              {need.includes('username') ? (
-                <div className="au-field">
-                  <label htmlFor="au-un">Username</label>
-                  <div className="au-input">
-                    <input
-                      id="au-un"
-                      autoComplete="username"
-                      autoCapitalize="off"
-                      spellCheck={false}
-                      value={more.username}
-                      onChange={(e) => setMore((m) => ({ ...m, username: e.target.value }))}
-                    />
-                  </div>
-                </div>
-              ) : null}
-              {need.includes('legal_accepted') ? (
-                <label className="au-check">
-                  <input type="checkbox" checked={more.legal} onChange={(e) => setMore((m) => ({ ...m, legal: e.target.checked }))} />
-                  <span>
-                    I agree to the <a href="/terms">Terms</a> and <a href="/privacy">Privacy policy</a>.
-                  </span>
-                </label>
-              ) : null}
-              {unsupported.length ? (
-                <p className="au-hint">This sign-up also needs: {unsupported.join(', ').replace(/_/g, ' ')}, which can’t be added here yet.</p>
-              ) : null}
-              <ErrorLine error={error} email={email.trim()} />
-              <button type="submit" className="au-btn au-ink au-wide" disabled={!!busy} aria-busy={busy === 'submit'}>
-                {busy === 'submit' ? <i className="au-spin" aria-hidden="true" /> : null}
-                Create account
-              </button>
             </form>
           ) : null}
 
@@ -655,7 +466,7 @@ export default function AuthPage({ mode }: { mode: Mode }) {
                 </div>
               </div>
               <ErrorLine error={error} email={email.trim()} />
-              <button type="submit" className="au-btn au-ink au-wide" disabled={!ready || !!busy} aria-busy={busy === 'submit'}>
+              <button type="submit" className="au-btn au-ink au-wide" disabled={!!busy} aria-busy={busy === 'submit'}>
                 {busy === 'submit' ? <i className="au-spin" aria-hidden="true" /> : null}
                 Email me a code
               </button>
@@ -835,26 +646,14 @@ function SignUpStage({ step }: { step: number }) {
   );
 }
 
-const FACTOR_LABEL: Record<Factor, string> = {
-  email_code: 'Email a code',
-  phone_code: 'Text a code',
-  totp: 'Authenticator app',
-  backup_code: 'Backup code',
-};
-
 /**
  * The form's error, announced (role=alert) and pointed at by the inputs'
- * aria-describedby. "No account" / "already have one" carry their way out —
- * a link to the other page with the email kept.
+ * aria-describedby. "Already have one" carries its way out — a link to sign
+ * in with the email kept.
  */
 function ErrorLine({ error, email }: { error: string | null; email?: string }) {
   const keep = email ? `?email=${encodeURIComponent(email)}` : '';
-  const action =
-    error === NO_ACCOUNT
-      ? { href: `/signup${keep}`, label: 'Create an account' }
-      : error === HAS_ACCOUNT
-        ? { href: `/login${keep}`, label: 'Sign in instead' }
-        : null;
+  const action = error === HAS_ACCOUNT ? { href: `/login${keep}`, label: 'Sign in instead' } : null;
   return (
     <div id="au-err" role="alert">
       {error ? (

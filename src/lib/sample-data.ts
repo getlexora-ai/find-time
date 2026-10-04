@@ -5,7 +5,7 @@ import type { CalendarEvent } from './types';
  * always has something to show on first launch, on any day.
  *
  * In a later milestone this is replaced by a real per-user data source
- * (Clerk-authenticated, Postgres-backed).
+ * (signed-in, Postgres-backed).
  */
 function at(dayOffset: number, hour: number, minute = 0): string {
   const d = new Date();

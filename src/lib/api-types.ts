@@ -85,7 +85,7 @@ export type ApiAccount = {
 
 export type AccountsResponse = {
   signedIn: boolean;
-  /** Name and email live in Clerk only; read them with Clerk's useUser. */
+  /** Name and email live in `auth_user`; read them with useAuthState (src/lib/session.ts). */
   user: { id: string } | null;
   accounts: ApiAccount[];
 };

@@ -1,13 +1,13 @@
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 
 /**
- * Google OAuth CSRF state. Clerk owns real sessions now (src/server/auth/clerk.ts);
+ * Google OAuth CSRF state. Better Auth owns real sessions (src/server/auth/auth.ts);
  * all that survives here is the short-lived `state` for the calendar-connect
- * redirect, which the browser cannot carry an Authorization header through.
+ * redirect, which has to name the user across Google's round trip.
  *
- * The `state` value is `<clerkUserId>.<nonce>.<sig>`, with the matching bare
+ * The `state` value is `<userId>.<nonce>.<sig>`, with the matching bare
  * `<nonce>` set as an httpOnly cookie. The callback checks the signature and
- * that the nonce round-tripped, then trusts `<clerkUserId>` as the account owner.
+ * that the nonce round-tripped, then trusts `<userId>` as the account owner.
  *
  * Server-only.
  */

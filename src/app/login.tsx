@@ -1,44 +1,51 @@
-import { useAuth, useSignIn, useSignUp, useSSO } from '@clerk/clerk-expo';
-import { makeRedirectUri } from 'expo-auth-session';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import { type ReactNode, useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, StyleSheet, TextInput, View } from 'react-native';
 
 import { C, R, T, w } from '@/design/tokens';
 import { MONO, Press, Txt } from '@/design/ui';
+import { authClient } from '@/lib/auth-client';
+import { useAuthState } from '@/lib/session';
 
 /**
- * `/login` on native — a custom Clerk flow (web has its own page,
+ * `/login` on native — a custom Better Auth flow (web has its own page,
  * src/auth/dom/AuthPage.tsx). Email + password sign in / sign up with an
- * email-code step (sign-up verification, or Clerk's email second factor on a
- * new device), resend, "Continue with Google" via SSO. `?mode=signup` opens
- * on sign-up (`/signup` redirects here). Password reset and sign-ups that
- * still need details hand over to the web page, which handles them.
+ * email-code step (sign-up verification, or signing in to an email that was
+ * never verified), resend, "Continue with Google" in the system browser (the
+ * Expo plugin brings the session back on `findtime://`). `?mode=signup` opens
+ * on sign-up (`/signup` redirects here). Password reset hands over to the web
+ * page.
  */
 const SITE = (process.env.EXPO_PUBLIC_SITE_URL || 'https://www.usefindtime.com').replace(/\/$/, '');
-
-WebBrowser.maybeCompleteAuthSession();
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 type Mode = 'login' | 'signup';
 
-function clerkError(err: unknown): string {
-  const e = err as { errors?: { message?: string; longMessage?: string }[] };
-  return e?.errors?.[0]?.longMessage ?? e?.errors?.[0]?.message ?? 'Something went wrong. Try again.';
+/** Better Auth's `{ error }` → a sentence. */
+function authError(err: { code?: string; message?: string } | null | undefined): string {
+  switch (err?.code) {
+    case 'INVALID_EMAIL_OR_PASSWORD':
+      return 'That email or password is not right.';
+    case 'USER_ALREADY_EXISTS':
+    case 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL':
+      return 'An account already uses that email. Sign in instead.';
+    case 'INVALID_OTP':
+      return 'That code is not right. Check the latest email.';
+    case 'OTP_EXPIRED':
+      return 'That code has expired. Send a new one.';
+    case 'TOO_MANY_ATTEMPTS':
+      return 'Too many tries. Send a new code.';
+    default:
+      return err?.message || 'Something went wrong. Try again.';
+  }
 }
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { isLoaded: authLoaded, isSignedIn } = useAuth();
-  const { signIn, setActive: setSignInActive, isLoaded: signInLoaded } = useSignIn();
-  const { signUp, setActive: setSignUpActive, isLoaded: signUpLoaded } = useSignUp();
-  const { startSSOFlow } = useSSO();
+  const { isLoaded: authLoaded, isSignedIn } = useAuthState();
 
   const params = useLocalSearchParams<{ mode?: string }>();
   const [mode, setMode] = useState<Mode>(params.mode === 'signup' ? 'signup' : 'login');
-  /** what the pending code is for */
-  const [codeFor, setCodeFor] = useState<'signup' | 'second'>('signup');
   const [resent, setResent] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -52,7 +59,7 @@ export default function LoginScreen() {
   }, [authLoaded, isSignedIn, router]);
 
   async function submit() {
-    if (busy || !signInLoaded || !signUpLoaded) return;
+    if (busy) return;
     setError(null);
     if (!EMAIL_RE.test(email.trim())) return setError('Enter a valid email address.');
     if (password.length < 8) return setError('Password must be at least 8 characters.');
@@ -60,59 +67,38 @@ export default function LoginScreen() {
     setBusy(true);
     try {
       if (mode === 'signup') {
-        await signUp.create({ emailAddress: email.trim(), password });
-        await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
-        setCodeFor('signup');
+        // The server emails the verification code on sign-up.
+        const { error: err } = await authClient.signUp.email({ email: email.trim(), password, name: '' });
+        if (err) return setError(authError(err));
+        setCode('');
         setPendingCode(true);
       } else {
-        const res = await signIn.create({ identifier: email.trim(), password });
-        if (res.status === 'complete') {
-          await setSignInActive({ session: res.createdSessionId });
-          router.replace('/app');
-        } else if (
-          ((res.status as string) === 'needs_second_factor' || (res.status as string) === 'needs_client_trust') &&
-          res.supportedSecondFactors?.some((f) => f.strategy === 'email_code')
-        ) {
-          // New device: Clerk emails a code before letting you in.
-          await signIn.prepareSecondFactor({ strategy: 'email_code' });
-          setCodeFor('second');
+        const { error: err } = await authClient.signIn.email({ email: email.trim(), password });
+        if (err?.code === 'EMAIL_NOT_VERIFIED') {
+          // Never verified: the server has just emailed a fresh code.
           setCode('');
           setPendingCode(true);
-        } else {
-          setError('This sign-in needs a step only the web app supports (authenticator or backup code). Sign in there once, then here.');
-        }
+        } else if (err) setError(authError(err));
+        else router.replace('/app');
       }
-    } catch (err) {
-      setError(clerkError(err));
+    } catch {
+      setError('Something went wrong. Try again.');
     } finally {
       setBusy(false);
     }
   }
 
   async function verify() {
-    if (busy || !signUpLoaded) return;
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
-      if (codeFor === 'second') {
-        const res = await signIn!.attemptSecondFactor({ strategy: 'email_code', code: code.trim() });
-        if (res.status === 'complete') {
-          await setSignInActive!({ session: res.createdSessionId });
-          router.replace('/app');
-        } else setError('That code did not verify. Try again.');
-        return;
-      }
-      const res = await signUp.attemptEmailAddressVerification({ code: code.trim() });
-      if (res.status === 'complete') {
-        await setSignUpActive({ session: res.createdSessionId });
-        router.replace('/app');
-      } else if (res.status === 'missing_requirements') {
-        setError('Your email is verified. A few more details are needed — finish creating the account on the web.');
-      } else {
-        setError('That code did not verify. Try again.');
-      }
-    } catch (err) {
-      setError(clerkError(err));
+      // Verifying signs you in; /app sends first-timers on to /welcome.
+      const { error: err } = await authClient.emailOtp.verifyEmail({ email: email.trim(), otp: code.trim() });
+      if (err) setError(authError(err));
+      else router.replace('/app');
+    } catch {
+      setError('Something went wrong. Try again.');
     } finally {
       setBusy(false);
     }
@@ -123,11 +109,11 @@ export default function LoginScreen() {
     setBusy(true);
     setError(null);
     try {
-      if (codeFor === 'second') await signIn!.prepareSecondFactor({ strategy: 'email_code' });
-      else await signUp!.prepareEmailAddressVerification({ strategy: 'email_code' });
-      setResent(true);
-    } catch (err) {
-      setError(clerkError(err));
+      const { error: err } = await authClient.emailOtp.sendVerificationOtp({ email: email.trim(), type: 'email-verification' });
+      if (err) setError(authError(err));
+      else setResent(true);
+    } catch {
+      setError('Something went wrong. Try again.');
     } finally {
       setBusy(false);
     }
@@ -138,19 +124,12 @@ export default function LoginScreen() {
     setBusy(true);
     setError(null);
     try {
-      const { createdSessionId, setActive, signUp: ssoSignUp } = await startSSOFlow({
-        strategy: 'oauth_google',
-        redirectUrl: makeRedirectUri(),
-      });
-      if (createdSessionId && setActive) {
-        await setActive({ session: createdSessionId });
-        router.replace('/app');
-      } else if (ssoSignUp?.status === 'missing_requirements') {
-        // Never fail silently: say what is missing and where to finish.
-        setError('Your Google sign-up needs a few more details. Finish it on the web, then sign in here.');
-      }
-    } catch (err) {
-      setError(clerkError(err));
+      // Google opens in the system browser; the session lands in SecureStore and
+      // useAuthState flips to signed in, which the effect above follows to /app.
+      const { error: err } = await authClient.signIn.social({ provider: 'google', callbackURL: '/app' });
+      if (err) setError(authError(err));
+    } catch {
+      setError('Something went wrong. Try again.');
     } finally {
       setBusy(false);
     }

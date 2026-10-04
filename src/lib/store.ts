@@ -8,7 +8,7 @@ import type { CalendarEvent } from './types';
  * Cross-platform (web + iOS + Android), no dependencies.
  *
  * MVP scope: state lives in memory for the session. The next milestone swaps this
- * for a real API layer (auth via Clerk, persistence in Postgres) behind the same hooks.
+ * for a real API layer (auth via Better Auth, persistence in Postgres) behind the same hooks.
  */
 let events: CalendarEvent[] = seedEvents();
 const listeners = new Set<() => void>();

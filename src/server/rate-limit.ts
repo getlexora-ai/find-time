@@ -37,7 +37,7 @@ const LIMITS: Record<RateRoute, Pair> = {
   'ai-report': { hour: 30, day: 100 },
   // authed, kicks off a Google OAuth round trip
   'google-connect': { hour: 10, day: 30 },
-  // authed, writes settings + calls Clerk — a few saves (and the GET's
+  // authed, writes settings + the user's name — a few saves (and the GET's
   // calendar read) per setup is normal; this is a flood guard
   onboarding: { hour: 30, day: 100 },
   // authed, one tiny insert per step viewed
