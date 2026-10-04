@@ -39,6 +39,7 @@ export type CalendarEventRow = {
   transparency: 'opaque' | 'transparent';
   response_status: string | null;
   attendee_count: number | null;
+  provider_editable: boolean;
 };
 
 export type MapResult =
@@ -129,8 +130,26 @@ export function toRow(
       transparency: g.transparency === 'transparent' ? 'transparent' : 'opaque',
       response_status: responseOf(g),
       attendee_count: g.attendees ? g.attendees.filter((a) => !a.resource).length : null,
+      provider_editable: editableHere(g, allDay),
     },
   };
+}
+
+/**
+ * May the user move, resize or delete this event from Find Time (edit.ts)?
+ * Only a timed, one-off, ordinary event they organise with no other guests:
+ * no one else gets an update email, no series is split, nothing someone else
+ * owns is touched. Everything else stays read-only.
+ */
+function editableHere(g: GEvent, allDay: boolean): boolean {
+  return (
+    !allDay &&
+    g.organizer?.self === true &&
+    (g.eventType ?? 'default') === 'default' &&
+    !g.recurringEventId &&
+    !g.recurrence?.length &&
+    !(g.attendees ?? []).some((a) => !a.self && !a.resource)
+  );
 }
 
 /** What an event is about. Read live from Google, never written to the database. */

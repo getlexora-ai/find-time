@@ -179,6 +179,7 @@ const EVENT_COLS = [
   'transparency',
   'response_status',
   'attendee_count',
+  'provider_editable',
 ] as const;
 
 async function upsertEvent(row: CalendarEventRow): Promise<void> {

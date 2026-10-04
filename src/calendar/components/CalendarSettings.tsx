@@ -117,8 +117,8 @@ function PushFocusRow() {
         <T style={styles.calName}>Add my focus blocks to Google Calendar</T>
       </Press>
       <T style={styles.status}>
-        As private busy events on your primary calendar, so others see the time as taken. Only Find Time’s own focus
-        blocks are written; your other events are never changed.
+        As private busy events on your primary calendar, so others see the time as taken. This switch writes only Find
+        Time’s own focus blocks.
       </T>
       {!!msg && <T style={styles.error}>{msg}</T>}
     </View>

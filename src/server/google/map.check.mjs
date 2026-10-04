@@ -126,4 +126,16 @@ assert.equal(invite.row.attendee_count, 2);
 assert.equal(timed.row.transparency, 'opaque');
 assert.equal(timed.row.response_status, null);
 
+// Editable from Find Time: only a timed, one-off, ordinary event you organise with no other guests.
+const mine = { id: 'e1', start: { dateTime: '2026-10-05T09:00:00+02:00' }, end: { dateTime: '2026-10-05T10:00:00+02:00' }, organizer: { self: true } };
+const editable = (g) => toRow({ ...mine, ...g }, ctx).row.provider_editable;
+assert.equal(editable({}), true, 'yours, no guests');
+assert.equal(editable({ attendees: [{ self: true }, { email: 'room', resource: true }] }), true, 'you + a room');
+assert.equal(editable({ attendees: [{ self: true }, { email: 'sarah@x.com' }] }), false, 'a guest would be emailed');
+assert.equal(editable({ organizer: { email: 'boss@x.com' } }), false, "someone else's event");
+assert.equal(editable({ organizer: undefined }), false, 'unknown organizer');
+assert.equal(editable({ recurringEventId: 'series1' }), false, 'one occurrence of a series');
+assert.equal(editable({ eventType: 'outOfOffice' }), false, 'special event types');
+assert.equal(editable({ start: { date: '2026-10-05' }, end: { date: '2026-10-06' } }), false, 'all-day');
+
 console.log('map.check: ok');

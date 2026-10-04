@@ -41,6 +41,8 @@ export type ApiEvent = {
   taskId?: string | null;
   /** the habit this block is a session of ("gym 3× a week") */
   habitId?: string | null;
+  /** imported, and Google lets you move, resize and delete it from here (synced-fields.ts) */
+  googleEditable?: boolean;
 };
 
 export type EventInput = {

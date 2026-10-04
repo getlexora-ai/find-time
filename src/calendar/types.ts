@@ -46,6 +46,8 @@ export type CalEvent = {
    * the calendar shows those read-only (src/lib/synced-fields.ts).
    */
   imported?: boolean;
+  /** Imported, and Google lets you move, resize and delete it from here; the change goes to Google first. */
+  googleEditable?: boolean;
   /** Source calendar (calendars.id). Absent = Find Time's own block. */
   calendarId?: string;
   /** Google all-day event — drawn in the all-day lane, never on the hours. */

@@ -348,7 +348,7 @@ export function TimeGrid({
 
   /** Why a tile cannot be dragged, or null if it can. */
   const lockOf = (it: LaidBlock): string | null => {
-    if (it.ev.imported) return 'From Google Calendar — change it there';
+    if (it.ev.imported && !it.ev.googleEditable) return 'From Google Calendar — change it there';
     if (it.cutTop || it.cutBottom) return 'Runs past your hours — edit it to move it';
     if (it.ev.endDate) return 'Spans midnight — edit it to move it';
     return null;

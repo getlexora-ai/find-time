@@ -299,7 +299,7 @@ export function createEventAsync(input: NewEvent): Promise<CalEvent> {
 
 /** An edit Google would overwrite (src/lib/synced-fields.ts). */
 function isLockedPatch(cur: CalEvent, patch: Partial<CalEvent>): boolean {
-  return cur.imported === true && lockedFields(IMPORTED_ORIGIN, toEventPatch(cur, patch)).length > 0;
+  return cur.imported === true && lockedFields(IMPORTED_ORIGIN, toEventPatch(cur, patch), cur.googleEditable).length > 0;
 }
 
 /** `current` is the event as it was BEFORE `patch` — times and the imported
@@ -353,7 +353,7 @@ function takeReadyWrites(): (() => Promise<void>)[] {
     }
 
     if (taken.op.kind === 'delete') {
-      if (cur.imported) {
+      if (cur.imported && !cur.googleEditable) {
         taken.settle(false);
         continue;
       }
@@ -401,7 +401,8 @@ export function deleteEvent(id: number): Promise<boolean> {
   if (!cur) return Promise.resolve(false);
   // sync.ts clears deleted_at whenever Google sends the event again — when it
   // changes there, or on a full re-sync — so a local delete would come back.
-  if (cur.imported) return Promise.resolve(false);
+  // An editable one is deleted in Google first (google/edit.ts), so it stays gone.
+  if (cur.imported && !cur.googleEditable) return Promise.resolve(false);
 
   events = events.filter((e) => e.id !== id);
   emit();
