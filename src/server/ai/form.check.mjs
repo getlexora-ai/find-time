@@ -78,6 +78,10 @@ assert.match(read(ev({ title: 'Call', date: '2026-02-30', start: '10:00', durati
 // An end before the start means no end was given: asked until when.
 r = read(ev({ title: 'Class', date: '2026-10-05', start: '11:00', duration_min: 60, repeat: rep({ days: ['MO'], until: '2026-09-01' }) }));
 assert.match(r.args.question, /Until when/);
+// Count and until together (what the model really sent for "for 4 days … till 29.10"): the end date wins.
+r = read(ev({ title: 'German class', date: '2026-10-05', start: '11:00', end: '14:45', repeat: rep({ days: ['MO', 'TU', 'WE', 'TH'], until: '2026-10-29', count: 4 }) }));
+assert.equal(r.args.rrule, 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH;UNTIL=20261029T235959');
+assert.match(r.summary, /16 times/);
 // An absurd length is no length: asked.
 assert.match(read(ev({ title: 'Nap', date: '2026-10-02', start: '13:00', duration_min: 5000 })).args.question, /How long/);
 // A long, multi-line title is trimmed.

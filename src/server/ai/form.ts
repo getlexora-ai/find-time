@@ -72,7 +72,10 @@ export const FORM_TOOL: ToolDef = {
               interval: { type: 'integer', description: '1 = every, 2 = every other, …' },
               days: { type: 'array', items: { type: 'string', enum: [...RULE_DAYS] }, description: 'WEEKLY: the weekdays. Empty otherwise.' },
               until: nullable('string', 'YYYY-MM-DD, the last day, only if the user said when it ends.'),
-              count: nullable('integer', 'How many times in all, only if the user said a number of times.'),
+              count: nullable(
+                'integer',
+                'How many times in all, only if the user said a number of times ("6 times", "for 10 sessions"). "4 days" next to weekdays describes the days, not a count. Null when there is an until.',
+              ),
               no_end: { type: 'boolean', description: 'true only if the user said it goes on with no end ("every Monday", "weekly", "always").' },
             },
           },
@@ -137,7 +140,9 @@ export function fromForm(form: Form, text: string, nowISO: string): Understood |
     if (!freq) return null;
     const byDay = freq === 'WEEKLY' ? [...new Set((r.days ?? []).map((c) => RULE_DAYS.indexOf(c as (typeof RULE_DAYS)[number])).filter((i) => i >= 0))] : [];
     const until = day(r.until);
-    const count = intIn(r.count, 1, 366);
+    // RFC 5545 forbids COUNT with UNTIL; a said end date wins. (Live: "for 4 days" next to
+    // Mon–Thu came back as count 4 *and* until 29 Oct — four classes instead of sixteen.)
+    const count = until ? null : intIn(r.count, 1, 366);
     const rule: Rule = { freq, interval: intIn(r.interval, 1, 12) ?? 1, byDay, until: null, count };
     d.rule = formatRule(rule);
     if (date) d.from = date;
