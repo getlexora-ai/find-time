@@ -75,6 +75,13 @@ create index if not exists "auth_session_userId_idx" on "auth_session" ("userId"
 create index if not exists "auth_account_userId_idx" on "auth_account" ("userId");
 create index if not exists "auth_verification_identifier_idx" on "auth_verification" ("identifier");
 
-alter table users alter column email set default '';
+-- Only where `users.email` still exists: the trimmed production schema (024)
+-- dropped it, and src/server/auth/user.ts inserts the id alone.
+do $$ begin
+  if exists (select 1 from information_schema.columns
+              where table_schema = 'public' and table_name = 'users' and column_name = 'email') then
+    alter table users alter column email set default '';
+  end if;
+end $$;
 
 alter table waitlist add column if not exists invited_at timestamptz;
