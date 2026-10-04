@@ -1,10 +1,11 @@
 import type { ChatMessage, ChatProposal, ChatResponse, ChatStreamEvent, TraceStep } from '@/lib/api-types';
 import { STEP } from '@/lib/agent-tools';
-import { listEvents } from '@/server/events-repo';
+import { listEvents, listOwnRepeats } from '@/server/events-repo';
 import { type ApiHabit, listHabits } from '@/server/habits-repo';
 import { type ApiTask, listOpenTasks } from '@/server/tasks-repo';
 import { DEFAULT_ZONE, wallClockNow } from '@/server/wall-clock';
 import { blocksTime } from './find-time';
+import { expandRepeat } from './place-at';
 import { describeClaim } from './learn';
 import type { AgentProfile } from './preferences';
 import { appendMessage, createSession, listMessages, loadProfile, sessionExists, userTimeZone } from './repo';
@@ -29,6 +30,15 @@ import { type Draft, NOT_UNDERSTOOD, understand } from './understand';
  */
 
 const HORIZON_DAYS = 21;
+
+/** The window's events with Find Time's own repeats expanded to every day they fall on. */
+async function calendarFor(userId: string, fromISO: string, toISO: string) {
+  const [events, repeats] = await Promise.all([listEvents(userId, fromISO, toISO), listOwnRepeats(userId, toISO)]);
+  const series = new Set(repeats.map((r) => r.id));
+  return [...events.filter((e) => !series.has(e.id)), ...repeats.flatMap((r) => expandRepeat(r, fromISO, toISO))].sort((a, b) =>
+    a.start.localeCompare(b.start),
+  );
+}
 export const MAX_TURNS = 16;
 
 export type Emit = (e: ChatStreamEvent) => void;
@@ -89,7 +99,7 @@ export async function runTurn(
     [profile, history, events, openTasks, habits] = await Promise.all([
       loadProfile(userId),
       listMessages(sessionId, MAX_TURNS),
-      listEvents(userId, nowISO, horizonISO),
+      calendarFor(userId, nowISO, horizonISO),
       // The backlog is optional context: a failure here must not cost the turn.
       listOpenTasks(userId).catch((err) => {
         console.error('ai/chat listOpenTasks', err);

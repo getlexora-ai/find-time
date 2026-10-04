@@ -351,4 +351,53 @@ assert.equal(say("I'm travelling to Copenhagen from the 17th to the 22nd").name,
   assert.notEqual(say('yes', { ...asked, clashAsked: false }).args.overlapOk, true);
 }
 
+// ── weekly repeats: one series with dates computed in code (reported 2026-10-04) ──
+{
+  const GERMAN = 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH;UNTIL=20261029T235959';
+  const series = (r) => [r.name, r.args.title, r.args.startISO, r.args.endISO, r.args.rrule];
+  const want = ['place_at', 'German class', '2026-10-05T11:00:00.000Z', '2026-10-05T14:45:00.000Z', GERMAN];
+
+  // The sentence as typed, German dates and all.
+  let r = say('i have german class from 5.10.2026 till 29.10.2026 for 4 days. Monday till Thursday from 11am till 2:45pm');
+  assert.deepEqual(series(r), want, r.summary);
+  assert.match(r.summary, /Mon–Thu 11:00 · 225 min · Mon 5 Oct – Thu 29 Oct · 16 times/);
+  // The same sentence as the model rewrote it.
+  r = say('German class from Oct 5 to Oct 29, Monday through Thursday, 11am to 2:45pm');
+  assert.deepEqual(series(r), want, r.summary);
+  r = say('German class Mon-Thu 11:00-14:45 from 5.10.26 to 29.10.26');
+  assert.deepEqual(series(r), want, r.summary);
+
+  // A typo'd end date is not July 2027 — and with no end it asks rather than guessing.
+  r = say('german class from 5.10.2026 till 29.19.2026, Monday till Thursday from 11am till 2:45pm');
+  assert.equal(r.name, 'ask_clarification');
+  assert.match(r.args.question, /Until when should German class repeat/);
+  assert.deepEqual(r.args.options.slice(0, 2), ['Every week', 'Just this week']);
+
+  // No end said: asked, then each answer gives a series.
+  r = talk('German class Monday through Thursday 11am to 2:45pm', 'Every week');
+  assert.deepEqual([r.name, r.args.rrule, r.args.startISO], ['place_at', 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH', '2026-10-01T11:00:00.000Z']);
+  r = talk('German class Monday through Thursday 11am to 2:45pm', 'Just this week');
+  assert.deepEqual([r.name, r.args.rrule, r.args.startISO], ['place_at', 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH;UNTIL=20261004T235959', '2026-10-01T11:00:00.000Z']);
+  r = talk('German class Monday through Thursday 11am to 2:45pm', 'Until Oct 29');
+  assert.equal(r.args.rrule, GERMAN);
+
+  // "every" / plural days need no end; a missing length is asked.
+  r = say('Gym every Monday and Wednesday at 7pm for 1 hour');
+  assert.deepEqual(series(r), ['place_at', 'Gym', '2026-10-05T19:00:00.000Z', '2026-10-05T20:00:00.000Z', 'FREQ=WEEKLY;BYDAY=MO,WE']);
+  r = say('Yoga on Tuesdays at 6pm');
+  assert.equal(r.name, 'ask_clarification');
+  assert.match(r.args.question, /How long is each Yoga/);
+  // Today's slot only if it hasn't passed: Thursday 08:00 is gone at 09:00.
+  r = say('standup every Thursday at 8am for 15 min');
+  assert.equal(r.args.startISO, '2026-10-08T08:00:00.000Z');
+
+  // Without a clock time, a weekday range is still a window to search.
+  r = say('Make room for 2h of deep work Monday to Thursday');
+  assert.equal(r.name, 'propose_blocks');
+  assert.equal(r.args.rrule, undefined);
+  // A single named weekday stays one block.
+  r = talk('Put the gym at 18:00 on Friday', '1 hour');
+  assert.equal(r.args.rrule, undefined);
+}
+
 console.log('understand.check: ok');

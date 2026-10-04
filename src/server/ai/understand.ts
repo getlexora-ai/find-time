@@ -45,7 +45,7 @@ import {
   TOOL_PLAN_SETTINGS,
 } from './tools/names.ts';
 import { durationOptions } from './clarify.ts';
-import { ambiguousTime } from './place-at.ts';
+import { ambiguousTime, daysLabel, weeklyDates, weeklyRule } from './place-at.ts';
 
 /** Stamped on every logged turn in place of the old prompt version. Bump on any behaviour change. */
 export const PARSER_VERSION = 'r4';
@@ -109,6 +109,10 @@ export type Draft = {
   atMin?: number;
   /** place_at: the time was a bare "at 6" and still needs am/pm */
   atUnsure?: boolean;
+  /** place_at: repeats weekly on these weekdays (0 = Sunday) inside from–to */
+  days?: number[];
+  /** place_at with days: no end date wanted ("every Monday", "every week") */
+  repeatOpen?: boolean;
   /** place_at, set by the route: the time overlaps something and the user was asked whether to go ahead */
   clashAsked?: boolean;
   /** set by the route: the last turn put blocks on the card */
@@ -150,7 +154,17 @@ const MON =
 const DATE =
   `(?:day after tomorrow|today|tonight|tomorrow|tmrw|(?:(?:this|next|coming)\\s+)?(?:${WDN})` +
   `|(?:the\\s+)?\\d{1,2}(?:st|nd|rd|th)(?:\\s+(?:of\\s+)?(?:${MON}))?` +
-  `|(?:${MON})\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?|\\d{1,2}\\s+(?:${MON})|\\d{4}-\\d{2}-\\d{2})`;
+  `|(?:${MON})\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?|\\d{1,2}\\s+(?:${MON})|\\d{4}-\\d{2}-\\d{2}` +
+  // German day.month.year: "5.10.2026", "29.10.26"
+  `|\\d{1,2}\\.\\d{1,2}\\.\\d{2}(?:\\d{2})?)`;
+
+/** A set of weekdays: "Monday through Thursday", "Mon–Thu", "Mondays and Wednesdays", "every Tuesday". */
+const WD_ONE = `(?:${WDN})s?`;
+const WD_RANGE = `\\b(?:every\\s+|each\\s+|on\\s+|from\\s+)?(${WD_ONE})\\s*(?:through|thru|to|till|until|-|–)\\s*(${WD_ONE})\\b`;
+const WD_LIST = `\\b(?:every\\s+|each\\s+|on\\s+)?${WD_ONE}(?:\\s*(?:,|and|&|\\+)\\s*${WD_ONE})+\\b`;
+const WD_EVERY = `\\b(?:every|each)\\s+(${WDN})\\b|\\b(?:mon|tues|wednes|thurs|fri|satur|sun)days\\b`;
+/** "every"/"each" or a plural day name: the days repeat with no end needed. */
+const REPEATS = /\b(?:every|each)\b|\b(?:mon|tues|wednes|thurs|fri|satur|sun)days\b/i;
 
 const PART =
   '(?:after lunch|before lunch|lunch(?:time)?|mornings?|afternoons?|evenings?|nights?|tonight|end of (?:the )?day|after work|before work)';
@@ -245,6 +259,12 @@ function dayOf(raw: string, today: number): number | null {
   const now = new Date(today);
   m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
   if (m) return validDay(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  // "29.19.2026" is a typo, not July 2027: Date.UTC would roll month 19 over.
+  m = /^(\d{1,2})\.(\d{1,2})\.(\d{2}|\d{4})$/.exec(s);
+  if (m) {
+    const mo = Number(m[2]) - 1;
+    return mo >= 0 && mo <= 11 ? validDay(Number(m[3]) < 100 ? 2000 + Number(m[3]) : Number(m[3]), mo, Number(m[1])) : null;
+  }
 
   m = /^(?:the )?(\d{1,2})(?:st|nd|rd|th)(?: (?:of )?([a-z]+))?$/.exec(s);
   if (m && !m[2]) {
@@ -304,6 +324,10 @@ type Facets = {
   everyDay?: boolean;
   weekendOk?: boolean;
   at?: { startMin: number; endMin?: number; hasMer: boolean };
+  /** weekdays a fixed-time block repeats on, 0 = Sunday ("Monday through Thursday 11–14:45") */
+  days?: number[];
+  /** "every"/plural days: repeats with no end needed */
+  repeat?: boolean;
   exclude: string[];
   shift?: Shift;
   /** the sentence with everything recognised blanked out — what is left is the title */
@@ -325,7 +349,20 @@ class Scan {
 
 const rx = (src: string) => new RegExp(src, 'i');
 
-export function readFacets(text: string, nowMs: number): Facets {
+/** "mon" | "Tuesdays" → 0–6 (Sunday 0). */
+const wdIndex = (w: string) => WD.indexOf(w.toLowerCase().slice(0, 3) as (typeof WD)[number]);
+
+/**
+ * Weekday sets mean a repeat only next to a clock time ("German class Mon–Thu
+ * 11:00–14:45"); without one, "Monday to Thursday" stays a window to search
+ * ("2h of deep work Monday to Thursday"), so the sentence is read again without them.
+ */
+export function readFacets(text: string, nowMs: number, withDays = true): Facets {
+  const f = readFacetsOnce(text, nowMs, withDays);
+  return f.days && !f.at ? readFacetsOnce(text, nowMs, false) : f;
+}
+
+function readFacetsOnce(text: string, nowMs: number, withDays: boolean): Facets {
   const today = dayStart(nowMs);
   const sc = new Scan(text);
   const f: Facets = { exclude: [], rest: '' };
@@ -342,6 +379,30 @@ export function readFacets(text: string, nowMs: number): Facets {
   for (let m; (m = sc.take(rx(`\\bnot\\s+(?:on\\s+)?(${DATE})\\b`))); ) {
     const d = dayOf(m[1], today);
     if (d !== null) f.exclude.push(ymd(d));
+  }
+
+  // Weekday sets, before date ranges read "Monday through Thursday" as one span.
+  if (withDays) {
+    let w: RegExpExecArray | null;
+    if ((w = sc.take(rx(WD_RANGE)))) {
+      const [a, b] = [wdIndex(w[1]), wdIndex(w[2])];
+      if (a >= 0 && b >= 0) {
+        f.days = [];
+        for (let i = a; ; i = (i + 1) % 7) {
+          f.days.push(i);
+          if (i === b) break;
+        }
+      }
+    } else if ((w = sc.take(rx(WD_LIST))) || (w = sc.take(rx(WD_EVERY)))) {
+      const names = w[0].match(new RegExp(WDN, 'gi')) ?? [];
+      f.days = [...new Set(names.map(wdIndex).filter((i) => i >= 0))];
+    }
+    if (f.days) {
+      f.days.sort((x, y) => ((x + 6) % 7) - ((y + 6) % 7)); // Monday first
+      f.repeat = REPEATS.test(w![0]);
+      // "for 4 days (a week)" only restates the days.
+      sc.take(/\bfor\s+(?:\d|one|two|three|four|five|six|seven)\s+days(?:\s+(?:a|per|each)\s+week)?\b/i);
+    }
   }
 
   if (sc.take(/\b(?:including|incl\.?|and|or|plus)\s+(?:the\s+)?weekends?\b/i)) f.weekendOk = true;
@@ -369,13 +430,14 @@ export function readFacets(text: string, nowMs: number): Facets {
     setWhen(d, d + DAY, true);
   }
 
-  if (!f.when && (m = sc.take(rx(`\\b(before|by|until|till|no later than)\\s+(${DATE})\\b`)))) {
-    const d = dayOf(m[2], today);
-    if (d !== null) setWhen(today, m[1].toLowerCase() === 'before' ? d : d + DAY);
-  }
+  // A span before a deadline: in "from 5.10.2026 till 29.10.2026" the "till" belongs to the span.
   if (!f.when && (m = sc.take(rx(`\\b(?:from\\s+)?(${DATE})\\s*(?:to|till|until|through|thru|-|–)\\s*(${DATE})\\b`)))) {
     const [a, b] = [dayOf(m[1], today), dayOf(m[2], today)];
     if (a !== null && b !== null) setWhen(a, b + DAY, a === b);
+  }
+  if (!f.when && (m = sc.take(rx(`\\b(before|by|until|till|no later than)\\s+(${DATE})\\b`)))) {
+    const d = dayOf(m[2], today);
+    if (d !== null) setWhen(today, m[1].toLowerCase() === 'before' ? d : d + DAY);
   }
   if (!f.when && (m = sc.take(rx(`\\bbetween\\s+(${DATE})\\s+and\\s+(${DATE})\\b`)))) {
     const [a, b] = [dayOf(m[1], today), dayOf(m[2], today)];
@@ -1416,6 +1478,15 @@ export function understand(text: string, ctx: UnderstandContext): Understood {
     if (f.at.endMin !== undefined) d.durationMin = f.at.endMin - f.at.startMin;
     changed.push('changed_time_of_day');
   }
+  if (f.days) {
+    d.days = f.days;
+    if (f.repeat) d.repeatOpen = true;
+    changed.push('changed_day');
+  }
+  // Answering "Until when?": an open-ended weekly repeat.
+  if (followUp && d.days?.length && /\b(?:every week|weekly|no end|ongoing|keep (?:it )?going|forever)\b/i.test(raw)) {
+    d.repeatOpen = true;
+  }
 
   if (followUp && f.shift) {
     const last = prev!.lastStartISO ? Date.parse(prev!.lastStartISO) : NaN;
@@ -1446,6 +1517,7 @@ export function understand(text: string, ctx: UnderstandContext): Understood {
       const am = pm - 720;
       return ask(`Did you mean ${hhmm(pm)} or ${hhmm(am)}?`, [hhmm(pm), hhmm(am)], { ...d, atMin: pm }, `${name} · am or pm?`);
     }
+    if (d.days?.length) return repeatAt(d, name, nowMs, today);
     const from = d.from ? fromYmd(d.from) : NaN;
     if (!d.single || !Number.isFinite(from)) {
       const opts: string[] = [];
@@ -1515,6 +1587,54 @@ function placeAtFrom(d: Draft, today: number): Understood | null {
     args: { title: name, category, startISO: iso(start), endISO: iso(start + d.durationMin * MIN), reply: '' },
     draft: d,
     summary: `${name} · ${dayLabel(from, today)} ${hhmm(d.atMin)} · ${d.durationMin} min`,
+  };
+}
+
+/**
+ * A fixed time on a set of weekdays: one repeating block, not N single ones.
+ * The dates are computed here, never by a model. Needs a length, and an end
+ * unless the person said "every"/"Mondays" — "Mon–Thu 11:00" alone could mean
+ * this week or every week, so that is asked.
+ */
+function repeatAt(d: Draft, name: string, nowMs: number, today: number): Understood {
+  const days = d.days!;
+  const at = d.atMin ?? 0;
+  const label = daysLabel(days);
+  if (!d.durationMin || d.durationMin <= 0) {
+    return ask(`How long is each ${name}?`, durationOptions(d.category ?? 'deep-work'), d, `${name} · ${label} ${hhmm(at)} · length missing`);
+  }
+  const lo = d.from ? Math.max(fromYmd(d.from), today) : today;
+  const hiEx = d.to ? fromYmd(d.to) : NaN;
+  if (!Number.isFinite(hiEx) && !d.repeatOpen) {
+    const later = new Date(today + 27 * DAY);
+    const month = MONTHS[later.getUTCMonth()].replace(/^./, (c) => c.toUpperCase());
+    return ask(
+      `Until when should ${name} repeat?`,
+      ['Every week', 'Just this week', `Until ${month} ${later.getUTCDate()}`],
+      d,
+      `${name} · ${label} ${hhmm(at)} · end missing`,
+    );
+  }
+  // Today counts only if the time hasn't passed yet.
+  const startDay = lo === today && at * MIN <= nowMs - today ? today + DAY : lo;
+  const until = Number.isFinite(hiEx) ? ymd(hiEx - DAY) : null;
+  const dates = weeklyDates(ymd(startDay), days, until);
+  if (!dates.length) return answer(`There's no ${label} left in that range. Which dates did you mean?`, d);
+  const first = fromYmd(dates[0]);
+  const start = first + at * MIN;
+  const span = until ? `${dayLabel(first, today)} – ${dayLabel(fromYmd(dates[dates.length - 1]), today)} · ${dates.length} times` : 'every week';
+  return {
+    name: TOOL_PLACE_AT,
+    args: {
+      title: name,
+      category: d.category ?? 'deep-work',
+      startISO: iso(start),
+      endISO: iso(start + d.durationMin * MIN),
+      rrule: weeklyRule(days, until ?? undefined),
+      reply: '',
+    },
+    draft: d,
+    summary: `${name} · ${label} ${hhmm(at)} · ${d.durationMin} min · ${span}`,
   };
 }
 

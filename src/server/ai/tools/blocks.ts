@@ -3,7 +3,19 @@ import { IMPORTED_ORIGIN } from '@/lib/synced-fields';
 import { createEvent, deleteEvent } from '@/server/events-repo';
 import { dayWindowFor, durationOptions, missingInfo, questionFor, whenOptions } from '../clarify';
 import { rankFreeSlots, selectSlots } from '../find-time';
-import { ambiguousTime, checkPlaceAt, clashNote, freeNear, overlapList, overlapping } from '../place-at';
+import {
+  ambiguousTime,
+  checkPlaceAt,
+  clashNote,
+  daysLabel,
+  freeNear,
+  overlapList,
+  overlapping,
+  readWeeklyRule,
+  type Span,
+  weeklyDates,
+  weeklyRule,
+} from '../place-at';
 import { adjustDuration, effectiveBuffer } from '../preferences';
 import { saveProposals } from '../repo';
 import { ZERO_FEATURES } from '../scoring';
@@ -143,6 +155,7 @@ export const placeAt: ToolHandler = async (args, ctx) => {
     return { kind: 'question', question, reply: question.text };
   }
   if (!checked.ok) return { reply: checked.reason };
+  if (args.rrule !== undefined) return placeRepeat(args, ctx, title, category, checked.span);
 
   // Anything you can see at that time — free, flexible or ours, not only what
   // blocks time — is asked about before the block goes on top of it.
@@ -170,6 +183,57 @@ export const placeAt: ToolHandler = async (args, ctx) => {
     return { fail: 'Could not save that plan. Try again.' };
   }
 };
+
+/**
+ * "German class Mon–Thu 11:00–14:45, 5–29 Oct": one repeating proposal. Every
+ * date comes from the rule (place-at.ts), never from a model. Each one inside
+ * the window we can see is checked; clashes go in the reason, so adding it is
+ * a choice made knowing them.
+ */
+async function placeRepeat(
+  args: Record<string, unknown>,
+  ctx: Parameters<ToolHandler>[1],
+  title: string,
+  category: string,
+  first: Span,
+): ReturnType<ToolHandler> {
+  const rule = readWeeklyRule(args.rrule);
+  if (!rule || !rule.days.length) return { reply: 'Which days should it repeat on?' };
+  const dates = weeklyDates(first.startISO.slice(0, 10), rule.days, rule.until);
+  const startHM = first.startISO.slice(10);
+  const endHM = first.endISO.slice(10);
+  const visible = dates.filter((d) => `${d}${startHM}` <= ctx.horizonISO);
+  const clashDays = visible.filter((d) => overlapping(ctx.shown, { startISO: `${d}${startHM}`, endISO: `${d}${endHM}` }).length);
+
+  const label = `${daysLabel(rule.days)} · ${rule.until ? `until ${shortDay(rule.until)}` : 'every week'}`;
+  const count = rule.until ? dates.length : null;
+  const seen = visible.length === dates.length ? '' : ' in the next three weeks';
+  const reason = clashDays.length
+    ? `it's the time you asked for, but it overlaps something on ${clashDays.slice(0, 3).map(shortDay).join(', ')}${clashDays.length > 3 ? ` and ${clashDays.length - 3} more` : ''}`
+    : `it's the time you asked for, and it's free every time${seen}`;
+  ctx.step({
+    tool: STEP.check,
+    label: doneLabel(STEP.check, 'Checked that time'),
+    detail: `${count ? plural(count, 'time') : 'weekly'} · ${clashDays.length ? `${clashDays.length} ${clashDays.length === 1 ? 'clash' : 'clashes'}` : 'all free'}${seen}`,
+  });
+  try {
+    const stored = await saveProposals(ctx.userId, ctx.sessionId, first, [
+      { title, category, ...first, score: 0, features: ZERO_FEATURES, reason, alternatives: [] },
+    ]);
+    const proposals = stored.map((p) => ({ ...toChatProposal(p), repeat: { rrule: weeklyRule(rule.days, rule.until ?? undefined), label, count } }));
+    const many = count ? `${count} times` : 'every week';
+    return { kind: 'plan', proposals, reply: asString(args.reply) || `Here's ${title}, ${daysLabel(rule.days)} ${startHM.slice(1, 6)}, ${many}. Nothing is saved until you add it.` };
+  } catch (err) {
+    console.error('ai/chat placeRepeat', err);
+    return { fail: 'Could not save that plan. Try again.' };
+  }
+}
+
+/** "2026-10-29" → "Thu 29 Oct" */
+function shortDay(ymd: string): string {
+  const d = new Date(`${ymd}T00:00:00Z`);
+  return `${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()]} ${d.getUTCDate()} ${d.toLocaleString('en', { month: 'short', timeZone: 'UTC' })}`;
+}
 
 /** "Vacation next week": fixed, manual away blocks, one per day — all or nothing. */
 export const timeOff: ToolHandler = async (args, ctx) => {
