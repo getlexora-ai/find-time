@@ -624,6 +624,8 @@ html.lenis body { height: auto; }
 .lp .legal-body { display: grid; gap: clamp(40px, 4vw, 56px); max-width: 68ch; }
 .lp .legal-sec { display: grid; gap: 14px; scroll-margin-top: 96px; }
 .lp .legal-sec .body { max-width: none; font-size: 16px; }
+.lp .legal-table { overflow-x: auto; }
+.lp .legal-table .cc-table { font-size: 13.5px; }
 @media (max-width: 900px) {
   .lp .legal-grid { grid-template-columns: 1fr; }
   .lp .legal-toc { position: static; }

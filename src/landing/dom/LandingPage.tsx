@@ -18,6 +18,8 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 
+import { CookieSettingsLink } from '@/consent/CookieSettingsLink';
+
 import './landing.css';
 import { LANDING } from '../copy';
 import type { Board, BoardMark, BoardTile } from './board';
@@ -656,6 +658,7 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
                 {l.label}
               </a>
             ))}
+            <CookieSettingsLink />
           </nav>
         </div>
         <div className="wordmark-wrap" aria-hidden="true">

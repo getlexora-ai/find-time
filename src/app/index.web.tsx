@@ -1,7 +1,6 @@
 import Head from 'expo-router/head';
 
 import LandingPage from '@/landing/dom/LandingPage';
-import { CookieConsent } from '@/landing/components/CookieConsent';
 import { META } from '@/landing/copy';
 import { joinWaitlist, validateEmail } from '@/signup/waitlist';
 
@@ -33,7 +32,6 @@ export default function Landing() {
         <meta name="description" content={META.description} />
       </Head>
       <LandingPage onJoinWaitlist={onJoinWaitlist} />
-      <CookieConsent />
     </>
   );
 }
