@@ -8,6 +8,7 @@
  * then lists every cookie, localStorage / sessionStorage key and third-party
  * host the browser touched, and checks each against src/consent/registry.ts.
  * Fails (exit 1) when something is:
+ *   - any cookie on a public page (PUBLIC: landing + legal — Clerk isn't loaded there),
  *   - not declared in the registry (it must be listed before it ships),
  *   - declared as optional but present before consent (it must be gated),
  *   - a third-party host not in THIRD_PARTY_HOSTS (it sees every visitor's IP).
@@ -20,7 +21,8 @@ import { chromium } from '@playwright/test';
 import { declared, knownHost } from '../src/consent/registry.ts';
 
 const base = (process.argv[2] || 'http://localhost:8081').replace(/\/$/, '');
-const PAGES = ['/', '/privacy', '/terms', '/login', '/signup'];
+const PUBLIC = ['/', '/privacy', '/terms'];
+const PAGES = [...PUBLIC, '/login', '/signup'];
 
 const browser = await chromium.launch(
   process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {},
@@ -36,17 +38,20 @@ page.on('request', (r) => {
 
 const local = new Set();
 const session = new Set();
+const publicCookies = [];
 for (const p of PAGES) {
   await page.goto(base + p, { waitUntil: 'load', timeout: 60_000 });
   await page.waitForTimeout(4000);
   const keys = await page.evaluate(() => ({ l: Object.keys(localStorage), s: Object.keys(sessionStorage) }));
   keys.l.forEach((k) => local.add(k));
   keys.s.forEach((k) => session.add(k));
+  if (PUBLIC.includes(p)) publicCookies.push(...(await ctx.cookies()).map((c) => `${c.name} (${p})`));
 }
 const cookies = await ctx.cookies();
 await browser.close();
 
 const problems = [];
+for (const c of publicCookies) problems.push(`cookie ${c} on a public page — only sign-in pages and the app may set cookies`);
 const rows = [];
 function check(name, type, where) {
   const item = declared(name, type);
