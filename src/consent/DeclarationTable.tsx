@@ -20,13 +20,13 @@ export function DeclarationTable({ category }: { category?: string }) {
       <tbody>
         {rows.map((i) => (
           <tr key={i.type + i.name}>
-            <td>
+            <td data-label={cols.name}>
               <code>{i.name}</code>
             </td>
-            <td>{i.provider}</td>
-            <td>{i.purpose}</td>
-            <td>{i.expiry}</td>
-            <td>{i.type}</td>
+            <td data-label={cols.provider}>{i.provider}</td>
+            <td data-label={cols.purpose}>{i.purpose}</td>
+            <td data-label={cols.expiry}>{i.expiry}</td>
+            <td data-label={cols.type}>{i.type}</td>
           </tr>
         ))}
       </tbody>
