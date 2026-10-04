@@ -74,7 +74,6 @@ export type ApiCalendar = {
 export type ApiAccount = {
   id: string;
   email: string;
-  displayName: string;
   accentColor: string;
   syncStatus: string;
   syncError: string | null;

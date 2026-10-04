@@ -130,14 +130,14 @@ export function decodeIdToken(jwt: string): { sub: string } {
   return { sub: claims.sub };
 }
 
-/** The account's email and name, read live — never stored (accounts-repo.ts). */
-export async function userInfo(accessToken: string): Promise<{ email: string; name: string }> {
+/** The account's email, read live — never stored (accounts-repo.ts). Name comes from onboarding. */
+export async function userInfo(accessToken: string): Promise<{ email: string }> {
   const res = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
     headers: { authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) throw new Error(`userinfo ${res.status}`);
-  const u = (await res.json()) as { email?: string; name?: string; given_name?: string };
-  return { email: u.email ?? '', name: u.name ?? u.given_name ?? '' };
+  const u = (await res.json()) as { email?: string };
+  return { email: u.email ?? '' };
 }
 
 export async function storeTokens(
