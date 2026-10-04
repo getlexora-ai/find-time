@@ -1,16 +1,19 @@
-import { aiConfigured, extractWithTool, type ToolDef } from './llm.ts';
+import { isConfigured, query, queryOne } from '../db.ts';
+import { aiConfigured, chatWithTools, type ToolDef } from './llm.ts';
 import { TOOL_ASK, TOOL_PLACE_AT, TOOL_PROPOSE } from './tools/names.ts';
 import { NOT_UNDERSTOOD, type Understood } from './understand.ts';
 
 /**
  * The model as a fallback reader. When understand.ts can't read a sentence,
  * or reads it into a long leftover title (what it does with slang, typos or
- * another language: "U squeeze a deep work thing in arvo"), the model rewrites it into the plain phrasing the rules do read, and the
- * rules run again on that. The model never picks a time or a slot: every
- * check (ask before placing, am/pm, clashes) still runs on the rewrite.
+ * another language: "U squeeze a deep work thing in arvo"), the model rewrites
+ * it into the plain phrasing the rules do read, and the rules run again on
+ * that. The model never picks a time or a slot: every check (ask before
+ * placing, am/pm, clashes) still runs on the rewrite.
  *
  * Sent to OpenAI: the sentence the user typed and today's date. Nothing from
- * the calendar (privacy policy, "AI features").
+ * the calendar (privacy policy, "AI features"). Capped at AI_BUDGET_USD a
+ * month (default $1, db/025); over it, the rules read alone.
  */
 
 const TOOL: ToolDef = {
@@ -81,12 +84,41 @@ export function weakRead(c: Understood): boolean {
   return title.trim().split(/\s+/).length > 3;
 }
 
-/** The rewrite, or null (no key, not a request, timeout, any failure). */
+// gpt-6-luna, USD per token (input $0.10 / output $0.50 per 1M, Sept 2026).
+// ponytail: one model's price; if OPENAI_MODEL changes, change these too.
+const USD_IN = 0.1 / 1e6;
+const USD_OUT = 0.5 / 1e6;
+const budget = () => Number(process.env.AI_BUDGET_USD ?? 1);
+const month = () => new Date().toISOString().slice(0, 7);
+
+/** Under this month's AI budget (db/025). No database, or it can't answer: no model. */
+async function underBudget(): Promise<boolean> {
+  if (!isConfigured()) return false;
+  const row = await queryOne<{ usd: string }>(`select usd from ai_spend where month = $1`, [month()]);
+  return Number(row?.usd ?? 0) < budget();
+}
+
+async function addSpend(usd: number): Promise<void> {
+  await query(
+    `insert into ai_spend (month, usd, calls) values ($1, $2, 1)
+     on conflict (month) do update set usd = ai_spend.usd + excluded.usd, calls = ai_spend.calls + 1`,
+    [month(), usd],
+  );
+}
+
+/** The rewrite, or null (no key, over budget, not a request, timeout, any failure). */
 export async function rewriteForRules(text: string, nowISO: string): Promise<string | null> {
   if (!aiConfigured()) return null;
   try {
-    const out = await extractWithTool({ system: system(nowISO), user: text, tool: TOOL, signal: AbortSignal.timeout(8000) });
-    const s = typeof out.sentence === 'string' ? out.sentence.trim().slice(0, 300) : '';
+    if (!(await underBudget())) return null;
+    const r = await chatWithTools({
+      system: system(nowISO),
+      history: [{ role: 'user', text }],
+      tools: [TOOL], // the only tool, and a call is required: forced
+      signal: AbortSignal.timeout(8000),
+    });
+    await addSpend((r.promptTokens ?? 0) * USD_IN + (r.outputTokens ?? 0) * USD_OUT);
+    const s = typeof r.args.sentence === 'string' ? r.args.sentence.trim().slice(0, 300) : '';
     return s && s.toLowerCase() !== text.trim().toLowerCase() ? s : null;
   } catch (err) {
     console.warn('[ai] rewrite failed:', err instanceof Error ? err.message.slice(0, 120) : err);
