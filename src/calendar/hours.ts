@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 
 import type { PreferencesResponse } from '@/lib/api-types';
+import { canStore } from '@/consent/store';
 import { apiFetch, hasTokenGetter, onTokenGetter } from '@/lib/api';
 
 import { DEFAULT_WINDOW } from './tokens';
@@ -72,7 +73,8 @@ export function setWindow(start: number, end: number) {
   if (s === state.start && e === state.end) return;
   state = { ...state, start: s, end: e };
   emit();
-  AsyncStorage.setItem(KEY, JSON.stringify({ start: s, end: e })).catch(() => {});
+  // Remembered across visits only with Preferences consent (src/consent).
+  if (canStore('preferences')) AsyncStorage.setItem(KEY, JSON.stringify({ start: s, end: e })).catch(() => {});
 }
 
 /** Working hours for a Monday-first day index, clipped to the window. */

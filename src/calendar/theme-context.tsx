@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
+import { canStore } from '@/consent/store';
+
 import { DEFAULT_THEME, STORAGE_KEY, THEME_BY_KEY, type Theme, type ThemeKey } from './themes';
 
 type Ctx = { theme: Theme; themeKey: ThemeKey; setTheme: (k: ThemeKey) => void };
@@ -45,7 +47,8 @@ export function CalendarThemeProvider({
     (k: ThemeKey) => {
       if (forceTheme) return;
       setKey(k);
-      AsyncStorage.setItem(STORAGE_KEY, k).catch(() => {});
+      // Remembered across visits only with Preferences consent (src/consent).
+      if (canStore('preferences')) AsyncStorage.setItem(STORAGE_KEY, k).catch(() => {});
     },
     [forceTheme],
   );

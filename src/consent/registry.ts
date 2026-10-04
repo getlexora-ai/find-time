@@ -109,7 +109,7 @@ export const DECLARATION: DeclaredItem[] = [
     purpose: 'The calendar background you picked. Saved only when you change it.',
     expiry: 'Persistent',
     type: 'Local storage',
-    category: 'necessary',
+    category: 'preferences',
   },
   {
     name: 'ft-hours',
@@ -117,7 +117,7 @@ export const DECLARATION: DeclaredItem[] = [
     purpose: 'The hours your calendar shows. Saved only when you change it.',
     expiry: 'Persistent',
     type: 'Local storage',
-    category: 'necessary',
+    category: 'preferences',
   },
   {
     name: 'ft-cal-events-v2:*',
