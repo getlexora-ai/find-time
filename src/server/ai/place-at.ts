@@ -12,8 +12,20 @@
  */
 
 import { datesBetween, parseRule } from '../../lib/repeats.ts';
+import type { HardRule } from './preferences.ts';
+import { ruleBlocks } from './scoring.ts';
 
 export type Span = { startISO: string; endISO: string };
+
+/**
+ * The saved rule a named time goes against, if any. Asked about, not refused:
+ * the person may mean this once. Working hours aren't on the list: gym at 19:00
+ * is outside them and breaks nothing.
+ */
+export function brokenRule(rules: HardRule[], span: Span, category: string): HardRule | null {
+  const asked = rules.filter((r) => r.kind === 'protected' || r.kind === 'no-meetings' || r.kind === 'leave-by' || r.kind === 'hard-bound');
+  return asked.find((r) => ruleBlocks(r, Date.parse(span.startISO), Date.parse(span.endISO), category)) ?? null;
+}
 export type PlaceCheck = { ok: true; span: Span } | { ok: false; reason: string };
 
 const MAX_BLOCK_MIN = 12 * 60;

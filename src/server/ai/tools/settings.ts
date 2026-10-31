@@ -1,5 +1,6 @@
 import { STEP } from '@/lib/agent-tools';
-import { addRule, savePlanSettings, saveTravelMin } from '../repo';
+import type { LearnedKind } from '../preferences';
+import { addRule, deleteRule, savePlanSettings, saveStatedPreference, saveTravelMin, setLearnedVerdict } from '../repo';
 import { doneLabel, hoursText, type ToolHandler } from './context';
 import { TOOL_PLAN_SETTINGS, TOOL_TRAVEL, asString, clampInt } from './names';
 
@@ -13,6 +14,16 @@ const WEEKDAY_CODES = new Set(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])
  * A rule the user stated in words is hard: they said it, so the scheduler
  * obeys it rather than trading it off. Only inferred preferences stay soft.
  */
+const idList = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+
+/** The user chose the new one over what contradicted it (contradictions.ts). A replaced preference is never relearned. */
+async function dropReplaced(args: Record<string, unknown>, userId: string): Promise<void> {
+  await Promise.all([
+    ...idList(args.replaceRuleIds).map((id) => deleteRule(userId, id)),
+    ...idList(args.replacePrefIds).map((id) => setLearnedVerdict(userId, id, 'rejected')),
+  ]);
+}
+
 export const recordRule: ToolHandler = async (args, ctx) => {
   const label = asString(args.label, 'New scheduling rule');
   // `constraints.kind` has a CHECK; an off-list value would fail the insert.
@@ -24,12 +35,28 @@ export const recordRule: ToolHandler = async (args, ctx) => {
   if (typeof args.minutes === 'number') rule.minutes = clampInt(args.minutes, 0, 120, 10);
   try {
     const saved = await addRule(ctx.userId, { kind: RULE_KINDS.has(kindArg) ? kindArg : 'work-hours', rule, hard: true, label });
+    await dropReplaced(args, ctx.userId);
     ctx.step({ tool: STEP.saveRule, label: doneLabel(STEP.saveRule, 'Saved a rule'), detail: saved.label });
     return { savedRule: { id: saved.id, label: saved.label }, reply: asString(args.reply) || `Saved — ${label}` };
   } catch (err) {
     // Never claim a rule that did not save; the user would believe the agent is bound by it.
     console.error('ai/chat addRule', err);
     return { reply: "I couldn't save that rule just now — try telling me again in a moment." };
+  }
+};
+
+/** "I write better in the mornings": soft, moves what the scorer prefers, never forbids a time. */
+export const recordPreference: ToolHandler = async (args, ctx) => {
+  const label = asString(args.label, 'New preference');
+  try {
+    await saveStatedPreference(ctx.userId, { kind: args.kind as LearnedKind, scope: asString(args.scope, '*'), value: args.value as Record<string, number> });
+    await dropReplaced(args, ctx.userId);
+    ctx.step({ tool: STEP.saveRule, label: 'Saved a preference', detail: label });
+    return { reply: `Saved. I'll plan around that: ${label}` };
+  } catch (err) {
+    // Never claim a preference that did not save.
+    console.error('ai/chat recordPreference', err);
+    return { reply: "I couldn't save that just now — try telling me again in a moment." };
   }
 };
 

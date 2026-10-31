@@ -241,7 +241,8 @@ export function claimsFrom(fb: Feedback): Claim[] {
  *
  * A claim the user has explicitly rejected is never re-learned — re-deriving a
  * preference someone just deleted is the fastest way to make an adaptive system
- * feel like it isn't listening.
+ * feel like it isn't listening. One the user confirmed or stated stays as they
+ * said it: behaviour doesn't average it away.
  */
 export function mergeClaim(
   existing: LearnedPref | undefined,
@@ -249,7 +250,7 @@ export function mergeClaim(
   signal: number,
   idFactory: () => string,
 ): LearnedPref | null {
-  if (existing?.userVerdict === 'rejected') return null;
+  if (existing?.userVerdict === 'rejected' || existing?.userVerdict === 'confirmed') return null;
 
   const alpha = CLAIM_ALPHA * Math.max(0, Math.min(1, signal));
   const target = claim.direction;
@@ -379,6 +380,17 @@ export function describeClaim(p: LearnedPref): string | null {
     default:
       return null;
   }
+}
+
+/** Rules and learned habits in words: counted on the trace, and what the model is told. */
+export function preferenceCard(profile: AgentProfile): { learned: string[]; rules: string[] } {
+  const learned = profile.learned
+    .filter((p) => p.userVerdict !== 'rejected' && (p.userVerdict === 'confirmed' || p.evidenceCount >= 3))
+    .map((p) => describeClaim(p))
+    .filter((t): t is string => Boolean(t))
+    .slice(0, 10);
+  const rules = profile.rules.map((r) => r.label).filter(Boolean).slice(0, 10);
+  return { learned, rules };
 }
 
 /** Everything the agent believes about this user, ready for the settings screen. */

@@ -14,6 +14,8 @@ export const TOOL_TIME_OFF = 'block_time_off';
 export const TOOL_ASK = 'ask_clarification';
 export const TOOL_ANSWER = 'answer';
 export const TOOL_RULE = 'record_rule';
+/** a soft preference the user stated ("I write better in the mornings"), saved from chat */
+export const TOOL_PREFER = 'record_preference';
 export const TOOL_TRAVEL = 'set_travel';
 export const TOOL_PLAN_SETTINGS = 'plan_settings';
 export const TOOL_ADD_TASK = 'add_task';
@@ -35,6 +37,7 @@ export type ToolName =
   | typeof TOOL_ASK
   | typeof TOOL_ANSWER
   | typeof TOOL_RULE
+  | typeof TOOL_PREFER
   | typeof TOOL_TRAVEL
   | typeof TOOL_PLAN_SETTINGS
   | typeof TOOL_ADD_TASK

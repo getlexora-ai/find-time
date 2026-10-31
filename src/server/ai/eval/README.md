@@ -1,5 +1,18 @@
 # Planner evals
 
+## Plan with AI — real sentences
+
+`sentences.live.mjs`: 98 sentences through the real model against a fixture
+calendar. Does it tell a question from a plan, understand an intention, ask
+rather than guess, save at the right strength? Right tool, right day, and the
+words a reply must contain. Accepts more than one tool where more than one is
+right. Tuned against, so it is a regression set: a score on sentences it has
+never seen means more (2026-10-31: 46/46, reader `gpt-6-luna`).
+
+```sh
+node --env-file=.env.local src/server/ai/eval/sentences.live.mjs [group|words]
+```
+
 ## NATURAL PLAN — calendar scheduling
 
 1,000 meeting-scheduling tasks from Google DeepMind's

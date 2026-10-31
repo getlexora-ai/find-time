@@ -3,7 +3,7 @@ import { addHabit, addTask, listTasks, planWeek, postponeTask, taskDone, updateH
 import { deleteBlocks, placeAt, propose, timeOff } from './blocks';
 import { changePlan } from './changes';
 import { doneLabel, type ToolHandler } from './context';
-import { planSettings, recordRule, setTravel } from './settings';
+import { planSettings, recordPreference, recordRule, setTravel } from './settings';
 import {
   TOOL_ADD_HABIT,
   TOOL_ADD_TASK,
@@ -18,6 +18,7 @@ import {
   TOOL_PLAN_WEEK,
   TOOL_POSTPONE,
   TOOL_PROPOSE,
+  TOOL_PREFER,
   TOOL_RULE,
   TOOL_TASK_DONE,
   TOOL_TASK_UPDATE,
@@ -55,6 +56,7 @@ export const TOOLS: Record<ToolName, ToolHandler> = {
   [TOOL_ASK]: ask,
   [TOOL_ANSWER]: answer,
   [TOOL_RULE]: recordRule,
+  [TOOL_PREFER]: recordPreference,
   [TOOL_TRAVEL]: setTravel,
   [TOOL_PLAN_SETTINGS]: planSettings,
   [TOOL_ADD_TASK]: addTask,

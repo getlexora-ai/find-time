@@ -1342,6 +1342,19 @@ const answer = (reply: string, keep: Draft | null): Understood => ({
   summary: 'a question, not a plan',
 });
 
+/** Past this, a "title" is a sentence the rules couldn't read. "Write the blog post" is four. */
+const LONGEST_TITLE_WORDS = 6;
+
+/**
+ * The rules are the backup when the model is out. A sentence they misread comes
+ * out as a block named after the whole sentence: ask, never repeat that back.
+ */
+export function guardTitle(u: Understood): Understood {
+  const title = typeof u.args.title === 'string' ? u.args.title : (u.draft?.title ?? '');
+  if (title.trim().split(/\s+/).length <= LONGEST_TITLE_WORDS) return u;
+  return { name: TOOL_ASK, args: { question: 'What should I call this, and when would you like it?', options: [] }, draft: null, summary: 'asked first' };
+}
+
 const ask = (question: string, options: string[], draft: Draft, summary: string): Understood => ({
   name: TOOL_ASK,
   args: { question, options },

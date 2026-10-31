@@ -4,9 +4,10 @@ import { listEvents, listOwnRepeats } from '@/server/events-repo';
 import { type ApiHabit, listHabits } from '@/server/habits-repo';
 import { type ApiTask, listOpenTasks } from '@/server/tasks-repo';
 import { DEFAULT_ZONE, wallClockNow } from '@/server/wall-clock';
+import { isImported } from '@/lib/synced-fields';
 import { blocksTime } from './find-time';
 import { expandRepeat } from './place-at';
-import { describeClaim } from './learn';
+import { preferenceCard } from './learn';
 import type { AgentProfile } from './preferences';
 import { appendMessage, createSession, listMessages, loadProfile, sessionExists, userTimeZone } from './repo';
 import { doneLabel, iso, plural, runningLabel, type TurnCtx } from './tools/context';
@@ -15,7 +16,8 @@ import { asString } from './tools/names';
 import { runAgent } from './agent';
 import { chargeTokens, hasCredit } from './credits';
 import { aiConfigured } from './llm';
-import { type Draft, type Understood, understand } from './understand';
+import { scrubTitles } from './scrub';
+import { type Draft, guardTitle, type Understood, understand } from './understand';
 
 /**
  * One turn of Plan with AI, after the route has authenticated the user and
@@ -71,17 +73,6 @@ export function weekShape(busy: { start: string; end: string }[], nowISO: string
 export const MAX_TURNS = 16;
 
 export type Emit = (e: ChatStreamEvent) => void;
-
-/** Rules and learned habits, as counted on the "Applied your rules" step. */
-function preferenceCard(profile: AgentProfile): { learned: string[]; rules: string[] } {
-  const learned = profile.learned
-    .filter((p) => p.userVerdict !== 'rejected' && (p.userVerdict === 'confirmed' || p.evidenceCount >= 3))
-    .map((p) => describeClaim(p))
-    .filter((t): t is string => Boolean(t))
-    .slice(0, 10);
-  const rules = profile.rules.map((r) => r.label).filter(Boolean).slice(0, 10);
-  return { learned, rules };
-}
 
 export async function runTurn(
   userId: string,
@@ -193,6 +184,7 @@ export async function runTurn(
   const lastOptions = ((lastReply?.parsed as { question?: { options?: string[] } } | null)?.question?.options ?? []) as string[];
   const tapped = Boolean(lastParsed.draft) && lastOptions.includes(text);
   let choice: Understood | null = null;
+  const seen: typeof events = [];
   if (!tapped && aiConfigured() && (await hasCredit(userId))) {
     choice = await runAgent({
       text,
@@ -201,13 +193,17 @@ export async function runTurn(
       horizonISO,
       profile,
       events,
+      tasks: openTasks,
+      habits,
+      eventsIn: (fromISO, toISO) => calendarFor(userId, fromISO, toISO),
+      seen,
       readCtx,
       step,
       charge: (p, o) => chargeTokens(userId, p, o),
     });
     if (choice) choice = { ...choice, summary: `${choice.summary} · AI` };
   }
-  choice ??= understand(text, readCtx);
+  choice ??= tapped ? understand(text, readCtx) : guardTitle(understand(text, readCtx));
   const read = text;
   // Echo the person's own words: the step is about this sentence, not a tool.
   const quoted = text.length > 42 ? `${text.slice(0, 40).trimEnd()}…` : text;
@@ -238,12 +234,11 @@ export async function runTurn(
     clashAsked: result.clashAsked ?? false,
   };
 
-  const messageId = await appendMessage(sessionId, {
-    role: 'assistant',
-    content: reply,
-    kind,
-    parsed: { ...extras, ...(draft ? { draft } : {}) },
-  });
+  // The model reads Google titles and may quote them; the person sees the reply, the database doesn't.
+  const googleTitles = [...events, ...seen].filter((e) => isImported(e.origin)).map((e) => e.title);
+  const typed = [...history.filter((m) => m.role === 'user').map((m) => m.content), text].join(' ');
+  const stored = scrubTitles({ content: reply, parsed: { ...extras, ...(draft ? { draft } : {}) } }, googleTitles, typed);
+  const messageId = await appendMessage(sessionId, { role: 'assistant', content: stored.content, kind, parsed: stored.parsed });
 
   const message: ChatMessage = {
     id: messageId,

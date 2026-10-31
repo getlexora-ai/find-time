@@ -17,6 +17,7 @@ import { randomUUID } from 'node:crypto';
 import { query, queryOne, tx } from '@/server/db';
 
 import {
+  MIN_EVIDENCE,
   type AgentProfile,
   type HardRule,
   type LearnedPref,
@@ -238,6 +239,22 @@ export async function upsertLearned(userId: string, prefs: LearnedPref[]): Promi
       );
     }
   });
+}
+
+/** What the user said in words: acts at once, and replaces what was there for that kind and scope. */
+export async function saveStatedPreference(userId: string, p: Pick<LearnedPref, 'kind' | 'scope' | 'value'>): Promise<void> {
+  await query(
+    `insert into learned_preferences
+       (id, user_id, kind, scope, value, strength, evidence_count, user_verdict, last_evidence_at)
+     values ($1,$2,$3,$4,$5::jsonb,1,$6,'confirmed', now())
+     on conflict (user_id, kind, scope) do update
+       set value = excluded.value,
+           strength = 1,
+           evidence_count = excluded.evidence_count,
+           user_verdict = 'confirmed',
+           last_evidence_at = now()`,
+    [id('lrn'), userId, p.kind, p.scope, JSON.stringify(p.value), MIN_EVIDENCE],
+  );
 }
 
 export async function setLearnedVerdict(

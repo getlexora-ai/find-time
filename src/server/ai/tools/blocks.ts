@@ -4,7 +4,7 @@ import { IMPORTED_ORIGIN } from '@/lib/synced-fields';
 import { createEvent, deleteEvent } from '@/server/events-repo';
 import { dayWindowFor, durationOptions, missingInfo, questionFor, whenOptions } from '../clarify';
 import { rankFreeSlots, selectSlots } from '../find-time';
-import { ambiguousTime, checkPlaceAt, clashNote, freeNear, overlapList, overlapping, type Span } from '../place-at';
+import { ambiguousTime, brokenRule, checkPlaceAt, clashNote, freeNear, overlapList, overlapping, type Span } from '../place-at';
 import { adjustDuration, effectiveBuffer } from '../preferences';
 import { saveProposals } from '../repo';
 import { ZERO_FEATURES } from '../scoring';
@@ -144,7 +144,17 @@ export const placeAt: ToolHandler = async (args, ctx) => {
     return { kind: 'question', question, reply: question.text };
   }
   if (!checked.ok) return { reply: checked.reason };
-  if (args.rrule !== undefined) return placeRepeat(args, ctx, title, category, checked.span);
+  const broken = args.overlapOk === true ? null : brokenRule(profile.rules, checked.span, category);
+  if (args.rrule !== undefined) return placeRepeat(args, ctx, title, category, checked.span, broken?.label);
+
+  if (broken) {
+    const question = {
+      text: `${checked.span.startISO.slice(11, 16)} goes against your rule "${broken.label}". Put ${title} there anyway?`,
+      options: ['Yes, put it there', 'No, keep the rule'],
+    };
+    step({ tool: STEP.check, label: doneLabel(STEP.check, 'Checked that time'), detail: 'it goes against a rule · asked first' });
+    return { kind: 'question', question, reply: question.text, clashAsked: true };
+  }
 
   // Anything you can see at that time — free, flexible or ours, not only what
   // blocks time — is asked about before the block goes on top of it.
@@ -186,6 +196,7 @@ async function placeRepeat(
   title: string,
   category: string,
   first: Span,
+  brokenLabel?: string,
 ): ReturnType<ToolHandler> {
   const rrule = typeof args.rrule === 'string' ? args.rrule : '';
   const rule = parseRule(rrule);
@@ -202,6 +213,7 @@ async function placeRepeat(
   const label = describeRule(firstDay, rrule);
   const count = ends ? dates.length : null;
   const seen = visible.length === dates.length ? '' : ' in the next three weeks';
+  const against = brokenLabel ? ` It goes against your rule "${brokenLabel}".` : '';
   const reason = clashDays.length
     ? `it's the time you asked for, but it overlaps something on ${clashDays.slice(0, 3).map(shortDay).join(', ')}${clashDays.length > 3 ? ` and ${clashDays.length - 3} more` : ''}`
     : `it's the time you asked for, and it's free every time${seen}`;
@@ -212,7 +224,7 @@ async function placeRepeat(
   });
   try {
     const stored = await saveProposals(ctx.userId, ctx.sessionId, first, [
-      { title, category, ...first, score: 0, features: ZERO_FEATURES, reason, alternatives: [] },
+      { title, category, ...first, score: 0, features: ZERO_FEATURES, reason: `${reason}${against}`, alternatives: [] },
     ]);
     const proposals = stored.map((p) => ({ ...toChatProposal(p), repeat: { rrule, label, count } }));
     return {

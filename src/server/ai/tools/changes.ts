@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { STEP } from '@/lib/agent-tools';
 import type { ApiEvent, ChangeItem } from '@/lib/api-types';
 import { dayWindowFor } from '../clarify';
-import { checkPlaceAt, freeNear, overlapList, overlapping, type Span } from '../place-at';
+import { brokenRule, checkPlaceAt, freeNear, overlapList, overlapping, type Span } from '../place-at';
 import { categoryOf } from '../understand';
 import { categoryOr, doneLabel, type ToolHandler } from './context';
 import { lockReason, shownTitle } from './look';
@@ -116,6 +116,17 @@ export const changePlan: ToolHandler = async (args, ctx) => {
     const text = `${c.item.title} at ${at} overlaps ${overlapList(c.hits)}.${near.length ? ` ${near.join(' and ')} ${near.length === 1 ? 'is' : 'are'} free nearby.` : ''} Apply as asked, or move it?`;
     ctx.step({ tool: STEP.check, label: doneLabel(STEP.check, 'Checked that time'), detail: `${clashes.length} overlap${clashes.length === 1 ? '' : 's'} · asked first` });
     return { kind: 'question', question: { text, options: ['Yes, apply as asked', ...near.map((t) => `Use ${t} instead`)] }, reply: text };
+  }
+
+  const broken = args.overlap_ok === true ? null : items.flatMap((it) => {
+    if (it.op === 'delete') return [];
+    const rule = brokenRule(ctx.profile.rules, { startISO: it.startISO!, endISO: it.endISO! }, String(it.category ?? 'personal'));
+    return rule ? [{ item: it, rule }] : [];
+  })[0];
+  if (broken) {
+    const text = `${broken.item.title} at ${broken.item.startISO!.slice(11, 16)} goes against your rule "${broken.rule.label}". Apply it anyway?`;
+    ctx.step({ tool: STEP.check, label: doneLabel(STEP.check, 'Checked that time'), detail: 'it goes against a rule · asked first' });
+    return { kind: 'question', question: { text, options: ['Yes, apply as asked', 'No, keep the rule'] }, reply: text };
   }
 
   ctx.step({

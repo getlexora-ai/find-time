@@ -21,7 +21,7 @@ export async function resolve(spec, ctx, next) {
 }`),
 );
 
-const { AGENT_TOOLS, runAgent } = await import('./agent.ts');
+const { AGENT_TOOLS, agentSystem, runAgent } = await import('./agent.ts');
 const { freeTime, findEvents } = await import('./tools/look.ts');
 const { changePlan } = await import('./tools/changes.ts');
 const { DEFAULT_WORK_HOURS } = await import('./preferences.ts');
@@ -99,15 +99,82 @@ for (const t of AGENT_TOOLS) {
   assert.ok(sat.free_min > 0);
 }
 
-// ── engine: find events — Google titles never reach the model ──
+// ── engine: find events — the model reads titles, so it knows what an event is ──
 {
   const all = findEvents(events, '', '2026-10-01', 1);
-  assert.ok(!all.some((e) => e.title === 'Dentist'), 'a Google title is never shown');
-  assert.equal(all.find((e) => e.id === 'e_doc').title, 'a calendar event');
+  assert.equal(all.find((e) => e.id === 'e_doc').title, 'Dentist', 'a Google title is read');
+  assert.ok(!Object.keys(all[0]).some((k) => ['notes', 'location', 'guests', 'attendees'].includes(k)), 'only title and time go out');
   assert.equal(all.find((e) => e.id === 'e_doc').editable, false);
-  // …but code still matches it, so "move my dentist" can be told it is locked.
   assert.equal(findEvents(events, 'dentist', '2026-10-01', 1)[0].id, 'e_doc');
   assert.deepEqual(findEvents(events, 'gym', '2026-10-01', 1).map((e) => [e.id, e.start, e.editable]), [['e_gym', '17:30', true]]);
+}
+
+// ── a course: all-day, already running, months long — found, and a window can open after it ──
+{
+  const threshold = ev('e_thr', 'Threshold', '00:00', '00:00', { allDay: true, origin: 'imported', start: '2026-09-20T00:00:00.000Z', end: '2026-10-09T00:00:00.000Z' });
+  const far = ev('e_far', 'Part-time job starts', '09:00', '17:00', { start: '2026-12-01T09:00:00.000Z', end: '2026-12-01T17:00:00.000Z' });
+  const [found] = findEvents([threshold], 'threshold', '2026-10-01', 120);
+  assert.deepEqual([found.id, found.all_day, found.end_date, found.editable], ['e_thr', true, '2026-10-08', false]);
+
+  const seen = [];
+  const s = script(['find_events', { match: 'part-time', from: null, days: null }], ['answer', { text: 'It starts on 1 Dec.' }]);
+  await runAgent(ctxFor('when does my job start', s, { seen, eventsIn: async () => [far] }));
+  assert.equal(lastOutput(s).events[0].title, 'Part-time job starts', 'a lookup reaches past the turn window');
+  assert.deepEqual(seen.map((e) => e.id), ['e_far'], 'and is kept for the saved-copy scrub');
+
+  const s2 = script(['find_events', { match: 'threshold', from: null, days: null }], ['find_slot', { title: 'German', duration_min: 60, from: null, to: null, count: null, earliest_hour: null, latest_hour: null, after_event_id: 'e_thr', before_event_id: null }]);
+  const r = await runAgent(ctxFor('after threshold find an hour for german', s2, { events: [...events, threshold] }));
+  assert.equal(r.args.earliestISO, '2026-10-09T00:00:00.000Z', 'the window opens when it ends, from the calendar');
+
+  const s3 = script(['find_slot', { title: 'German', duration_min: 60, from: null, to: null, count: null, earliest_hour: null, latest_hour: null, after_event_id: 'nope', before_event_id: null }], ['ask', { question: 'When is it?', options: [] }]);
+  await runAgent(ctxFor('after x find an hour', s3));
+  assert.match(JSON.stringify(s3.sent[1]), /unknown event id/, 'a made-up id goes back to the model');
+
+  const s4 = script(['find_events', { match: 'part-time', from: null, days: null }], ['find_slot', { title: 'German', duration_min: 60, from: null, to: null, count: null, earliest_hour: null, latest_hour: null, after_event_id: 'e_far', before_event_id: null }], ['answer', { text: 'Later.' }]);
+  await runAgent(ctxFor('german after the job starts', s4, { seen: [], eventsIn: async () => [far] }));
+  assert.match(JSON.stringify(s4.sent[2]), /can be planned up to/, 'past the window is said, not silently moved');
+}
+
+// ── remember: saved at once; a contradiction asks first ──
+{
+  const none = { type: 'preference', rule_kind: null, preference_kind: 'preferred-hours', category: 'deep-work', day: null, start_hour: 14, end_hour: 17, minutes: null, label: 'deep work in the afternoon', replace_existing: false };
+  const s = script(['remember', none]);
+  const saved = await runAgent(ctxFor('i write better in the afternoon', s));
+  assert.equal(saved.name, 'record_preference');
+  assert.deepEqual(saved.args.value, { hourStart: 14, hourEnd: 17 });
+
+  const morning = { id: 'p1', kind: 'preferred-hours', scope: 'deep-work', value: { hourStart: 8, hourEnd: 12 }, strength: 1, evidenceCount: 5, userVerdict: 'confirmed' };
+  const withPref = { ...profile, learned: [morning] };
+  const asked = await runAgent(ctxFor('i write better in the afternoon', script(['remember', none]), { profile: withPref }));
+  assert.equal(asked.name, 'ask_clarification', 'a contradiction is asked about');
+  const replaced = await runAgent(ctxFor('Use the new one', script(['remember', { ...none, replace_existing: true }]), { profile: withPref }));
+  assert.deepEqual(replaced.args.replacePrefIds, ['p1'], 'and only a yes replaces it');
+
+  const rule = await runAgent(ctxFor('never before 10', script(['remember', { ...none, type: 'rule', rule_kind: 'protected', preference_kind: null, category: null, start_hour: 0, end_hour: 10, label: 'nothing before 10:00' }])));
+  assert.deepEqual([rule.name, rule.args.kind, rule.args.endHour], ['record_rule', 'protected', 10]);
+
+  const bad = script(['remember', { ...none, start_hour: 17, end_hour: 14 }], ['ask', { question: 'Which hours?', options: [] }]);
+  await runAgent(ctxFor('x', bad));
+  assert.match(JSON.stringify(bad.sent[1]), /start_hour before end_hour/, 'a bad argument goes back to the model');
+}
+
+// ── a day said in the sentence comes from the date reader, whatever the model wrote ──
+{
+  const placed = await runAgent(ctxFor('dentist friday 9:30am for half an hour', script(['place_at', { title: 'Dentist', date: null, start: '09:30', end: null, duration_min: 30, repeat: null }])));
+  assert.equal(placed.args.startISO, '2026-10-02T09:30:00.000Z', 'the model left the day out');
+  const wrong = await runAgent(ctxFor('dentist friday 9:30am for half an hour', script(['place_at', { title: 'Dentist', date: '2026-10-09', start: '09:30', end: null, duration_min: 30, repeat: null }])));
+  assert.equal(wrong.args.startISO, '2026-10-02T09:30:00.000Z', 'the model got the day wrong');
+  const slot = await runAgent(ctxFor('find 2 hours on tuesday', script(['find_slot', { title: 'Focus', duration_min: 120, from: '2026-10-13', to: null, count: null, earliest_hour: null, latest_hour: null, after_event_id: null, before_event_id: null }])));
+  assert.equal(slot.args.earliestISO, '2026-10-06T00:00:00.000Z');
+}
+
+// ── what the model is told about the user, and a named time against a rule ──
+{
+  const known = { ...profile, rules: [{ id: 'r', kind: 'protected', rule: { start: 0, end: 10 }, hard: true, label: 'nothing before 10:00', source: 'chat' }],
+    learned: [{ id: 'p', kind: 'preferred-hours', scope: 'deep-work', value: { hourStart: 8, hourEnd: 12 }, strength: 1, evidenceCount: 5, userVerdict: 'confirmed' }] };
+  const prompt = agentSystem(nowISO, known, [{ title: 'Thesis', durationMin: 360, dueBy: '2026-10-08T00:00:00.000Z' }], [{ title: 'Gym', perWeek: 3, durationMin: 60 }]);
+  for (const part of ['nothing before 10:00', 'You prefer deep work between', 'Thesis (6h left', 'Gym (3× a week']) assert.ok(prompt.includes(part), part);
+  assert.ok(!agentSystem(nowISO, known).includes('undefined'), 'an empty backlog reads as none yet');
 }
 
 // ── "how much free time do i have" — look up, then answer; never a plan ──
