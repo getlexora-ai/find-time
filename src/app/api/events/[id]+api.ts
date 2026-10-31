@@ -3,7 +3,7 @@ import { requireUserId, unauthorized } from '@/server/auth/user';
 import { isConfigured } from '@/server/db';
 import { deleteEvent, getEventMeta, updateEvent, type EventInput } from '@/server/events-repo';
 import { deleteRemote, moveRemote } from '@/server/google/edit';
-import { pushFocus } from '@/server/google/push';
+import { pushEvent } from '@/server/google/push';
 
 /*
  * Imported events are Google's. Sync overwrites their title, times and notes
@@ -41,8 +41,8 @@ export async function PATCH(request: Request, { id }: Record<string, string>): P
     }
     const event = await updateEvent(userId, id, patch);
     if (!event) return Response.json({ error: 'Not found.' }, { status: 404 });
-    await pushFocus(userId, id); // no-op unless write-back is on; never throws
-    return Response.json({ event });
+    const pushed = await pushEvent(userId, id); // no-op unless write-back is on; never throws
+    return Response.json({ event: { ...event, pushFailed: pushed ? undefined : true } });
   } catch (err) {
     console.error('PATCH /api/events/[id]', err);
     return Response.json({ error: 'Failed to update event.' }, { status: 500 });
@@ -66,7 +66,7 @@ export async function DELETE(request: Request, { id }: Record<string, string>): 
     }
     const ok = await deleteEvent(userId, id);
     if (!ok) return Response.json({ error: 'Not found.' }, { status: 404 });
-    await pushFocus(userId, id); // takes a pushed copy down; never throws
+    await pushEvent(userId, id); // takes a pushed copy down; never throws
     return Response.json({ ok: true });
   } catch (err) {
     console.error('DELETE /api/events/[id]', err);

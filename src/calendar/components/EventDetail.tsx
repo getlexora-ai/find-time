@@ -95,6 +95,11 @@ export function EventDetail({
 
       {!!ev.notes && <Txt style={styles.notes}>{ev.notes}</Txt>}
 
+      {ev.pushFailed && (
+        <View style={styles.box}>
+          <Txt style={styles.boxTxt}>Saved here, but not in Google Calendar: Google didn’t take the last change. Move it again to retry, or reconnect Google in Settings.</Txt>
+        </View>
+      )}
       {ev.imported && (
         <View style={styles.box}>
           <Txt style={styles.boxTxt}>

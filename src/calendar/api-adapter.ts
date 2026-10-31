@@ -104,6 +104,7 @@ export function toCalEvent(e: ApiEvent): CalEvent {
   // on events it had no way to change.
   if (isImported(e.origin)) cal.imported = true;
   if (cal.imported && e.googleEditable) cal.googleEditable = true;
+  if (e.pushFailed) cal.pushFailed = true;
   if (e.calendarId) cal.calendarId = e.calendarId;
   if (e.allDay) cal.allDay = true;
   if (en.date !== s.date) cal.endDate = en.date;

@@ -10,7 +10,7 @@
  * - Short. A headline and at most one line under it; let the board show it.
  * - Label every example as one.
  * - Only claim what the product does today (Google Calendar, read first,
- *   opt-in write-back of focus blocks, proposals you accept, undo).
+ *   opt-in write-back of your Find Time blocks, proposals you accept, undo).
  * - No customers, metrics or quotes we don't have.
  */
 
@@ -125,7 +125,7 @@ export const LANDING = {
     hint: 'Try them',
     items: [
       { title: 'Nothing lands without a yes.', body: 'Every plan is a proposal first.', ui: 'proposal' },
-      { title: 'Reads first. Writes only if you ask.', body: 'Your focus blocks, and the events you move yourself.', ui: 'toggle' },
+      { title: 'Reads first. Writes only if you ask.', body: 'Your Find Time blocks, and the events you move yourself.', ui: 'toggle' },
       { title: 'Other people’s meetings never move.', body: 'It plans around them.', ui: 'locked' },
     ],
     uiText: {
@@ -133,7 +133,7 @@ export const LANDING = {
       proposalTime: 'Mon 07:30–10:00',
       accept: 'Accept',
       undo: 'Undo',
-      toggle: 'Add focus blocks to Google Calendar',
+      toggle: 'Show Find Time blocks in Google Calendar',
       on: 'On',
       off: 'Off',
       lockedTitle: 'Client call',
@@ -177,7 +177,7 @@ export const LANDING = {
       },
       {
         q: 'Does it write to my Google Calendar?',
-        a: 'Only when you ask. Turn on focus-block sync and your focus blocks appear as private busy events. Move or delete one of your own events in Find Time and Google updates too — for one-off events without guests. It never edits meetings with other people.',
+        a: 'Only when you ask. Turn on Google Calendar sync and your Find Time blocks appear as private events. Move or delete one of your own events in Find Time and Google updates too — for one-off events without guests. It never edits meetings with other people.',
       },
       {
         q: 'What if everything doesn’t fit?',

@@ -1,16 +1,17 @@
-import { queryOne } from '../db';
+import { query, queryOne } from '../db';
 import { getValidAccessToken } from './oauth';
 
 /**
  * Write-back, opt-in (scheduler_profiles.push_focus, docs/calendar-spec.md §11).
  *
- * Protected focus only: a one-off focus block becomes a private, busy event on
- * your primary Google calendar, so colleagues booking you see the time as taken.
- * Nothing else is written. Repeating focus blocks are not pushed: Google would
- * hand each occurrence back to pull sync as a separate event, doubling them.
+ * Every block you keep in Find Time, once the switch is on, becomes a private,
+ * busy event on your primary Google calendar: you see it there, and colleagues
+ * booking you see the time as taken. A proposal is not on this path: it has no
+ * row until it is accepted. Repeating blocks are not pushed: Google would hand
+ * each occurrence back to pull sync as a separate event, doubling them.
  *
- * Best effort and never throws — a failure is recorded on the row
- * (sync_state 'push_failed', sync_error) and the local change stands.
+ * Never throws. A failure is recorded on the row (sync_state 'push_failed',
+ * sync_error), the local change stands, and the person is told (`pushFailed`).
  */
 
 const API = 'https://www.googleapis.com/calendar/v3';
@@ -20,8 +21,7 @@ type EvRow = {
   title: string;
   start_at: Date;
   end_at: Date;
-  item_type: string;
-  flexibility: string;
+  all_day: boolean;
   origin: string;
   is_draft: boolean;
   rrule: string | null;
@@ -32,46 +32,63 @@ type EvRow = {
 
 type Target = { accountId: string; calendarId: string; providerCalendarId: string; zone: string };
 
-/** Push / update / remove the Google copy of event `id` as its state now requires. */
-export async function pushFocus(userId: string, id: string): Promise<void> {
+/** Should this row have a copy in Google? */
+export function wantsCopy(ev: Pick<EvRow, 'origin' | 'deleted_at' | 'is_draft' | 'rrule'>): boolean {
+  return ev.origin !== 'imported' && ev.deleted_at == null && !ev.is_draft && ev.rrule == null;
+}
+
+/** The Google event for a block. Times are wall-clock, see api-adapter.ts. */
+export function copyBody(ev: Pick<EvRow, 'title' | 'start_at' | 'end_at' | 'all_day'>, zone: string) {
+  const wall = (d: Date) => d.toISOString().slice(0, 19);
+  const day = (d: Date) => d.toISOString().slice(0, 10);
+  return {
+    summary: ev.title,
+    description: 'From Find Time.',
+    start: ev.all_day ? { date: day(ev.start_at) } : { dateTime: wall(ev.start_at), timeZone: zone },
+    end: ev.all_day ? { date: day(ev.end_at) } : { dateTime: wall(ev.end_at), timeZone: zone },
+    transparency: 'opaque',
+    visibility: 'private',
+  };
+}
+
+type Send = (method: 'POST' | 'PATCH', path: string, body: unknown) => Promise<Response>;
+
+/** Update the copy, or make it. Deleted by hand in Google since: make it again. */
+export async function sendCopy(send: Send, path: string, providerEventId: string | null, body: unknown): Promise<Response> {
+  if (providerEventId) {
+    const res = await send('PATCH', `${path}/${encodeURIComponent(providerEventId)}`, body);
+    if (res.status !== 404 && res.status !== 410) return res;
+  }
+  return send('POST', path, body);
+}
+
+/**
+ * Push / update / remove the Google copy of event `id` as its state now
+ * requires. False when Google didn't take it; true also when there is nothing
+ * to do (the switch is off, a repeat, someone else's event).
+ */
+export async function pushEvent(userId: string, id: string): Promise<boolean> {
   try {
     const target = await targetFor(userId);
     const ev = await queryOne<EvRow>(
-      `select title, start_at, end_at, item_type, flexibility, origin, is_draft, rrule,
+      `select title, start_at, end_at, all_day, origin, is_draft, rrule,
               deleted_at, provider_event_id, calendar_id
          from calendar_events where id = $1 and user_id = $2`,
       [id, userId],
     );
-    if (!ev || ev.origin === 'imported') return;
+    if (!ev || ev.origin === 'imported') return true;
 
-    const wanted =
-      target != null &&
-      ev.deleted_at == null &&
-      !ev.is_draft &&
-      ev.rrule == null &&
-      (ev.item_type === 'deepwork' || ev.flexibility === 'protected');
-
-    if (!wanted) {
-      // It was pushed before and no longer qualifies (deleted, unprotected,
-      // turned into a repeat, or write-back switched off): take the copy down.
+    if (target == null || !wantsCopy(ev)) {
+      // It was pushed before and no longer qualifies (deleted, turned into a
+      // repeat, or write-back switched off): take the copy down.
       if (ev.provider_event_id && ev.calendar_id) await removeRemote(userId, id, ev);
-      return;
+      return true;
     }
 
     const token = await getValidAccessToken(target.accountId);
-    const wall = (d: Date) => d.toISOString().slice(0, 19); // wall-clock, see api-adapter.ts
-    const body = {
-      summary: ev.title,
-      description: 'Protected focus time, from Find Time.',
-      start: { dateTime: wall(ev.start_at), timeZone: target.zone },
-      end: { dateTime: wall(ev.end_at), timeZone: target.zone },
-      transparency: 'opaque',
-      visibility: 'private',
-    };
     const path = `/calendars/${encodeURIComponent(target.providerCalendarId)}/events`;
-    const res = ev.provider_event_id
-      ? await gsend(token, 'PATCH', `${path}/${encodeURIComponent(ev.provider_event_id)}`, body)
-      : await gsend(token, 'POST', path, body);
+    const res = await sendCopy((method, url, body) => gsend(token, method, url, body), path, ev.provider_event_id, copyBody(ev, target.zone));
+    if (!res.ok) throw new Error(`Google ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const out = (await res.json()) as { id: string; etag?: string };
     await queryOne(
       `update calendar_events
@@ -80,13 +97,26 @@ export async function pushFocus(userId: string, id: string): Promise<void> {
         where id = $1 and user_id = $2 returning id`,
       [id, userId, out.id, out.etag ?? null, target.calendarId],
     );
+    return true;
   } catch (err) {
     await queryOne(
       `update calendar_events set sync_state = 'push_failed', sync_error = $3
         where id = $1 and user_id = $2 returning id`,
       [id, userId, (err instanceof Error ? err.message : String(err)).slice(0, 500)],
     ).catch(() => {});
+    return false;
   }
+}
+
+/** After the switch changes: every upcoming block of yours gets its copy, or loses it. */
+export async function pushUpcoming(userId: string): Promise<void> {
+  const rows = await query<{ id: string }>(
+    `select id from calendar_events
+      where user_id = $1 and origin <> 'imported' and deleted_at is null and end_at >= now()
+      order by start_at limit 300`,
+    [userId],
+  );
+  for (let i = 0; i < rows.length; i += 5) await Promise.all(rows.slice(i, i + 5).map((r) => pushEvent(userId, r.id)));
 }
 
 async function removeRemote(userId: string, id: string, ev: EvRow) {
@@ -141,11 +171,9 @@ async function targetFor(userId: string): Promise<Target | null> {
 }
 
 async function gsend(token: string, method: 'POST' | 'PATCH', path: string, body: unknown): Promise<Response> {
-  const res = await fetch(`${API}${path}`, {
+  return fetch(`${API}${path}`, {
     method,
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`Google ${method} ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  return res;
 }

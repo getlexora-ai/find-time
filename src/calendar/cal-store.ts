@@ -322,6 +322,9 @@ async function sendPatch(serverId: string, current: CalEvent, patch: Partial<Cal
       body: JSON.stringify(toEventPatch(current, patch)),
     });
     if (!res.ok) throw new Error(`PATCH /api/events ${res.status}`);
+    // Saved here, not in Google: the fresh row carries the note on the tile.
+    const body = (await res.json().catch(() => null)) as { event?: { pushFailed?: boolean } } | null;
+    if (body?.event?.pushFailed || current.pushFailed) void refresh();
     return true;
   } catch {
     void refresh(); // server is truth

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { queryOne } from '../db';
+import { query, queryOne } from '../db';
 import { collectEvents, listCalendars, SyncTokenExpired } from './calendar';
 import { getValidAccessToken } from './oauth';
 import { toRow, type CalendarEventRow } from './map';
@@ -9,7 +9,7 @@ import { toRow, type CalendarEventRow } from './map';
  * Pull-only Google Calendar sync. Called after connect and on the calendar
  * screen's mount (throttled by the /api/calendar/sync route).
  *
- * Pull is on demand. The one thing pushed back is opt-in: focus blocks written
+ * Pull is on demand. The one thing pushed back is opt-in: Find Time blocks written
  * to Google as busy (push.ts). `events.watch` channels and a scheduled worker
  * are still the upgrade path.
  */
@@ -211,13 +211,24 @@ async function upsertEvent(row: CalendarEventRow): Promise<void> {
   if (updated) return;
 
   // Our own block pushed to Google (push.ts) comes back in the feed: it is
-  // already here under its own origin, live or deleted. Never import it.
-  const ours = await queryOne<{ id: string }>(
-    `select id from calendar_events
+  // already here under its own origin, live or deleted. Never import it. If it
+  // was moved in Google, the new time is the latest word: the etag says so.
+  const ours = await queryOne<{ id: string; provider_etag: string | null; deleted_at: Date | null }>(
+    `select id, provider_etag, deleted_at from calendar_events
       where calendar_id = $1 and provider_event_id = $2 and origin <> 'imported' limit 1`,
     [row.calendar_id, row.provider_event_id],
   );
-  if (ours) return;
+  if (ours) {
+    if (!ours.deleted_at && ours.provider_etag !== row.provider_etag) {
+      await query(`update calendar_events set start_at = $2, end_at = $3, provider_etag = $4 where id = $1`, [
+        ours.id,
+        row.start_at,
+        row.end_at,
+        row.provider_etag,
+      ]);
+    }
+    return;
+  }
 
   const cols = ['id', 'user_id', 'calendar_id', 'connected_account_id', 'title', 'item_type', 'category', 'origin', 'flexibility', 'sync_state', ...EVENT_COLS];
   const ph = cols.map((_, i) => `$${i + 1}`).join(', ');

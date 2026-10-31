@@ -43,6 +43,8 @@ export type ApiEvent = {
   habitId?: string | null;
   /** imported, and Google lets you move, resize and delete it from here (synced-fields.ts) */
   googleEditable?: boolean;
+  /** one of ours, and Google didn't take the last change (google/push.ts) */
+  pushFailed?: boolean;
 };
 
 export type EventInput = {

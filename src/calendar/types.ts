@@ -48,6 +48,8 @@ export type CalEvent = {
   imported?: boolean;
   /** Imported, and Google lets you move, resize and delete it from here; the change goes to Google first. */
   googleEditable?: boolean;
+  /** One of ours, and Google didn't take the last change. */
+  pushFailed?: boolean;
   /** Source calendar (calendars.id). Absent = Find Time's own block. */
   calendarId?: string;
   /** Google all-day event — drawn in the all-day lane, never on the hours. */

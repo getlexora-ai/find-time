@@ -34,6 +34,7 @@ type Row = {
   habit_id: string | null;
   provider_event_id: string | null;
   provider_editable: boolean;
+  sync_state: string | null;
 };
 
 // Editable from here = sync's verdict (map.ts editableHere) AND the account granted
@@ -47,7 +48,7 @@ const COLS = `id, title, start_at, end_at, category, item_type, flexibility,
               origin, is_draft, rrule, project_label, description,
               calendar_id, all_day, location, transparency, response_status,
               conference_url, attendee_count, done_at, exdates, recurrence_parent_id, task_id, habit_id,
-              provider_event_id, ${EDITABLE}`;
+              provider_event_id, sync_state, ${EDITABLE}`;
 
 /**
  * Imported rows carry no content (google/map.ts); fill title, notes, location
@@ -98,6 +99,7 @@ function toApi(r: Row): ApiEvent {
     taskId: r.task_id,
     habitId: r.habit_id,
     ...(r.provider_editable ? { googleEditable: true } : {}),
+    ...(r.sync_state === 'push_failed' ? { pushFailed: true } : {}),
   };
 }
 

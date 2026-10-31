@@ -2,6 +2,7 @@ import { STEP } from '@/lib/agent-tools';
 import { datesBetween, describeRule, parseRule } from '@/lib/repeats';
 import { IMPORTED_ORIGIN } from '@/lib/synced-fields';
 import { createEvent, deleteEvent } from '@/server/events-repo';
+import { pushEvent } from '@/server/google/push';
 import { dayWindowFor, durationOptions, missingInfo, questionFor, whenOptions } from '../clarify';
 import { rankFreeSlots, selectSlots } from '../find-time';
 import { ambiguousTime, brokenRule, checkPlaceAt, clashNote, freeNear, overlapList, overlapping, type Span } from '../place-at';
@@ -272,6 +273,7 @@ export const timeOff: ToolHandler = async (args, ctx) => {
     await Promise.all(created.map((id) => deleteEvent(ctx.userId, id).catch(() => false)));
     return { reply: "I couldn't block that time just now, so nothing was added. Try telling me again in a moment." };
   }
+  await Promise.all(created.map((id) => pushEvent(ctx.userId, id)));
   ctx.step({ tool: STEP.block, label: doneLabel(STEP.block, 'Blocked the time'), detail: plural(created.length, 'day') });
   return {
     timeOff: { title, startISO: checked.span.startISO, endISO: checked.span.endISO, days: created.length },
@@ -292,7 +294,12 @@ export const deleteBlocks: ToolHandler = async (args, ctx) => {
   if (args.confirm === true) {
     const ids = Array.isArray(args.ids) ? args.ids.filter((x): x is string => typeof x === 'string') : [];
     let n = 0;
-    for (const id of ids) if (await deleteEvent(userId, id).catch(() => false)) n++;
+    for (const id of ids) {
+      if (await deleteEvent(userId, id).catch(() => false)) {
+        n++;
+        await pushEvent(userId, id); // takes a pushed copy down
+      }
+    }
     step({ tool: TOOL_DELETE, label: 'Deleted blocks', detail: `${n} of ${ids.length}` });
     return {
       deleted: { count: n },

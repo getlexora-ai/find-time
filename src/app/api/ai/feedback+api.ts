@@ -14,6 +14,7 @@ import {
   upsertLearned,
 } from '@/server/ai/repo';
 import { isConfigured } from '@/server/db';
+import { pushEvent } from '@/server/google/push';
 import { linkBlockToHabit, retireReplacedHabitBlock } from '@/server/habits-repo';
 import { linkBlockToTask, retireReplacedBlock } from '@/server/tasks-repo';
 import { listEvents } from '@/server/events-repo';
@@ -94,7 +95,7 @@ export async function POST(request: Request): Promise<Response> {
         title: suggestion.title,
         startISO: (outcome === 'edited' && finalStart) || suggestion.proposed_start.toISOString(),
       });
-      if (suggestion.event_id) await retireReplacedBlock(userId, suggestion.event_id, suggestion.task_id);
+      if (suggestion.event_id && (await retireReplacedBlock(userId, suggestion.event_id, suggestion.task_id))) await pushEvent(userId, suggestion.event_id);
     } catch (err) {
       console.error('ai/feedback task link', err);
     }
@@ -105,7 +106,7 @@ export async function POST(request: Request): Promise<Response> {
         title: suggestion.title,
         startISO: (outcome === 'edited' && finalStart) || suggestion.proposed_start.toISOString(),
       });
-      if (suggestion.event_id) await retireReplacedHabitBlock(userId, suggestion.event_id, suggestion.habit_id);
+      if (suggestion.event_id && (await retireReplacedHabitBlock(userId, suggestion.event_id, suggestion.habit_id))) await pushEvent(userId, suggestion.event_id);
     } catch (err) {
       console.error('ai/feedback habit link', err);
     }

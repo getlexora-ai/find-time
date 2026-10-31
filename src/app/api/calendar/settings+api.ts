@@ -1,3 +1,4 @@
+import { pushUpcoming } from '@/server/google/push';
 import type { CalendarSettings } from '@/lib/api-types';
 import { requireUserId, unauthorized } from '@/server/auth/user';
 import { checkPatch, getSettings, patchSettings } from '@/server/calendar/settings-repo';
@@ -32,12 +33,13 @@ export async function PATCH(request: Request): Promise<Response> {
       const cur = await getSettings(userId);
       if (!cur.canWriteGoogle) {
         return Response.json(
-          { error: 'Reconnect Google Calendar to let Find Time add your focus blocks.' },
+          { error: 'Reconnect Google Calendar to let Find Time add your blocks.' },
           { status: 409 },
         );
       }
     }
     await patchSettings(userId, patch);
+    if (patch.pushFocus !== undefined) await pushUpcoming(userId);
     return Response.json({ settings: await getSettings(userId) });
   } catch (err) {
     console.error('PATCH /api/calendar/settings', err);

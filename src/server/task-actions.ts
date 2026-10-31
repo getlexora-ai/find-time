@@ -1,4 +1,5 @@
 import { deleteEvent } from './events-repo';
+import { pushEvent } from './google/push';
 import { type ApiHabit, futureHabitBlockIds, updateHabit } from './habits-repo';
 import { type ApiTask, futureBlockIds, updateTask } from './tasks-repo';
 
@@ -11,7 +12,12 @@ import { type ApiTask, futureBlockIds, updateTask } from './tasks-repo';
 
 async function clear(userId: string, ids: string[]): Promise<number> {
   let n = 0;
-  for (const id of ids) if (await deleteEvent(userId, id).catch(() => false)) n++;
+  for (const id of ids) {
+    if (await deleteEvent(userId, id).catch(() => false)) {
+      n++;
+      await pushEvent(userId, id); // takes a pushed copy down
+    }
+  }
   return n;
 }
 

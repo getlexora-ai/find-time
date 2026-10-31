@@ -70,7 +70,7 @@ const T = ({ style, children, lines }: { style: object | object[]; children: Rea
 );
 
 /**
- * Focus-block write-back (push.ts): off by default. The server refuses to turn
+ * Write-back of Find Time's own blocks (push.ts): off by default. The server refuses to turn
  * it on without the calendar.events grant (409) and says to reconnect.
  */
 function PushFocusRow() {
@@ -112,14 +112,14 @@ function PushFocusRow() {
         style={styles.calRow}
         accessibilityRole="checkbox"
         aria-checked={on}
-        aria-label="Add my focus blocks to Google Calendar"
+        aria-label="Show my Find Time blocks in Google Calendar"
         onPress={() => void toggle()}>
         <View style={[styles.box, on && styles.boxOn]}>{on && <Icon name="check" size={10} color={K.onLime} />}</View>
-        <T style={styles.calName}>Add my focus blocks to Google Calendar</T>
+        <T style={styles.calName}>Show my Find Time blocks in Google Calendar</T>
       </Press>
       <T style={styles.status}>
-        As private busy events on your primary calendar, so others see the time as taken. This switch writes only Find
-        Time’s own focus blocks.
+        As private events on your primary calendar: you see them there, others see the time as taken. When you move or
+        delete a block here, Google follows. This switch writes only Find Time’s own blocks.
       </T>
       {!!msg && <T style={styles.error}>{msg}</T>}
     </View>
