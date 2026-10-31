@@ -12,8 +12,10 @@ import { appendMessage, createSession, listMessages, loadProfile, sessionExists,
 import { doneLabel, iso, plural, runningLabel, type TurnCtx } from './tools/context';
 import { toolFor } from './tools';
 import { asString } from './tools/names';
-import { rewriteForRules, weakRead } from './rewrite';
-import { type Draft, NOT_UNDERSTOOD, understand } from './understand';
+import { runAgent } from './agent';
+import { chargeTokens, hasCredit } from './credits';
+import { aiConfigured } from './llm';
+import { type Draft, type Understood, understand } from './understand';
 
 /**
  * One turn of Plan with AI, after the route has authenticated the user and
@@ -183,19 +185,30 @@ export async function runTurn(
     taskTitles: openTasks.map((t) => t.title),
     habitTitles: habits.map((h) => h.title),
   };
-  let choice = understand(text, readCtx);
-  // The rules couldn't read it, or read it badly (rewrite.ts weakRead): the model rewrites it into phrasing they do read, and
-  // the rules decide again. A rewrite they still can't read changes nothing.
-  let read = text;
-  if (weakRead(choice, readCtx.previous)) {
-    const lastQuestion = lastReply?.kind === 'question' ? lastReply.content : undefined;
-    const rewritten = await rewriteForRules(text, nowISO, lastQuestion);
-    const again = rewritten ? understand(rewritten, readCtx) : null;
-    if (rewritten && again && again.summary !== NOT_UNDERSTOOD) {
-      choice = { ...again, summary: `${again.summary} · read by AI as "${rewritten}"` };
-      read = rewritten;
-    }
+  // The model reads every typed message and chooses the workflow (agent.ts);
+  // the engine computes. Two exceptions go to the rules: a tap on one of the
+  // options the rules themselves offered (they hold the draft it answers, and
+  // the meaning is already known), and no model — no key, no credit left, or
+  // it failed. Rules are the backup, not the reader.
+  const lastOptions = ((lastReply?.parsed as { question?: { options?: string[] } } | null)?.question?.options ?? []) as string[];
+  const tapped = Boolean(lastParsed.draft) && lastOptions.includes(text);
+  let choice: Understood | null = null;
+  if (!tapped && aiConfigured() && (await hasCredit(userId))) {
+    choice = await runAgent({
+      text,
+      history: history.map((m) => ({ role: m.role, content: m.content })),
+      nowISO,
+      horizonISO,
+      profile,
+      events,
+      readCtx,
+      step,
+      charge: (p, o) => chargeTokens(userId, p, o),
+    });
+    if (choice) choice = { ...choice, summary: `${choice.summary} · AI` };
   }
+  choice ??= understand(text, readCtx);
+  const read = text;
   // Echo the person's own words: the step is about this sentence, not a tool.
   const quoted = text.length > 42 ? `${text.slice(0, 40).trimEnd()}…` : text;
   step({ tool: choice.name, label: `Read “${quoted}”`, detail: choice.summary, ms: Date.now() - readT0 });
@@ -213,6 +226,7 @@ export async function runTurn(
   if (result.savedRule) extras.savedRule = result.savedRule;
   if (result.timeOff) extras.timeOff = result.timeOff;
   if (result.deleted) extras.deleted = result.deleted;
+  if (result.changes) extras.changes = result.changes;
   extras.trace = trace;
 
   // Stored with the reply, never sent: what the next turn continues from.

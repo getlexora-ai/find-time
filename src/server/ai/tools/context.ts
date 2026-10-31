@@ -50,6 +50,7 @@ export type ToolResult = {
   savedRule?: ChatMessage['savedRule'];
   timeOff?: ChatMessage['timeOff'];
   deleted?: ChatMessage['deleted'];
+  changes?: ChatMessage['changes'];
   /** the blocks a delete question listed — kept server-side, deleted only on a yes */
   pendingDeleteIds?: string[];
   /** place_at asked "it overlaps X — put it there anyway?"; the next turn reads the answer */

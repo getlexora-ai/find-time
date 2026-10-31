@@ -24,6 +24,8 @@ export const TOOL_POSTPONE = 'postpone_task';
 export const TOOL_PLAN_WEEK = 'plan_week';
 export const TOOL_ADD_HABIT = 'add_habit';
 export const TOOL_HABIT_UPDATE = 'update_habit';
+/** several linked changes in one card: move, add, delete (tools/changes.ts) */
+export const TOOL_CHANGES = 'change_plan';
 
 export type ToolName =
   | typeof TOOL_PROPOSE
@@ -42,7 +44,8 @@ export type ToolName =
   | typeof TOOL_POSTPONE
   | typeof TOOL_PLAN_WEEK
   | typeof TOOL_ADD_HABIT
-  | typeof TOOL_HABIT_UPDATE;
+  | typeof TOOL_HABIT_UPDATE
+  | typeof TOOL_CHANGES;
 
 /** An int argument clamped into a range, falling back to `dflt`. */
 export function clampInt(n: unknown, lo: number, hi: number, dflt: number): number {

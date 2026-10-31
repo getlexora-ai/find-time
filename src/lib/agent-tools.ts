@@ -24,6 +24,9 @@ export const STEP = {
   saveRule: 'save_rule',
   block: 'block_time',
   ask: 'ask',
+  /** the model's read-only lookups (src/server/ai/tools/look.ts) */
+  freeTime: 'free_time',
+  findEvents: 'find_events',
 } as const;
 
 export const AGENT_TOOLS: ToolUi[] = [
@@ -101,6 +104,7 @@ export const AGENT_TOOLS: ToolUi[] = [
   { key: 'plan_settings', label: 'Planning settings', running: 'Saving how you like to work', icon: 'target', color: 'deep' },
   { key: 'ask_clarification', label: 'Ask you', running: 'Working out what to ask', icon: 'chat', color: 'admin' },
   { key: 'answer', label: 'Answer', running: 'Writing an answer', icon: 'chat', color: 'sync' },
+  { key: 'change_plan', label: 'Changes to apply', running: 'Checking the changes', icon: 'pen', color: 'design' },
 
   /* ── pipeline steps ── */
   { key: STEP.read, label: 'Read your calendar', running: 'Reading your calendar', icon: 'calendar', color: 'deep' },
@@ -111,6 +115,8 @@ export const AGENT_TOOLS: ToolUi[] = [
   { key: STEP.saveRule, label: 'Saved a rule', running: 'Saving the rule', icon: 'stars', color: 'research' },
   { key: STEP.block, label: 'Blocked the time', running: 'Blocking the time', icon: 'calendar-mark', color: 'admin' },
   { key: STEP.ask, label: 'Needs one detail', running: 'Checking what is missing', icon: 'chat', color: 'admin' },
+  { key: STEP.freeTime, label: 'Counted your free time', running: 'Counting your free time', icon: 'clock', color: 'research' },
+  { key: STEP.findEvents, label: 'Looked up your events', running: 'Looking up your events', icon: 'calendar', color: 'deep' },
 ];
 
 export const agentTool = (key: string): ToolUi | undefined => AGENT_TOOLS.find((t) => t.key === key);

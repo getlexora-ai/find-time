@@ -11,6 +11,7 @@
 import { useSyncExternalStore } from 'react';
 
 import type {
+  ChangeSet,
   ChatHistoryResponse,
   ChatMessage,
   ChatProposal,
@@ -26,7 +27,7 @@ import type {
 } from '@/lib/api-types';
 import { apiFetch, currentUserId, onTokenGetter } from '@/lib/api';
 
-import { createAgentBlock, refresh } from './cal-store';
+import { createAgentBlock, deleteEvent, localIdFor, refresh, updateEvent } from './cal-store';
 import { refreshTasks, TASK_TOOLS } from './tasks-store';
 
 /** Per user: two accounts on one browser must not reopen each other's thread. */
@@ -270,6 +271,37 @@ export async function acceptProposal(p: ChatProposal): Promise<AcceptResult> {
     void refreshTasks();
   }
   return { ok: true, notes };
+}
+
+/**
+ * Apply a change card ("move Gym to 18:00, add Learn German at 17:30") in its
+ * order, through the same store calls a drag or an edit uses — so a Google
+ * event Find Time may edit changes in Google too, and a locked one is refused.
+ * `done` counts what the server confirmed.
+ */
+export async function applyChanges(set: ChangeSet): Promise<{ done: number; failed: number }> {
+  let done = 0;
+  let failed = 0;
+  for (const it of set.items) {
+    let ok = false;
+    try {
+      if (it.op === 'add' && it.startISO && it.endISO) {
+        await createAgentBlock({ title: it.title ?? 'Block', category: it.category ?? 'personal', startISO: it.startISO, endISO: it.endISO });
+        ok = true;
+      } else {
+        const id = it.eventId ? localIdFor(it.eventId) : undefined;
+        if (id !== undefined && it.op === 'delete') ok = await deleteEvent(id);
+        if (id !== undefined && it.op === 'move' && it.startISO && it.endISO) {
+          ok = await updateEvent(id, { date: it.startISO.slice(0, 10), start: it.startISO.slice(11, 16), end: it.endISO.slice(11, 16) });
+        }
+      }
+    } catch {
+      ok = false;
+    }
+    if (ok) done++;
+    else failed++;
+  }
+  return { done, failed };
 }
 
 /**

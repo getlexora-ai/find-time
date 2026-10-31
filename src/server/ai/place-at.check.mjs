@@ -4,7 +4,7 @@
  */
 import assert from 'node:assert/strict';
 
-import { ambiguousTime, checkPlaceAt, clashNote, daysLabel, expandRepeat, freeNear, overlapping, readWeeklyRule, weeklyDates, weeklyRule } from './place-at.ts';
+import { ambiguousTime, checkPlaceAt, clashNote, expandRepeat, freeNear, overlapping } from './place-at.ts';
 
 // am/pm: ask only when the hour could be either
 assert.deepEqual(ambiguousTime('gym at 6'), { said: 'at 6', am: '06:00', pm: '18:00' });
@@ -69,30 +69,9 @@ assert.equal(clashNote(busy.slice(1), span), null);
   assert.equal(overlapping(shown, { startISO: '2026-10-02T14:30:00.000Z', endISO: '2026-10-02T15:00:00.000Z' }).length, 0);
 }
 
-// ── weekly repeats ──
+// ── the planner sees every occurrence (rule reading itself: src/lib/repeats.check.mjs) ──
 {
-  const rule = weeklyRule([1, 2, 3, 4], '2026-10-29');
-  assert.equal(rule, 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH;UNTIL=20261029T235959');
-  assert.deepEqual(readWeeklyRule(rule), { days: [1, 2, 3, 4], until: '2026-10-29' });
-  assert.deepEqual(readWeeklyRule('FREQ=WEEKLY;BYDAY=MO,WE'), { days: [1, 3], until: null });
-  // Only what weeklyRule writes; anything else is refused, not half-read.
-  assert.equal(readWeeklyRule('FREQ=DAILY'), null);
-  assert.equal(readWeeklyRule('FREQ=WEEKLY;BYDAY=XX'), null);
-  assert.equal(readWeeklyRule(42), null);
-
-  // German class: Mon–Thu, 5–29 Oct 2026 → 16 dates, first and last right.
-  const dates = weeklyDates('2026-10-05', [1, 2, 3, 4], '2026-10-29');
-  assert.equal(dates.length, 16);
-  assert.deepEqual([dates[0], dates[3], dates[4], dates[15]], ['2026-10-05', '2026-10-08', '2026-10-12', '2026-10-29']);
-  assert.equal(weeklyDates('2026-10-05', [1], null, 10).length, 10, 'open-ended stops at the limit');
-  assert.deepEqual(weeklyDates('2026-10-05', [], null), [], 'no days, no loop');
-
-  assert.equal(daysLabel([1, 2, 3, 4]), 'Mon–Thu');
-  assert.equal(daysLabel([1, 3, 5]), 'Mon, Wed, Fri');
-  assert.equal(daysLabel([1, 2, 3, 4, 5]), 'weekdays');
-  assert.equal(daysLabel([5, 6, 0]), 'Fri–Sun');
-
-  // The planner sees every class, not just the first: a series begun before the window.
+  const rule = 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH;UNTIL=20261029T235959';
   const german = { id: 'g', start: '2026-10-05T11:00:00.000Z', end: '2026-10-05T14:45:00.000Z', rrule: rule };
   let out = expandRepeat(german, '2026-10-13T09:00:00.000Z', '2026-11-03T09:00:00.000Z');
   assert.deepEqual(out.map((o) => o.start.slice(0, 10)), ['2026-10-13', '2026-10-14', '2026-10-15', '2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22', '2026-10-26', '2026-10-27', '2026-10-28', '2026-10-29']);
@@ -100,9 +79,12 @@ assert.equal(clashNote(busy.slice(1), span), null);
   // The calendar's own plain weekly rule repeats on the first day's weekday, with no end.
   out = expandRepeat({ start: '2026-09-07T08:00:00.000Z', end: '2026-09-07T08:15:00.000Z', rrule: 'FREQ=WEEKLY' }, '2026-10-01T00:00:00.000Z', '2026-10-22T00:00:00.000Z');
   assert.deepEqual(out.map((o) => o.start.slice(0, 10)), ['2026-10-05', '2026-10-12', '2026-10-19']);
-  // A rule it doesn't write stays one event, only if it is in the window.
-  assert.equal(expandRepeat({ start: '2026-10-05T08:00:00.000Z', end: '2026-10-05T09:00:00.000Z', rrule: 'FREQ=DAILY' }, '2026-10-01T00:00:00.000Z', '2026-10-22T00:00:00.000Z').length, 1);
-  assert.equal(expandRepeat({ start: '2026-09-05T08:00:00.000Z', end: '2026-09-05T09:00:00.000Z', rrule: 'FREQ=DAILY' }, '2026-10-01T00:00:00.000Z', '2026-10-22T00:00:00.000Z').length, 0);
+  // Every other Friday, begun before the window.
+  out = expandRepeat({ start: '2026-09-04T16:00:00.000Z', end: '2026-09-04T17:00:00.000Z', rrule: 'FREQ=WEEKLY;INTERVAL=2;BYDAY=FR' }, '2026-10-01T00:00:00.000Z', '2026-10-31T00:00:00.000Z');
+  assert.deepEqual(out.map((o) => o.start.slice(0, 10)), ['2026-10-02', '2026-10-16', '2026-10-30']);
+  // A rule the engine can't read stays one event, only if it is in the window.
+  assert.equal(expandRepeat({ start: '2026-10-05T08:00:00.000Z', end: '2026-10-05T09:00:00.000Z', rrule: 'FREQ=YEARLY' }, '2026-10-01T00:00:00.000Z', '2026-10-22T00:00:00.000Z').length, 1);
+  assert.equal(expandRepeat({ start: '2026-09-05T08:00:00.000Z', end: '2026-09-05T09:00:00.000Z', rrule: 'FREQ=YEARLY' }, '2026-10-01T00:00:00.000Z', '2026-10-22T00:00:00.000Z').length, 0);
 }
 
 console.log('place-at: ok');
