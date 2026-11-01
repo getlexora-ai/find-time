@@ -176,7 +176,7 @@ const DECIDE_TOOL: ToolDef = {
   input_schema: obj({
     kind: { type: 'string', enum: ['question', 'request', 'reply'] },
     understood: { type: 'string', description: 'what the person means, in one short plain sentence' },
-    things: { type: 'integer', description: 'how many separate things to do. One thing with its day and length is 1. Usually 1.' },
+    things: { type: 'integer', description: 'how many separate things to do. One thing with its day, length and how often is 1: "run three times a week" is 1. Usually 1.' },
   }),
 };
 
@@ -546,12 +546,12 @@ export async function dispatch(name: string, args: Record<string, unknown>, c: A
 }
 
 /** One model step, tried twice. Calls can queue at OpenAI, so the limit allows for a wait. */
-async function stepWithRetry(call: typeof agentStep, opts: Omit<Parameters<typeof agentStep>[0], 'signal'>) {
+async function stepWithRetry(call: typeof agentStep, opts: Omit<Parameters<typeof agentStep>[0], 'signal'>, onRetry: { force?: string } = {}) {
   try {
     return await call({ ...opts, signal: AbortSignal.timeout(STEP_TIMEOUT_MS) });
   } catch {
     await new Promise((resolve) => setTimeout(resolve, RETRY_WAIT_MS));
-    return call({ ...opts, signal: AbortSignal.timeout(STEP_TIMEOUT_MS) });
+    return call({ ...opts, ...onRetry, signal: AbortSignal.timeout(STEP_TIMEOUT_MS) });
   }
 }
 
@@ -586,19 +586,20 @@ export async function runAgent(c: AgentCtx): Promise<Understood | null> {
     const allowed = AGENT_TOOLS.filter((t) => (route.kind === 'question' ? READ_ONLY.has(t.name) : t.name !== 'revise_last' || c.readCtx.previous));
     const system = `${agentSystem(c.nowISO, c.profile, c.tasks, c.habits)}\n\n${modeLine(route, pending)}`;
     const input = conversation(c);
-    // With the planner's verdict in hand a question has one thing left to do. Left
-    // free to choose, the model now and then writes prose and runs out its limit.
+    // With the planner's verdict in hand a question has one thing left to do.
     let force: string | undefined;
     for (let i = 0; i < MAX_STEPS; i++) {
       // The last steps can only end the turn: the loop never runs out without a reply.
       const tools = i < MAX_STEPS - 2 ? allowed : allowed.filter((t) => LAST_WORD.has(t.name));
-      const s = await stepWithRetry(call, { system, input, tools, force });
+      // Left free, the model now and then writes prose and runs out its limit. On a
+      // question that already looked things up, the retry goes straight to the answer.
+      const s = await stepWithRetry(call, { system, input, tools, force }, route.kind === 'question' && i > 0 ? { force: 'answer' } : {});
       await c.charge(s.promptTokens, s.outputTokens);
       input.push(...s.output);
       const refused = !tools.some((t) => t.name === s.name);
       // Two things asked, one done, the other dropped without a word: not allowed.
-      const severalSlots = s.name === 'find_slot' && Number(s.args?.count ?? 1) >= (route.things ?? 1);
-      const dropsSome = route.kind === 'request' && (route.things ?? 1) > 1 && !ONE_CARD.has(s.name) && !severalSlots;
+      const covers = Math.max(Number(s.args?.count ?? 1), Number(s.args?.per_week ?? 1));
+      const dropsSome = route.kind === 'request' && (route.things ?? 1) > covers && !ONE_CARD.has(s.name);
       const out: Outcome = refused
         ? { kind: 'feedback', output: { error: `${s.name} is not available now` } }
         : dropsSome

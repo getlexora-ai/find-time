@@ -428,6 +428,25 @@ for (const t of AGENT_TOOLS) {
   assert.equal(t.name, 'propose_blocks');
 }
 
+// ── a question whose step fails after a lookup still gets answered; a habit's "3x" is one thing ──
+{
+  let calls = 0;
+  const forced = [];
+  const flaky = async ({ force }) => {
+    calls++;
+    forced.push(force);
+    if (calls === 1) return { name: 'free_time', args: { date: '2026-10-01', days: null }, callId: 'c1', output: [], promptTokens: 0, outputTokens: 0 };
+    if (calls === 2) throw new Error('Model returned no tool call (max_messages).');
+    return { name: 'answer', args: { text: 'Monday is free.' }, callId: 'c3', output: [], promptTokens: 0, outputTokens: 0 };
+  };
+  const r = await runAgent(ctxFor('am i booked monday', { call: flaky }, { route: async () => ({ kind: 'question', understood: 'x' }) }));
+  assert.equal(r.name, 'answer');
+  assert.deepEqual(forced, [undefined, undefined, 'answer']);
+
+  const run = await runAgent(ctxFor('running three times a week, 45 min each', script(['add_habit', { title: 'Running', per_week: 3, min_per_week: null, duration_min: 45, preferred_window: null, category: null }]), { route: async () => ({ kind: 'request', understood: 'x', things: 3 }) }));
+  assert.equal(run.name, 'add_habit');
+}
+
 // ── a time said once stays said ──
 {
   const slot = { title: 'Massage', category: 'personal', duration_min: 60, from: '2026-10-09', to: null, count: null, earliest_hour: null, latest_hour: null, after_event_id: null, before_event_id: null };
