@@ -201,7 +201,7 @@ function modeLine(route: Route, pending: string | null): string {
   if (route.kind === 'question') {
     return [
       `THIS MESSAGE IS A QUESTION. ${understood}`,
-      'Answer it. You can look things up, and nothing can be changed this turn. Give the answer in your first sentence, plainly: for a yes-or-no question, start with yes or no. Then stop: no plan, no proposal, no list of what else you could do. If you cannot know it, say so.',
+      'Answer it. You can look things up, and nothing can be changed this turn. Give the answer in your first sentence, plainly: for a yes-or-no question, start with yes or no, and a mostly busy day is a no. Then stop: no plan, no proposal, no list of what else you could do. If you cannot know it, say so.',
     ].join('\n');
   }
   if (route.kind === 'reply') {
@@ -256,6 +256,8 @@ export function agentSystem(nowISO: string, profile: AgentProfile, tasks: ApiTas
     '- A question about what you know, what you learned, their rules, settings, tasks or habits is answered from the list above, straight away, with no tools. Never say you cannot see it. If the list has nothing on it, say so plainly.',
     '- "What did you learn", even worded as "habits you learned", means the LEARNED line, never their own Habits list: those are things they added.',
     '- Write times the way a person says them: "Tuesday 1 December at 9:00", "8 hours free", never 2026-12-01 or 480 minutes.',
+    '- Plain "Wednesday" is the next Wednesday: use it, do not ask. Only a day that points at no one date ("a Wednesday", "some Friday", "Wednesday next month") needs asking, with the next dates as options. In an answer, name the exact day you checked ("Wednesday 4 November").',
+    '- Whether something fits in a day depends on longest_gap_min, not free_min: 2 hours split across small gaps does not fit.',
     '- A question about free or busy time: free_time or find_events, then answer with those numbers. Whether things fit: check_fit, then answer with what it found. Never count minutes yourself.',
     '- A wish in passing is a request ("I wanted to…", "I should…", "I\'d like to…"): work out what it is, then ask for what is missing. Never treat it as off topic. Look up each thing it names.',
     '- A time relative to something ("after X", "before Y"): find_events for X first. If it is there, use its dates, and find_slot with after_event_id or before_event_id. After an all-day or running event means after it ends; do not ask which. If it is not there, ask when it is. Never guess.',
@@ -387,7 +389,12 @@ export async function dispatch(name: string, args: Record<string, unknown>, c: A
   switch (name) {
     case 'free_time': {
       const date = typeof args.date === 'string' && DATE.test(args.date) ? args.date : today;
-      const days = freeTime(c.events, c.profile, c.nowISO, date, intOr(args.days, 1, 7) ?? 1);
+      const span = intOr(args.days, 1, 7) ?? 1;
+      // Past the turn's loaded window the real calendar is read: a late date must never look empty.
+      const lastISO = `${new Date(Date.parse(`${date}T00:00:00Z`) + span * 86_400_000).toISOString().slice(0, 10)}T00:00:00.000Z`;
+      const wider = lastISO > c.horizonISO ? await c.eventsIn?.(`${date}T00:00:00.000Z`, lastISO).catch(() => null) : c.events;
+      if (!wider) return { kind: 'feedback', output: { error: 'That date could not be read. Tell the user you could not check it, and never say it is free.' } };
+      const days = freeTime(wider, c.profile, c.nowISO, date, span);
       const total = days.reduce((n, d) => n + d.free_min, 0);
       c.step({ tool: STEP.freeTime, label: 'Counted your free time', detail: `${Math.floor(total / 60)}h ${total % 60}m free · ${days.length} day${days.length === 1 ? '' : 's'}` });
       return { kind: 'feedback', output: { days } };

@@ -447,6 +447,23 @@ for (const t of AGENT_TOOLS) {
   assert.equal(run.name, 'add_habit');
 }
 
+// ── "am i free": a date past the loaded window reads the real calendar, and never looks empty by accident ──
+{
+  const far = ev('e_far', 'Work', '09:00', '17:00', { start: '2026-12-01T09:00:00.000Z', end: '2026-12-01T17:00:00.000Z' });
+  const lookup = ['free_time', { date: '2026-12-01', days: null }];
+  const asked = { route: async () => ({ kind: 'question', understood: 'x' }) };
+  const s = script(lookup, ['answer', { text: 'Only an hour.' }]);
+  await runAgent(ctxFor('am i free on december 1', s, { ...asked, eventsIn: async () => [far] }));
+  assert.deepEqual(lastOutput(s).days[0].gaps, ['17:00–18:00'], 'the event past the window is counted');
+  const down = script(lookup, ['answer', { text: 'I could not check that day.' }]);
+  await runAgent(ctxFor('am i free on december 1', down, { ...asked, eventsIn: async () => { throw new Error('db'); } }));
+  assert.match(lastOutput(down).error, /never say it is free/);
+  // Total free time isn't what fits: three hours in small pieces has no 2-hour gap.
+  const bits = [ev('a', 'A', '10:00', '11:00'), ev('b', 'B', '12:00', '13:00'), ev('c', 'C', '14:00', '15:00'), ev('d', 'D', '16:00', '18:00')];
+  const [day] = freeTime(bits, profile, nowISO, '2026-10-01');
+  assert.deepEqual([day.free_min, day.longest_gap_min], [240, 60]);
+}
+
 // ── a time said once stays said ──
 {
   const slot = { title: 'Massage', category: 'personal', duration_min: 60, from: '2026-10-09', to: null, count: null, earliest_hour: null, latest_hour: null, after_event_id: null, before_event_id: null };
