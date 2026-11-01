@@ -65,6 +65,7 @@ export const REQUEST_TOOLS: ToolDef[] = [
       due: nul('string', `${DAY}, the new last day, only if changing`),
       duration_min: nul('integer', 'new total minutes, only if changing'),
       effort: nullEffort,
+      priority: oneOf(['low', 'medium', 'high'], 'only if changing'),
       splittable: { type: ['boolean', 'null'], description: 'true only if they said it can be split' },
     }),
   },
@@ -101,12 +102,13 @@ export const REQUEST_TOOLS: ToolDef[] = [
       match: { type: 'string', description: 'the habit, as listed' },
       per_week: nul('integer', 'new sessions a week, only if changing'),
       duration_min: nul('integer', 'new minutes per session, only if changing'),
+      preferred_window: forWindow,
       stop: { type: 'boolean', description: 'true to stop it for good' },
     }),
   },
   {
     name: 'time_off',
-    description: 'The user is away, off, ill or travelling for whole days. Nothing is planned on those days.',
+    description: 'The user is away, off, ill or travelling for whole days. Nothing is planned on those days. "The 17th" with no month is the next 17th to come; "next week" is all of next week. Do not ask.',
     strict: true,
     input_schema: obj({
       from: nul('string', `${DAY}, first day`),
@@ -132,7 +134,7 @@ export const REQUEST_TOOLS: ToolDef[] = [
   },
   {
     name: 'set_travel',
-    description: 'How many minutes it takes the user to get anywhere: kept free around in-person events. Not a buffer. 0 turns it off.',
+    description: 'Only for time spent getting to places: kept free around in-person events. A gap "between things" or "between meetings" is a buffer: use remember, rule_kind buffer. 0 turns travel off.',
     strict: true,
     input_schema: obj({ minutes: { type: 'integer', description: '0-180' } }),
   },
@@ -219,6 +221,7 @@ export function readRequest(name: string, args: Record<string, unknown>, c: Requ
         ...(due ? { dueByISO: `${nextDay(due)}T00:00:00.000Z` } : {}),
         ...(durationMin ? { durationMin } : {}),
         ...(args.effort ? { effort: args.effort } : {}),
+        ...(args.priority ? { priority: args.priority } : {}),
         ...(args.splittable === true ? { splittable: true } : {}),
       };
       if (!Object.keys(changes).length) return missing(['what should change']);
@@ -265,8 +268,8 @@ export function readRequest(name: string, args: Record<string, unknown>, c: Requ
       if (args.stop === true) return done(TOOL_HABIT_UPDATE, { match: found.item.title, stop: true, reply: '' }, `stop · ${found.item.title}`);
       const perWeek = intIn(args.per_week, 1, 7);
       const durationMin = intIn(args.duration_min, 5, 480);
-      if (!perWeek && !durationMin) return missing(['what should change']);
-      return done(TOOL_HABIT_UPDATE, { match: found.item.title, ...(perWeek ? { perWeek } : {}), ...(durationMin ? { durationMin } : {}), reply: '' }, `${found.item.title} · ${perWeek ? `${perWeek}x a week` : ''} ${durationMin ? hours(durationMin) : ''}`.trim());
+      if (!perWeek && !durationMin && !args.preferred_window) return missing(['what should change']);
+      return done(TOOL_HABIT_UPDATE, { match: found.item.title, ...(perWeek ? { perWeek } : {}), ...(durationMin ? { durationMin } : {}), ...(args.preferred_window ? { preferredWindow: args.preferred_window } : {}), reply: '' }, `${found.item.title} · ${perWeek ? `${perWeek}x a week` : ''} ${durationMin ? hours(durationMin) : ''}`.trim());
     }
     case 'time_off': {
       const from = dateOf(args.from);

@@ -104,6 +104,7 @@ export const updateTask: ToolHandler = async (args, ctx) => {
   if (typeof args.durationMin === 'number') patch.durationMin = clampInt(args.durationMin, 15, 40 * 60, t.durationMin);
   if (args.splittable === true) patch.splittable = true;
   if (args.effort === 'hard' || args.effort === 'light') patch.effort = args.effort;
+  if (args.priority === 'low' || args.priority === 'medium' || args.priority === 'high') patch.priority = args.priority;
   try {
     const u = await saveTask(ctx.userId, t.id, patch);
     if (!u) throw new Error('no change');
@@ -112,6 +113,7 @@ export const updateTask: ToolHandler = async (args, ctx) => {
       patch.durationMin ? hoursText(patch.durationMin) : '',
       patch.splittable ? 'can be split across days' : '',
       patch.effort ? `${patch.effort} — it counts ${patch.effort === 'hard' ? 'more' : 'less'} toward a full day` : '',
+      patch.priority ? `${patch.priority} priority` : '',
     ].filter(Boolean);
     ctx.step({ tool: TOOL_TASK_UPDATE, label: doneLabel(TOOL_TASK_UPDATE, 'Changed a task'), detail: `${u.title} · ${what.join(', ')}` });
     return { reply: `Updated "${u.title}": ${what.join(', ')}. Say "replan" to fit it in again.` };
@@ -187,6 +189,7 @@ export const updateHabit: ToolHandler = async (args, ctx) => {
     patch.minPerWeek = min && min < patch.perWeek ? min : null;
   }
   if (typeof args.durationMin === 'number') patch.durationMin = clampInt(args.durationMin, 5, 480, h.durationMin);
+  if (windowOf(args.preferredWindow)) patch.preferredWindow = windowOf(args.preferredWindow);
   try {
     const u = await saveHabit(ctx.userId, h.id, patch);
     if (!u) throw new Error('no change');

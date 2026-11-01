@@ -13,6 +13,18 @@ never seen means more (2026-10-31: 46/46, reader `gpt-6-luna`).
 node --env-file=.env.local src/server/ai/eval/sentences.live.mjs [group|words]
 ```
 
+## Plan with AI — the loop
+
+`loop.live.mjs`: the first decision (question, request or reply), the exact
+values in the planner's forms, and whole conversations where the model's real
+question goes back in and a scripted person answers. Stops at the handlers, so
+nothing is saved. Send one at a time (`LOOP_POOL=1`): OpenAI served this key's
+calls one after another on 2026-11-01, so running several measures the queue.
+
+```sh
+LOOP_POOL=1 node --env-file=.env.local src/server/ai/eval/loop.live.mjs [route|fields|talk]
+```
+
 ## NATURAL PLAN — calendar scheduling
 
 1,000 meeting-scheduling tasks from Google DeepMind's

@@ -150,7 +150,10 @@ for (const t of AGENT_TOOLS) {
   const withPref = { ...profile, learned: [morning] };
   const asked = await runAgent(ctxFor('i write better in the afternoon', script(['remember', none]), { profile: withPref }));
   assert.equal(asked.name, 'ask_clarification', 'a contradiction is asked about');
-  const replaced = await runAgent(ctxFor('Use the new one', script(['remember', { ...none, replace_existing: true }]), { profile: withPref }));
+  const replaced = await runAgent(ctxFor('Use the new one', script(['remember', { ...none, replace_existing: true }]), { profile: withPref, pendingQuestion: 'Which should I keep?' }));
+  // Nobody asked: the model can't overwrite what they said before by itself.
+  const overwrite = await runAgent(ctxFor('actually afternoons', script(['remember', { ...none, replace_existing: true }]), { profile: withPref }));
+  assert.equal(overwrite.name, 'ask_clarification', 'replacing is the person\'s choice');
   assert.deepEqual(replaced.args.replacePrefIds, ['p1'], 'and only a yes replaces it');
 
   const rule = await runAgent(ctxFor('never before 10', script(['remember', { ...none, type: 'rule', rule_kind: 'protected', preference_kind: null, category: null, start_hour: 0, end_hour: 10, label: 'nothing before 10:00' }])));
@@ -386,6 +389,51 @@ for (const t of AGENT_TOOLS) {
   const noLen = script(['find_slot', slot({ from: '2026-10-06' })], ['ask', { question: 'How long?', options: [] }]);
   await runAgent(ctxFor('find time for the report on tuesday', noLen));
   assert.match(JSON.stringify(noLen.sent[1]), /how long/);
+}
+
+// ── two things asked: never one done and the other dropped; a hung call gets a second try ──
+{
+  const two = () => ({ route: async () => ({ kind: 'request', understood: 'x', things: 2 }) });
+  const s = script(['place_at', { title: 'Gym', date: '2026-10-07', start: '19:00', end: null, duration_min: 60, repeat: null, category: 'personal', overlap_ok: false }], ['ask', { question: 'Gym and dinner: which first?', options: [] }]);
+  assert.equal((await runAgent(ctxFor('gym wednesday 7pm for an hour and dinner thursday 8pm for 2 hours', s, two()))).name, 'ask_clarification');
+  assert.match(JSON.stringify(s.sent[1]), /asked for 2 things/);
+  // Asking first, or a card that covers both, goes through.
+  assert.equal((await runAgent(ctxFor('x y', script(['ask', { question: 'Which?', options: [] }]), two()))).name, 'ask_clarification');
+
+  let calls = 0;
+  const flaky = async ({ tools }) => {
+    calls++;
+    if (calls === 1) throw new Error('OpenAI 503');
+    return { name: 'answer', args: { text: 'Fine.' }, callId: 'c', output: [], promptTokens: 0, outputTokens: 0, tools };
+  };
+  assert.equal((await runAgent(ctxFor('hi', { call: flaky }))).name, 'answer', 'a failed call is tried again');
+  assert.equal(calls, 2);
+}
+
+// ── small things that went wrong live ──
+{
+  // A clear time elsewhere in the sentence doesn't make "at 7" clear.
+  const s = script(['change_plan', { changes: [{ op: 'add', event_id: null, title: 'Gym', date: '2026-10-07', start: '07:00', end: null, duration_min: 60 }], overlap_ok: false, reply: '' }], ['ask', { question: 'Morning or evening?', options: [] }]);
+  await runAgent(ctxFor('gym at 7 on wednesday for an hour and a call thursday at 9am', s));
+  assert.match(JSON.stringify(s.sent[1]), /am or pm/);
+  // An end day with no start day is still a window.
+  const slot = { title: 'Call', category: 'meeting', duration_min: 60, from: null, to: '2026-10-07', count: null, earliest_hour: null, latest_hour: null, after_event_id: null, before_event_id: null };
+  const r = await runAgent(ctxFor('find an hour for a call before thursday', script(['find_slot', slot])));
+  assert.deepEqual([r.name, r.args.latestISO], ['propose_blocks', '2026-10-08T00:00:00.000Z']);
+  // A reply fills in one request, however the router counted it.
+  const reply = { route: async () => ({ kind: 'reply', understood: 'x', things: 2 }), pendingQuestion: 'How long?' };
+  const t = await runAgent(ctxFor('30 minutes tomorrow', script(['find_slot', { ...slot, title: 'Stretching', category: 'personal', duration_min: 30, to: null, from: '2026-10-02' }]), reply));
+  assert.equal(t.name, 'propose_blocks');
+}
+
+// ── moving something to a bare "at 6" is asked about too, never a guess at 06:00 ──
+{
+  const s = script(
+    ['change_plan', { changes: [{ op: 'move', event_id: 'e_gym', title: null, date: null, start: '06:00', end: null, duration_min: null }], overlap_ok: false, reply: '' }],
+    ['ask', { question: 'Morning or evening?', options: ['18:00', '06:00'] }],
+  );
+  assert.equal((await runAgent(ctxFor('gym at 6', s))).name, 'ask_clarification');
+  assert.match(JSON.stringify(s.sent[1]), /am or pm/);
 }
 
 // ── revise_last: a follow-up keeps what was proposed; with nothing to revise it's refused ──

@@ -18,7 +18,7 @@ export type Said = {
   answering: boolean;
 };
 
-const LENGTH = /\b\d+(?:[.,]\d+)?\s*(?:h|hrs?|hours?|m|mins?|minutes?|std|stunden?)\b|\b(?:hours?|hrs?|minutes?|mins?|stunden?)\b|^\s*\d+(?:[.,]\d+)?\s*$/i;
+const LENGTH = /\b\d+(?:[.,]\d+)?\s*(?:h|hrs?|hours?|m|mins?|minutes?|std|stunden?|heures?|horas?|ore|uur|minuten|minuti|minutos)\b|\b(?:hours?|hrs?|minutes?|mins?|stunden?|stündchen|heures?|horas?)\b|^\s*\d+(?:[.,]\d+)?\s*$/i;
 const OFTEN = /\d|\b(?:once|twice|thrice|every|each|daily|weekdays?|one|two|three|four|five|six|seven|täglich|jeden?|mal)\b/i;
 const CLOCK = /\d|\b(?:noon|midday|midnight|mittag|mitternacht)\b/i;
 
