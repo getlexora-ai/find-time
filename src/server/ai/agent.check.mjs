@@ -44,15 +44,17 @@ const events = [
 function script(...calls) {
   const sent = [];
   const offered = [];
+  const forced = [];
   let i = 0;
-  const call = async ({ input, tools }) => {
+  const call = async ({ input, tools, force }) => {
+    forced.push(force);
     sent.push(JSON.parse(JSON.stringify(input)));
     offered.push(tools.map((t) => t.name));
     const c = calls[i++];
     if (!c) throw new Error('script ran out');
     return { name: c[0], args: c[1], callId: `c${i}`, output: [{ type: 'function_call', call_id: `c${i}`, name: c[0], arguments: JSON.stringify(c[1]) }], promptTokens: 100, outputTokens: 20 };
   };
-  return { call, sent, offered };
+  return { call, sent, offered, forced };
 }
 
 const steps = [];
@@ -426,6 +428,18 @@ for (const t of AGENT_TOOLS) {
   assert.equal(t.name, 'propose_blocks');
 }
 
+// ── a time said once stays said ──
+{
+  const slot = { title: 'Massage', category: 'personal', duration_min: 60, from: '2026-10-09', to: null, count: null, earliest_hour: null, latest_hour: null, after_event_id: null, before_event_id: null };
+  const s = script(['find_slot', slot], ['ask', { question: 'Friday at 5pm?', options: [] }]);
+  const history = [{ role: 'user', content: 'massage on wednesday at 5pm' }, { role: 'assistant', content: 'How long?' }, { role: 'user', content: 'actually friday, an hour' }];
+  await runAgent(ctxFor('actually friday, an hour', s, { history, pendingQuestion: 'How long?' }));
+  assert.match(JSON.stringify(s.sent[1]), /named a time/, 'the time from before the question is kept');
+  const h = script(['add_habit', { title: 'Weekly review', per_week: 1, min_per_week: null, duration_min: 30, preferred_window: null, category: null }], ['ask', { question: 'Every Friday at 4pm?', options: [] }]);
+  await runAgent(ctxFor('weekly review every friday at 4pm for 30 min', h));
+  assert.match(JSON.stringify(h.sent[1]), /repeat/, 'a habit would lose the time');
+}
+
 // ── moving something to a bare "at 6" is asked about too, never a guess at 06:00 ──
 {
   const s = script(
@@ -448,6 +462,7 @@ for (const t of AGENT_TOOLS) {
   const tasks = [{ id: 't1', title: 'Thesis', durationMin: 6000, dueBy: '2026-10-02T00:00:00.000Z', priority: 'medium', effort: 'normal', splittable: true, minChunkMin: 30, category: 'deep-work', preferredWindow: null, preferBy: null, notBefore: null, status: 'backlog' }];
   const s = script(['check_fit', {}], ['answer', { text: 'No: the thesis does not fit.' }]);
   await runAgent(ctxFor('will i get the thesis done in time', s, { tasks, habits: [], profile: defaultProfile(), route: async () => ({ kind: 'question', understood: 'x' }) }));
+  assert.deepEqual(s.forced, [undefined, 'answer'], 'once the planner has spoken, the answer is written');
   const seen = lastOutput(s);
   assert.equal(seen.fits, false);
   assert.equal(seen.does_not_fit[0].title, 'Thesis');

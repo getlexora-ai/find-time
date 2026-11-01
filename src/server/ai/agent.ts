@@ -312,6 +312,13 @@ function saidDay(c: AgentCtx): string | null {
   return when?.single ? new Date(when.from).toISOString().slice(0, 10) : null;
 }
 
+/** A clock time in this message, or in the one this message answers: "gym at 5pm" → "how long?" → "friday, an hour". */
+function namedTime(c: AgentCtx): boolean {
+  const typed = c.history.filter((m) => m.role === 'user').map((m) => m.content);
+  const texts = c.pendingQuestion ? [...typed.slice(-2), c.text] : [c.text];
+  return texts.some((t) => readFacets(t, Date.parse(c.nowISO)).at);
+}
+
 /** What the person actually typed, for the checks in grounded.ts. */
 function saidBy(c: AgentCtx): Said {
   const typed = c.history.filter((m) => m.role === 'user').map((m) => m.content);
@@ -440,7 +447,7 @@ export async function dispatch(name: string, args: Record<string, unknown>, c: A
     }
     case 'find_slot': {
       // The person's own time is kept: a sentence with a clock time is not the scorer's to re-pick.
-      if (readFacets(c.text, Date.parse(c.nowISO)).at) {
+      if (namedTime(c)) {
         return { kind: 'feedback', output: { error: 'The user named a time. Keep it: use place_at (or change_plan) with that time.' } };
       }
       const said = saidDay(c);
@@ -528,6 +535,10 @@ export async function dispatch(name: string, args: Record<string, unknown>, c: A
       return { kind: 'done', choice: u };
     }
     default: {
+      // "every Friday at 4pm" is a repeating event, and a habit would lose the time.
+      if (name === 'add_habit' && namedTime(c)) {
+        return { kind: 'feedback', output: { error: 'The user named a time. Use place_at with a repeat.' } };
+      }
       const request = readRequest(name, args, { said: saidBy(c), saidDay: saidDay(c), tasks: c.tasks ?? [], habits: c.habits ?? [], nowISO: c.nowISO });
       return request ? asOutcome(request) : { kind: 'feedback', output: { error: `unknown tool ${name}` } };
     }
@@ -575,10 +586,13 @@ export async function runAgent(c: AgentCtx): Promise<Understood | null> {
     const allowed = AGENT_TOOLS.filter((t) => (route.kind === 'question' ? READ_ONLY.has(t.name) : t.name !== 'revise_last' || c.readCtx.previous));
     const system = `${agentSystem(c.nowISO, c.profile, c.tasks, c.habits)}\n\n${modeLine(route, pending)}`;
     const input = conversation(c);
+    // With the planner's verdict in hand a question has one thing left to do. Left
+    // free to choose, the model now and then writes prose and runs out its limit.
+    let force: string | undefined;
     for (let i = 0; i < MAX_STEPS; i++) {
       // The last steps can only end the turn: the loop never runs out without a reply.
       const tools = i < MAX_STEPS - 2 ? allowed : allowed.filter((t) => LAST_WORD.has(t.name));
-      const s = await stepWithRetry(call, { system, input, tools });
+      const s = await stepWithRetry(call, { system, input, tools, force });
       await c.charge(s.promptTokens, s.outputTokens);
       input.push(...s.output);
       const refused = !tools.some((t) => t.name === s.name);
@@ -594,6 +608,7 @@ export async function runAgent(c: AgentCtx): Promise<Understood | null> {
           : { kind: 'feedback', output: { error: 'arguments were not valid JSON' } };
       if (out.kind === 'done') return { ...out.choice, summary: `${route.kind} · ${out.choice.summary}` };
       input.push({ type: 'function_call_output', call_id: s.callId, output: JSON.stringify(out.output) });
+      if (route.kind === 'question' && s.name === 'check_fit') force = 'answer';
     }
     console.warn('[ai] agent: no action in', MAX_STEPS, 'steps');
     return null;
