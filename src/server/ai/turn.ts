@@ -12,8 +12,8 @@ import type { AgentProfile } from './preferences';
 import { appendMessage, createSession, listMessages, loadProfile, sessionExists, userTimeZone } from './repo';
 import { doneLabel, iso, plural, runningLabel, type TurnCtx } from './tools/context';
 import { toolFor } from './tools';
-import { asString } from './tools/names';
-import { runAgent } from './agent';
+import { asString, TOOL_ANSWER } from './tools/names';
+import { askAboutFacts, runAgent } from './agent';
 import { chargeTokens, hasCredit } from './credits';
 import { aiConfigured } from './llm';
 import { scrubTitles } from './scrub';
@@ -23,14 +23,16 @@ import { type Draft, guardTitle, type Understood, understand } from './understan
  * One turn of Plan with AI, after the route has authenticated the user and
  * parsed the body (src/app/api/ai/chat+api.ts):
  *
- *   load the calendar, tasks and habits → understand.ts reads the sentence into
- *   one tool + arguments → that tool's handler (tools/index.ts) carries it out →
- *   the reply is stored with the draft the next turn continues from.
+ *   load the calendar, tasks and habits → the model decides whether this is a
+ *   question, a request or a reply, and reads it (agent.ts) → that tool's handler
+ *   (tools/index.ts) carries it out → if the planner found something it can't
+ *   decide alone, the model asks → the reply is stored.
  *
- * The rules read first; only a sentence they can't read goes to the model,
- * which rewrites it for the rules to read again (rewrite.ts). What has been understood so far rides on each assistant
- * message as `parsed.draft`, so "make it 90 minutes" or the answer to its own
- * question continues the plan.
+ * The rules (understand.ts) read a message only when there is no model to read
+ * it: no key, or no credit left. A model that fails says so, and nothing changes:
+ * a broken reading passed off as an answer is worse than asking again. What has
+ * been understood so far rides on each assistant message as `parsed.draft`, so
+ * "make it 90 minutes" continues the plan.
  */
 
 const HORIZON_DAYS = 21;
@@ -183,11 +185,16 @@ export async function runTurn(
   // it failed. Rules are the backup, not the reader.
   const lastOptions = ((lastReply?.parsed as { question?: { options?: string[] } } | null)?.question?.options ?? []) as string[];
   const tapped = Boolean(lastParsed.draft) && lastOptions.includes(text);
+  // What the app just asked, if that was its last word: this message may be the answer.
+  const lastQuestion = lastReply?.kind === 'question' ? lastReply.content : ((lastReply?.parsed as { question?: { text?: string } } | null)?.question?.text ?? null);
   let choice: Understood | null = null;
   const seen: typeof events = [];
-  if (!tapped && aiConfigured() && (await hasCredit(userId))) {
+  const modelReads = !tapped && aiConfigured() && (await hasCredit(userId));
+  const charge = (p: number, o: number) => chargeTokens(userId, p, o);
+  if (modelReads) {
     choice = await runAgent({
       text,
+      pendingQuestion: lastQuestion,
       history: history.map((m) => ({ role: m.role, content: m.content })),
       nowISO,
       horizonISO,
@@ -199,9 +206,11 @@ export async function runTurn(
       seen,
       readCtx,
       step,
-      charge: (p, o) => chargeTokens(userId, p, o),
+      charge,
     });
-    if (choice) choice = { ...choice, summary: `${choice.summary} · AI` };
+    choice = choice
+      ? { ...choice, summary: `${choice.summary} · AI` }
+      : { name: TOOL_ANSWER, args: { reply: "I couldn't read that just now, so nothing has changed. Please send it again." }, draft: null, summary: 'the model failed · nothing changed' };
   }
   choice ??= tapped ? understand(text, readCtx) : guardTitle(understand(text, readCtx));
   const read = text;
@@ -214,11 +223,16 @@ export async function runTurn(
   const result = handler ? await handler(choice.args, ctx) : {};
   if ('fail' in result) return Response.json({ sessionId, error: result.fail }, { status: 500 });
 
-  const reply = result.reply ?? asString(choice.args.reply);
-  const kind = result.kind ?? 'text';
+  // The planner's facts become a question the person can answer, in the model's words.
+  const asked = modelReads && !choice.draft && result.facts?.length ? await askAboutFacts({ text, nowISO, charge }, result.facts) : null;
+  if (asked) step({ tool: STEP.ask, label: doneLabel(STEP.ask, 'Ask you'), detail: 'the planner needs a decision' });
+
+  const reply = asked?.text ?? result.reply ?? asString(choice.args.reply);
+  const kind = result.kind ?? (asked ? 'question' : 'text');
   const extras: Partial<ChatMessage> = {};
   if (result.proposals) extras.proposals = result.proposals;
   if (result.question) extras.question = result.question;
+  if (asked) extras.question = asked;
   if (result.savedRule) extras.savedRule = result.savedRule;
   if (result.timeOff) extras.timeOff = result.timeOff;
   if (result.deleted) extras.deleted = result.deleted;

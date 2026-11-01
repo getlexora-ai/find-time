@@ -3,11 +3,11 @@ import { listEvents } from '@/server/events-repo';
 import { createHabit, findHabits, updateHabit as saveHabit } from '@/server/habits-repo';
 import { finishTask, postponeTask as savePostpone, stopHabit } from '@/server/task-actions';
 import { type ApiTask, createTask, findOpenTasks, updateTask as saveTask } from '@/server/tasks-repo';
-import { blocksTime } from '../find-time';
-import { MAX_HORIZON_DAYS, type PlanInput, dueLabel, habitWeeks, planWeek as buildPlan, startLabel, travelPadding, verifyPlan } from '../plan-week';
+import { planInputFor } from '../plan-input';
+import { MAX_HORIZON_DAYS, dueLabel, habitWeeks, planWeek as buildPlan, startLabel, verifyPlan } from '../plan-week';
 import { saveProposals } from '../repo';
 import { ZERO_FEATURES } from '../scoring';
-import { categoryOr, doneLabel, habitText, hoursText, iso, plural, toChatProposal, toPlanTask, type ToolHandler, type TurnCtx } from './context';
+import { categoryOr, doneLabel, habitText, hoursText, iso, plural, toChatProposal, type ToolHandler, type TurnCtx } from './context';
 import {
   TOOL_ADD_HABIT,
   TOOL_ADD_TASK,
@@ -220,32 +220,7 @@ export const planWeek: ToolHandler = async (_args, ctx) => {
     return { fail: 'Could not read your calendar.' };
   }
 
-  const taskIds = new Set(openTasks.map((t) => t.id));
-  const habitIds = new Set(habits.map((h) => h.id));
-  type Ev = (typeof planEvents)[number];
-  const ownBlock = (e: Ev) => Boolean((e.taskId && taskIds.has(e.taskId)) || (e.habitId && habitIds.has(e.habitId)));
-  const isAway = (e: Ev) => e.itemType === 'away' || (e.allDay === true && blocksTime(e));
-  // The plan doesn't move other blocks, so flexible ones count as busy here;
-  // free, declined and all-day ones still don't (blocksTime).
-  const others = planEvents.filter((e) => !ownBlock(e) && !isAway(e) && blocksTime({ ...e, flexibility: undefined }));
-  const input: PlanInput = {
-    nowISO,
-    profile,
-    tasks: openTasks.map(toPlanTask),
-    habits: habits.map((h) => ({ ...h, minPerWeek: h.minPerWeek, category: categoryOr(h.category, 'personal') })),
-    busy: others.map((e) => ({ start: e.start, end: e.end })),
-    // Travel either side of in-person events (off unless the user set it).
-    travel: travelPadding(others, profile.travelMin),
-    away: planEvents.filter((e) => !ownBlock(e) && isAway(e)).map((e) => ({ start: e.start, end: e.end })),
-    existing: planEvents.filter(ownBlock).map((e) => ({
-      eventId: e.id,
-      ...(e.taskId && taskIds.has(e.taskId) ? { taskId: e.taskId } : { habitId: e.habitId! }),
-      startISO: e.start,
-      endISO: e.end,
-      // Fixed by the user, or moved there by hand (events-repo pins on move).
-      pinned: e.flexibility !== 'flexible',
-    })),
-  };
+  const { input, others } = planInputFor(planEvents, openTasks, habits, profile, nowISO);
   const plan = buildPlan(input);
   // Bad rows are left out or repaired by the planner, never guessed at; say so in the logs.
   if (plan.issues.length) console.warn('ai/chat planWeek input', plan.issues);
@@ -322,5 +297,10 @@ export const planWeek: ToolHandler = async (_args, ctx) => {
   // Low priority, no deadline: said once, as a group — not as failures.
   if (leftOut.length) lines.push(`Left out for now (low priority, no deadline): ${leftOut.map((u) => u.title).join(', ')}.`);
   for (const n of plan.notes.slice(0, 3)) lines.push(n);
-  return { ...(proposals ? { kind: 'plan' as const, proposals } : {}), reply: lines.join('\n') };
+  return {
+    ...(proposals ? { kind: 'plan' as const, proposals } : {}),
+    reply: lines.join('\n'),
+    // The planner states what doesn't fit; the AI turns it into a choice (turn.ts).
+    ...(needed.length ? { facts: needed.map((u) => `${u.title} doesn't fit: ${u.reason}.${u.options.length ? ` What would help: ${u.options.join('; ')}.` : ''}`) } : {}),
+  };
 };

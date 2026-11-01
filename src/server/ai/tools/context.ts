@@ -55,6 +55,8 @@ export type ToolResult = {
   pendingDeleteIds?: string[];
   /** place_at asked "it overlaps X — put it there anyway?"; the next turn reads the answer */
   clashAsked?: boolean;
+  /** what the planner found and can't decide alone: the AI words the choice for the person (turn.ts) */
+  facts?: string[];
 };
 
 /** A turn that can't go on: the user sees `fail` as an error (HTTP 500). */
