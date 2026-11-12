@@ -49,7 +49,7 @@ export function previewEvents(): CalEvent[] {
     E(2, '04:30', '05:30', 'Airport run', 'event', 'admin', family),
     E(2, '09:00', '12:00', 'Research synthesis', 'focus', 'research'),
     E(2, '14:00', '15:00', 'Design review', 'event', 'design', work),
-    E(2, '15:15', '16:45', 'Focus block', 'ai', 'deep'),
+    E(2, '15:15', '16:45', 'Draft pitch deck', 'ai', 'deep'),
 
     // Thu — a clash and a four-way overlap
     E(3, '09:00', '12:00', 'Write launch plan', 'focus', 'deep'),

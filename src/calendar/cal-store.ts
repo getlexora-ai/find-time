@@ -498,7 +498,8 @@ export async function createMeetLink(id: number): Promise<MeetOutcome> {
 export function acceptEvent(id: number): Promise<boolean> {
   const cur = events.find((e) => e.id === id);
   if (!cur || cur.kind !== 'ai') return Promise.resolve(false);
-  return updateEvent(id, { kind: 'event' });
+  // A deep-work proposal ("Focus block") is focus time once you take it.
+  return updateEvent(id, { kind: cur.cat === 'deep' ? 'focus' : 'event' });
 }
 
 /** Create one agent-proposed block at an explicit time. Used by the chat panel,

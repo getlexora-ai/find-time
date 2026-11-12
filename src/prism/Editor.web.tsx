@@ -117,7 +117,8 @@ function Strip() {
 /** The fields an editor works on, for a new block and an existing one alike. */
 type Draft = {
   title: string;
-  kind: 'event' | 'focus' | 'task';
+  /** the four kinds the grid and its legend show; a routine is the one that repeats */
+  kind: EditKind;
   date: string;
   s: number;
   t: number;
@@ -130,9 +131,34 @@ type Draft = {
   notes: string;
 };
 
+type EditKind = 'event' | 'focus' | 'task' | 'routine';
+const KINDS: EditKind[] = ['event', 'focus', 'task', 'routine'];
+/** One line under the kind tabs: what this kind means, in the user's words. */
+const KIND_HINT: Record<EditKind, string> = {
+  event: 'Something at a set time: a meeting, a call, an appointment.',
+  focus: 'Protected time for deep work. Plan with AI won’t move it; you still can.',
+  task: 'Time set aside to work on a task.',
+  routine: 'Repeats: lunch, gym, standup. Drawn pale so the rest of your week reads first.',
+};
+/** A repeat rule we didn't write ourselves, in words: "Weekly on Mon, Wed, Fri". */
+function describeRule(r: string): string {
+  const by = /BYDAY=([A-Z,]+)/.exec(r)?.[1]?.split(',').map((x) => WD[BYDAY.indexOf(x)]).filter(Boolean);
+  const every = /INTERVAL=(\d+)/.exec(r)?.[1];
+  if (r.includes('FREQ=DAILY')) return every ? `Every ${every} days` : 'Every day';
+  if (r.includes('FREQ=MONTHLY')) return every ? `Every ${every} months` : 'Every month';
+  if (r.includes('FREQ=WEEKLY')) return `${every ? `Every ${every} weeks` : 'Weekly'}${by?.length ? ` on ${by.join(', ')}` : ''}`;
+  return 'Repeats';
+}
+
+/** A routine always repeats; it starts weekly on its own day. */
+const weeklyOn = (date: string) => {
+  const [y, m, dd] = date.split('-').map(Number);
+  return `FREQ=WEEKLY;BYDAY=${BYDAY[wdIndex(new Date(y, m - 1, dd))]}`;
+};
+
 const fromEvent = (ev: CalEvent): Draft => ({
   title: ev.title,
-  kind: ev.kind === 'focus' || ev.kind === 'task' ? ev.kind : 'event',
+  kind: ev.kind === 'break' ? 'routine' : ev.kind === 'ai' ? 'event' : ev.kind,
   date: ev.date,
   s: toMin(ev.start),
   t: toMin(ev.end),
@@ -263,6 +289,9 @@ function Editor({
 
   /** Change fields; on an existing block, save them right away. */
   const change = (patch: Partial<Draft>, save = true) => {
+    // Only a routine repeats (that is what makes it one): becoming a routine
+    // starts a weekly repeat, becoming anything else stops it.
+    if ('kind' in patch) patch = { ...patch, rrule: patch.kind === 'routine' ? d.rrule || weeklyOn(d.date) : '' };
     const next = { ...d, ...patch };
     setD(next);
     if (isNew || !ev || !save) return;
@@ -331,7 +360,7 @@ function Editor({
         title: d.title.trim() || 'New block',
         cat: d.kind === 'focus' ? 'deep' : d.cat,
         kind: d.kind,
-        rrule: d.rrule || undefined,
+        rrule: d.kind === 'routine' ? d.rrule || weeklyOn(d.date) : undefined,
         // where only belongs to events
         location: (d.kind === 'event' && d.location.trim()) || undefined,
         videoUrl: (d.kind === 'event' && d.videoUrl.trim()) || undefined,
@@ -404,7 +433,7 @@ function Editor({
       {/* 2 · kind */}
       {contentEditable && !ev?.allDay ? (
         <div className="kinds tabs" role="tablist" aria-label="Kind">
-          {(['event', 'focus', 'task'] as const).map((kk) => (
+          {KINDS.map((kk) => (
             <button key={kk} type="button" role="tab" aria-selected={d.kind === kk} onClick={() => change({ kind: kk })}>
               <i style={{ background: SW[kk] }} />
               {LBL[kk]}
@@ -453,7 +482,8 @@ function Editor({
           </div>
         )}
       </div>
-      {contentEditable && !ev?.allDay && (
+      {contentEditable && !ev?.allDay && <p className="hint">{KIND_HINT[d.kind]}</p>}
+      {contentEditable && !ev?.allDay && d.kind === 'routine' && (
         <div className="row">
           <span className="ri">{I.repeat}</span>
           <div className="rc">
@@ -461,7 +491,11 @@ function Editor({
               label="Repeats"
               className="wide"
               value={d.rrule}
-              options={[...(repeatKnown ? [] : [{ value: d.rrule, label: 'Repeats (custom)' }]), ...repeats.map(([v, l]) => ({ value: v, label: l }))]}
+              options={[
+                ...(repeatKnown ? [] : [{ value: d.rrule, label: describeRule(d.rrule) }]),
+                // a routine always repeats: to stop, make it an Event
+                ...repeats.filter(([v]) => v).map(([v, l]) => ({ value: v, label: l })),
+              ]}
               onChange={(v) => change({ rrule: v })}
             />
           </div>
@@ -624,7 +658,6 @@ function Editor({
         </div>
       )}
       {proposal && <div className="meta">Proposed by Plan with AI. Not on your calendar until you add it.</div>}
-      {!isNew && ev!.kind === 'focus' && <div className="meta">Protected: Plan with AI won’t move this when it plans. You can still change it.</div>}
       <div className="acts">
         {isNew ? (
           <>
