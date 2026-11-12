@@ -17,6 +17,8 @@
   --ground: #eef0fb; --surface: #ffffff; --sunken: #f6f7fb; --ink: #0b1020; --ink2: #2e3550; --muted: #5d6584; --faint: #98a0bb;
   --line: #e6e9f2; --line-soft: #eff1f7; --line-strong: #c9d3ea;
   --focus: #1d6bff; --focus-ink: #fff;
+  /* A focus block is deep indigo: no Google calendar is ever drawn solid and dark, so it never reads as a Work event. */
+  --focus-tile: linear-gradient(160deg, #2f2a9e 0%, #1b1f5e 100%); --focus-sw: #2a2790;
   --event-bg: #ffe5f0; --event-bd: #ff9cc4; --event-fg: #a3124f;
   --task-bg: #fff; --task-bd: #c9d3ea; --task-fg: #0b1020;
   --routine-bg: #f1f4fc; --routine-hatch: rgba(29, 107, 255, .08); --routine-fg: #3b4466;
@@ -184,12 +186,17 @@
 .px .ev b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; max-width: 100%; }
 .px .ev span { flex: none; opacity: .85; white-space: nowrap; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; }
 .px .ev.short { flex-direction: row; gap: 5px; align-items: center; padding-block: 0; }
-.px .ev.focus { background: var(--focus); color: var(--focus-ink); }
+.px .ev.focus { background: var(--focus-tile); color: var(--focus-ink); }
 .px .ev.event { background: var(--event-bg); border-color: var(--event-bd); color: var(--event-fg); }
 .px .ev.task { background: var(--task-bg); border-color: var(--task-bd); color: var(--task-fg); }
 .px .ev.task b::before { content: ''; display: inline-block; width: 8px; height: 8px; border: 1.4px solid currentColor; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
 .px .ev.routine { background: repeating-linear-gradient(135deg, var(--routine-hatch) 0 4px, transparent 4px 9px), var(--routine-bg); color: var(--routine-fg); }
 .px .ev.ai { background: var(--ai-bg); border: 1.5px dashed var(--ai-bd); color: var(--ai-fg); }
+.px .ev.drop { border-style: dashed; border-color: var(--ink2); box-shadow: 0 10px 22px -12px rgba(11, 16, 32, .5); z-index: 6; }
+.px .tk[draggable='true'] { cursor: grab; }
+.px .tk[draggable='true']:active { cursor: grabbing; }
+.px .tasks .hint { color: var(--faint); font-size: 11.5px; padding: 0 2px; }
+.px .board-add { max-width: 420px; margin-bottom: 14px; }
 /* A Google event: its calendar's colour (--cc) as a tint and a left bar. Find Time's own blocks never get the bar. */
 .px .ev.gcal { background: color-mix(in srgb, var(--cc) 15%, var(--surface)); border: 0; border-left: 3px solid var(--cc); border-radius: 4px 8px 8px 4px; color: color-mix(in srgb, var(--cc) 55%, var(--ink)); }
 .px .adv.gcal { background: color-mix(in srgb, var(--cc) 16%, var(--surface)); border-color: color-mix(in srgb, var(--cc) 45%, transparent); color: color-mix(in srgb, var(--cc) 55%, var(--ink)); }

@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { fromMin, iso, MO, nowMin, pad, WD, wdIndex } from '@/calendar/cal-date';
-import { updateEvent } from '@/calendar/cal-store';
+import { API_CAT_TO_CAT, createEventAsync, updateEvent } from '@/calendar/cal-store';
+import { taskPlaced } from '@/calendar/tasks-store';
 import { workFor, type Hours } from '@/calendar/hours';
 import { allDayOn, planDay } from '@/calendar/layout';
 import type { CalEvent, LaidBlock } from '@/calendar/types';
@@ -22,12 +23,18 @@ type Kind = 'focus' | 'event' | 'task' | 'routine' | 'ai';
 export const cls = (ev: Pick<CalEvent, 'kind'>): Kind => (ev.kind === 'break' ? 'routine' : ev.kind);
 export const LBL: Record<Kind, string> = { focus: 'Focus', event: 'Event', task: 'Task', routine: 'Routine', ai: 'Proposal' };
 export const SW: Record<Kind, string> = {
-  focus: 'var(--focus)',
+  focus: 'var(--focus-sw)',
   event: 'var(--event-bd)',
   task: 'var(--task-bd)',
   routine: 'var(--routine-fg)',
   ai: 'var(--ai-bd)',
 };
+
+/** dataTransfer type a task row sets when it is dragged toward the grid */
+export const TASK_DRAG = 'application/x-findtime-task';
+type TaskDrop = { id: string; title: string; durationMin: number; category: string };
+/** A dropped task becomes one session this long; you can resize it after. */
+const dropLen = (t: Pick<TaskDrop, 'durationMin'>) => Math.min(t.durationMin || 60, 120);
 
 /** Why a block can't be dragged here, or null. Same rules as the old grid. */
 function lockOf(ev: CalEvent, cut: boolean): string | null {
@@ -86,6 +93,8 @@ export function Week({
   const grid = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
+  /** where a task dragged in from the list would land */
+  const [over, setOver] = useState<{ di: number; s: number } | null>(null);
   const dragRef = useRef<Drag | null>(null);
   const [rawPop, setRawPop] = useState<Pop | null>(null);
   const wk = isoDays.join();
@@ -141,6 +150,36 @@ export function Week({
   const toMinAt = (clientY: number) => {
     const { top } = colW();
     return Math.round(((clientY - top) / HH) * 60 / SNAP) * SNAP + ws * 60;
+  };
+
+  const isTask = (e: React.DragEvent) => e.dataTransfer.types.includes(TASK_DRAG);
+  const slotAt = (e: React.DragEvent) => Math.min(we * 60 - SNAP, Math.max(ws * 60, Math.floor((toMinAt(e.clientY) - 7) / SNAP) * SNAP));
+  const dropTask = (e: React.DragEvent, di: number) => {
+    if (!isTask(e)) return;
+    e.preventDefault();
+    setOver(null);
+    let t: TaskDrop;
+    try {
+      t = JSON.parse(e.dataTransfer.getData(TASK_DRAG)) as TaskDrop;
+    } catch {
+      return;
+    }
+    const s = slotAt(e);
+    const end = Math.min(we * 60, s + dropLen(t));
+    createEventAsync({
+      date: isoDays[di],
+      start: fromMin(s),
+      end: fromMin(end),
+      title: t.title,
+      cat: API_CAT_TO_CAT[t.category] ?? 'deep',
+      kind: 'task',
+      taskId: t.id,
+    })
+      .then(() => {
+        taskPlaced(t.id);
+        toast(`${t.title}: ${dayLabel(isoDays[di])}, ${fromMin(s)}–${fromMin(end)}`);
+      })
+      .catch(() => toast(`Couldn't put ${t.title} on the calendar. Try again.`));
   };
 
   const begin = (e: React.PointerEvent, d: Drag) => {
@@ -321,7 +360,18 @@ export function Week({
           begin(e, { mode: 'create', x0: e.clientX, y0: e.clientY, day0: di, s0: s, t0: s + 30, day: di, s, t: s + 30, moved: false });
         }}
         onPointerMove={onMove}
-        onPointerUp={onUp}>
+        onPointerUp={onUp}
+        onDragOver={(e) => {
+          if (!isTask(e)) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+          const s = slotAt(e);
+          if (over?.di !== di || over.s !== s) setOver({ di, s });
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(null);
+        }}
+        onDrop={(e) => dropTask(e, di)}>
         {/* outside work hours: a faint tint. A day off stays plain — not a grey wall. */}
         {work && work.start > ws && <div className="off" style={{ top: 0, height: y(work.start * 60) }} />}
         {work && work.end < we && <div className="off" style={{ top: y(work.end * 60), bottom: 0 }} />}
@@ -340,6 +390,12 @@ export function Week({
             <b>+{o.items.length}</b>
           </button>
         ))}
+        {over?.di === di && (
+          <div className="ev task drop" style={{ top: y(over.s) + 1, height: HH - 3, left: 3, right: 3, pointerEvents: 'none' }}>
+            <b>Drop to put it here</b>
+            <span>{fromMin(over.s)}</span>
+          </div>
+        )}
         {(creating || draft) && (
           <div
             className="ev draft"

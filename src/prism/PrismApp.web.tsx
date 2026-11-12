@@ -6,14 +6,14 @@ import { addDays, iso, MO, nowMin, startOfWeek, toMin, WD_LONG, wdIndex } from '
 import { refresh, useCalEvents, useCalLoad } from '@/calendar/cal-store';
 import { AccountButton } from '@/calendar/components/AccountButton';
 import { useHours, workFor, type Hours } from '@/calendar/hours';
-import { finishTask, refreshTasks, stopHabit, useTasks } from '@/calendar/tasks-store';
+import { addPreviewTask, finishTask, isPreviewTasks, refreshTasks, stopHabit, useTasks } from '@/calendar/tasks-store';
 import type { CalEvent } from '@/calendar/types';
 import type { ApiTask } from '@/lib/api-types';
 
 import './prism.css';
 import { paintScene } from './scene';
 import { calLooks } from './cal-look';
-import { cls, LBL, Week, type Toast } from './Week.web';
+import { cls, LBL, TASK_DRAG, Week, type Toast } from './Week.web';
 
 type Page = 'planner' | 'tasks' | 'insights' | 'habits';
 const DRAWER_KEY = 'ft.px.drawer';
@@ -194,6 +194,11 @@ export function PrismApp() {
 
   const calendars = accounts.flatMap((a) => a.calendars.map((c) => ({ ...c, account: a.email })));
   const looks = useMemo(() => calLooks(accounts.flatMap((a) => a.calendars)), [accounts]);
+  // A calendar switched off in the drawer drops off the grid at once, before the server catches up.
+  const shown = useMemo(() => {
+    const off = new Set(accounts.flatMap((a) => a.calendars.filter((c) => !c.readEnabled).map((c) => c.id)));
+    return off.size ? events.filter((e) => !(e.calendarId && off.has(e.calendarId))) : events;
+  }, [accounts, events]);
 
   const nav = (p: Page, label: string, icon: React.ReactNode, extra?: React.ReactNode) => (
     <button type="button" className="d-item" aria-current={page === p ? 'page' : undefined} title={label} onClick={() => setPage(p)}>
@@ -257,10 +262,10 @@ export function PrismApp() {
         </nav>
 
         <div className="main">
-          <Band events={events} hours={hours} />
+          <Band events={shown} hours={hours} />
           {page === 'planner' ? (
             <div className="work">
-              <TaskColumn tasks={open} events={events} hours={hours} days={days} toast={toast} />
+              <TaskColumn tasks={open} events={shown} hours={hours} days={days} toast={toast} />
               <section className="cal" aria-label="Week">
                 <div className="cal-top">
                   <span className="m">{rangeTitle}</span>
@@ -290,14 +295,14 @@ export function PrismApp() {
                     </button>
                   </div>
                 ) : (
-                  <Week days={days} events={events} hours={hours} loading={load.status === 'loading'} toast={toast} looks={looks} />
+                  <Week days={days} events={shown} hours={hours} loading={load.status === 'loading'} toast={toast} looks={looks} />
                 )}
               </section>
             </div>
           ) : page === 'tasks' ? (
             <TasksBoard tasks={tasks} toast={toast} />
           ) : page === 'insights' ? (
-            <Insights events={events} hours={hours} tasks={open} />
+            <Insights events={shown} hours={hours} tasks={open} />
           ) : (
             <Habits habits={habits} toast={toast} />
           )}
@@ -407,8 +412,6 @@ function TaskColumn({
   days: Date[];
   toast: Toast;
 }) {
-  const [text, setText] = useState('');
-  const [adding, setAdding] = useState(false);
   const today = new Date(new Date().toDateString());
   const weekEnd = addDays(startOfWeek(today), 7);
 
@@ -424,27 +427,19 @@ function TaskColumn({
   const proposed = events.filter((e) => e.kind === 'ai' && weekDays.some((d) => iso(d) === e.date)).reduce((s, e) => s + toMin(e.end) - toMin(e.start), 0);
   const fits = need <= freeWeek;
 
-  const add = async () => {
-    const t = text.trim();
-    if (!t || adding) return;
-    setAdding(true);
-    try {
-      const reply = await sendMessage(`Add task: ${t}`);
-      setText('');
-      toast(reply.text.split('\n')[0].slice(0, 140));
-      void refreshTasks();
-    } catch {
-      toast("Couldn't add that task. Try again.");
-    } finally {
-      setAdding(false);
-    }
-  };
-
   const row = (t: ApiTask) => {
     const due = dueDate(t);
     const hold = t.notBefore && new Date(t.notBefore) > today ? new Date(t.notBefore) : null;
     return (
-      <div className="tk" key={t.id}>
+      <div
+        className="tk"
+        key={t.id}
+        draggable
+        title="Drag onto the calendar to put it there"
+        onDragStart={(e) => {
+          e.dataTransfer.effectAllowed = 'copy';
+          e.dataTransfer.setData(TASK_DRAG, JSON.stringify({ id: t.id, title: t.title, durationMin: t.durationMin, category: t.category }));
+        }}>
         <button
           type="button"
           className="cb"
@@ -480,22 +475,8 @@ function TaskColumn({
         <h3>Tasks</h3>
         <span>{tasks.length} open</span>
       </header>
-      <form
-        className="add"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void add();
-        }}>
-        +
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder={adding ? 'Adding…' : 'Write the memo 2h fri'}
-          disabled={adding}
-          aria-label="Add a task in your own words"
-          autoComplete="off"
-        />
-      </form>
+      <AddTask toast={toast} />
+      {tasks.length > 0 && <small className="hint">Drag a task onto the calendar to put it there.</small>}
       {group('Overdue', overdue, true)}
       {group('Due this week', thisWeek)}
       {group('Needs a length', needLen)}
@@ -515,6 +496,51 @@ function TaskColumn({
   );
 }
 
+/** Add a task in your own words ("Write the memo 2h fri"); Plan with AI reads the length and the day. */
+function AddTask({ toast }: { toast: Toast }) {
+  const [text, setText] = useState('');
+  const [adding, setAdding] = useState(false);
+  const add = async () => {
+    const t = text.trim();
+    if (!t || adding) return;
+    if (isPreviewTasks()) {
+      addPreviewTask(t);
+      setText('');
+      toast(`Added "${t}"`);
+      return;
+    }
+    setAdding(true);
+    try {
+      const reply = await sendMessage(`Add task: ${t}`);
+      setText('');
+      toast(reply.text.split('\n')[0].slice(0, 140));
+      void refreshTasks();
+    } catch {
+      toast("Couldn't add that task. Try again.");
+    } finally {
+      setAdding(false);
+    }
+  };
+  return (
+    <form
+      className="add"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void add();
+      }}>
+      +
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder={adding ? 'Adding…' : 'Add a task: Write the memo 2h fri'}
+        disabled={adding}
+        aria-label="Add a task in your own words"
+        autoComplete="off"
+      />
+    </form>
+  );
+}
+
 /* ───────────────────────── other pages ───────────────────────── */
 
 function TasksBoard({ tasks, toast }: { tasks: ApiTask[]; toast: Toast }) {
@@ -527,6 +553,9 @@ function TasksBoard({ tasks, toast }: { tasks: ApiTask[]; toast: Toast }) {
   ];
   return (
     <div className="page">
+      <div className="board-add">
+        <AddTask toast={toast} />
+      </div>
       <div className="board">
         {lanes.map(([name, list]) => (
           <div className="lane" key={name}>

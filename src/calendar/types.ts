@@ -52,6 +52,8 @@ export type CalEvent = {
   pushFailed?: boolean;
   /** Source calendar (calendars.id). Absent = Find Time's own block. */
   calendarId?: string;
+  /** the task this block is a session of */
+  taskId?: string;
   /** Google all-day event — drawn in the all-day lane, never on the hours. */
   allDay?: boolean;
   /** where it happens, in person */

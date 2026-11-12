@@ -46,6 +46,40 @@ export function previewTasks(tasks: ApiTask[], habits: ApiHabit[]) {
   set({ loading: false, tasks, habits, error: null });
 }
 
+/** `/preview` only: there is no Plan with AI to read the sentence, so the words become the title. */
+export function isPreviewTasks(): boolean {
+  return previewing;
+}
+export function addPreviewTask(title: string): ApiTask {
+  const t: ApiTask = {
+    id: `tsk_preview_${Date.now()}`,
+    title,
+    status: 'backlog',
+    durationMin: 60,
+    dueBy: null,
+    preferBy: null,
+    notBefore: null,
+    priority: 'medium',
+    effort: 'normal',
+    preferredWindow: null,
+    splittable: false,
+    minChunkMin: 30,
+    category: 'deep-work',
+    completedAt: null,
+  };
+  set({ tasks: [t, ...state.tasks] });
+  return t;
+}
+
+/** A session of this task was put on the calendar by hand. */
+export function taskPlaced(id: string): void {
+  if (previewing) {
+    set({ tasks: state.tasks.map((t) => (t.id === id && t.status === 'backlog' ? { ...t, status: 'scheduled' } : t)) });
+    return;
+  }
+  void refreshTasks();
+}
+
 export async function refreshTasks(): Promise<void> {
   if (previewing) return;
   try {

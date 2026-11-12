@@ -106,6 +106,7 @@ export function toCalEvent(e: ApiEvent): CalEvent {
   if (cal.imported && e.googleEditable) cal.googleEditable = true;
   if (e.pushFailed) cal.pushFailed = true;
   if (e.calendarId) cal.calendarId = e.calendarId;
+  if (e.taskId) cal.taskId = e.taskId;
   if (e.allDay) cal.allDay = true;
   if (e.location) cal.location = e.location;
   if (e.videoUrl) cal.videoUrl = e.videoUrl;
@@ -138,6 +139,11 @@ export function toEventInput(c: Partial<CalEvent>): Partial<EventInput> {
     out.rrule = c.rrule || null;
   } else if (c.flexible !== undefined) {
     out.flexibility = c.flexible ? 'flexible' : 'fixed';
+  }
+  // A task session you placed yourself: the planner keeps it where you put it.
+  if (c.taskId !== undefined) {
+    out.taskId = c.taskId;
+    out.flexibility = 'fixed';
   }
   return out;
 }

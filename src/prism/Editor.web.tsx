@@ -21,7 +21,7 @@ type Kind = 'focus' | 'event' | 'task' | 'routine' | 'ai';
 const cls = (ev: Pick<CalEvent, 'kind'>): Kind => (ev.kind === 'break' ? 'routine' : ev.kind);
 const LBL: Record<Kind, string> = { focus: 'Focus', event: 'Event', task: 'Task', routine: 'Routine', ai: 'Proposal' };
 const SW: Record<Kind, string> = {
-  focus: 'var(--focus)',
+  focus: 'var(--focus-sw)',
   event: 'var(--event-bd)',
   task: 'var(--task-bd)',
   routine: 'var(--routine-fg)',

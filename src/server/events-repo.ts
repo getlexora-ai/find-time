@@ -147,10 +147,11 @@ export async function createEvent(userId: string, input: EventInput): Promise<Ap
     `insert into calendar_events
        (id, user_id, title, start_at, end_at, time_zone, category, item_type,
         flexibility, origin, is_draft, rrule, project_label, description,
-        all_day, recurrence_parent_id, exdates, location, conference_url)
+        all_day, recurrence_parent_id, exdates, location, conference_url, task_id)
      values ($1,$2,$3,$4,$5,
              coalesce((select timezone from scheduler_profiles where user_id = $2), 'Europe/Berlin'),
-             $6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::timestamptz[],$17,$18)
+             $6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::timestamptz[],$17,$18,
+             (select id from tasks where id = $19 and user_id = $2))
      returning ${COLS}`,
     [
       `evt_${randomUUID()}`,
@@ -171,8 +172,17 @@ export async function createEvent(userId: string, input: EventInput): Promise<Ap
       (input.exdates ?? []).map(dateToInstant),
       input.location ?? null,
       safeLink(input.videoUrl),
+      input.taskId ?? null,
     ],
   );
+  // A session of a task: the task is on the calendar now.
+  if (row!.task_id) {
+    await query(
+      `update tasks set status = 'scheduled', scheduled_event_id = coalesce(scheduled_event_id, $3)
+        where id = $1 and user_id = $2 and status = 'backlog'`,
+      [row!.task_id, userId, row!.id],
+    );
+  }
   return toApi(row!);
 }
 

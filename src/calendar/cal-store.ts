@@ -224,6 +224,8 @@ export type NewEvent = {
   endDate?: string;
   location?: string;
   videoUrl?: string;
+  /** a session of this task */
+  taskId?: string;
 };
 
 function optimistic(input: NewEvent): CalEvent {
@@ -455,7 +457,7 @@ export function setKind(id: number, kind: CalEvent['kind']): Promise<boolean> {
   return updateEvent(id, { kind, rrule: kind === 'routine' ? cur.rrule ?? DEFAULT_RRULE : undefined });
 }
 
-const API_CAT_TO_CAT: Record<string, CatKey> = {
+export const API_CAT_TO_CAT: Record<string, CatKey> = {
   'deep-work': 'deep',
   design: 'design',
   research: 'research',

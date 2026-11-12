@@ -67,6 +67,8 @@ export type EventInput = {
   location?: string | null;
   /** the video call link: a pasted one, or the Meet link POST /api/events/:id/meet created */
   videoUrl?: string | null;
+  /** a session of this task (dropped on the grid from the task list); create only */
+  taskId?: string | null;
 };
 
 /** POST /api/events/:id/meet */
