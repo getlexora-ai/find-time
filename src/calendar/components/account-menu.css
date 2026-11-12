@@ -414,7 +414,96 @@
   background: var(--am-hover);
 }
 
+/* ── About you (AboutYou.web.tsx) ───────────────────────── */
+.am-lead {
+  margin: 16px 40px 0 0;
+}
+.am-textarea,
+.am-input {
+  width: 100%;
+  border: 1px solid var(--am-line);
+  border-radius: 8px;
+  background: var(--am-input);
+  font: inherit;
+  font-size: 13px;
+  color: var(--am-text);
+  outline: none;
+}
+.am-textarea {
+  padding: 10px 12px;
+  line-height: 20px;
+  resize: vertical;
+  min-height: 120px;
+}
+.am-input {
+  height: 34px;
+  padding: 0 12px;
+  min-width: 0;
+  flex: 1;
+}
+.am-textarea:focus,
+.am-input:focus {
+  border-color: var(--am-line-strong);
+  box-shadow: 0 0 0 3px rgba(204, 255, 0, 0.15);
+}
+.am-textarea::placeholder,
+.am-input::placeholder {
+  color: var(--am-faint);
+}
+.am-count {
+  font-size: 12px;
+  color: var(--am-faint);
+}
+.am-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+.am-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--am-line);
+}
+.am-item-row:last-child {
+  border-bottom: 0;
+}
+.am-fact {
+  min-width: 0;
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+.am-item-actions {
+  display: flex;
+  flex-shrink: 0;
+}
+.am-link-danger {
+  color: var(--am-muted);
+}
+.am-link-danger:hover,
+.am-link-danger:focus-visible {
+  color: var(--am-danger);
+}
+.am-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
 @media (max-width: 720px) {
+  .am-lead {
+    margin-right: 0;
+  }
+  .am-item-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
   .am-backdrop {
     padding: 0;
   }

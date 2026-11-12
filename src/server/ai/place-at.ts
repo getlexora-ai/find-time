@@ -81,6 +81,8 @@ export function ambiguousTime(text: string): Ambiguous | null {
   if (CLEAR.test(text)) return null;
   const hit = BARE_TIME.exec(text);
   if (!hit) return null;
+  // "9 to 5", "8-4": a range that ends on a smaller hour only reads one way, morning to afternoon.
+  if (hit[5] && Number(hit[6]) < Number(hit[5])) return null;
   const hour = Number(hit[1] ?? hit[3] ?? hit[5]);
   const minute = hit[2] ?? hit[4] ?? '00';
   const pad = (h: number) => String(h).padStart(2, '0');

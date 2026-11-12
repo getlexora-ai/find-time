@@ -9,7 +9,7 @@ import { blocksTime } from './find-time';
 import { expandRepeat } from './place-at';
 import { preferenceCard } from './learn';
 import type { AgentProfile } from './preferences';
-import { appendMessage, createSession, listMessages, loadProfile, sessionExists, userTimeZone } from './repo';
+import { addFact, appendMessage, createSession, deleteFact, listMessages, loadMemory, loadProfile, type Memory, sessionExists, updateFact, userTimeZone } from './repo';
 import { doneLabel, iso, plural, runningLabel, type TurnCtx } from './tools/context';
 import { toolFor } from './tools';
 import { asString, TOOL_ANSWER } from './tools/names';
@@ -116,9 +116,10 @@ export async function runTurn(
   let events: Awaited<ReturnType<typeof listEvents>>;
   let openTasks: ApiTask[];
   let habits: ApiHabit[];
+  let memory: Memory;
   begin(STEP.read);
   try {
-    [profile, history, events, openTasks, habits] = await Promise.all([
+    [profile, history, events, openTasks, habits, memory] = await Promise.all([
       loadProfile(userId),
       listMessages(sessionId, MAX_TURNS),
       calendarFor(userId, nowISO, horizonISO),
@@ -130,6 +131,11 @@ export async function runTurn(
       listHabits(userId).catch((err) => {
         console.error('ai/chat listHabits', err);
         return [] as ApiHabit[];
+      }),
+      // Also optional: before db/029 is applied, or if it fails, the turn runs without memory.
+      loadMemory(userId).catch((err) => {
+        console.error('ai/chat loadMemory', err);
+        return { instructions: '', facts: [] } as Memory;
       }),
     ]);
   } catch (err) {
@@ -202,6 +208,16 @@ export async function runTurn(
       events,
       tasks: openTasks,
       habits,
+      memory,
+      // A fact is the person's words about themselves: a Google title it picked up is scrubbed first.
+      saveFact: async ({ action, text: fact, factId }) => {
+        if (action === 'forget') return factId && (await deleteFact(userId, factId)) ? { id: factId } : null;
+        const googleTitles = [...events, ...seen].filter((e) => isImported(e.origin)).map((e) => e.title);
+        const typed = [...history.filter((m) => m.role === 'user').map((m) => m.content), text].join(' ');
+        const clean = scrubTitles(fact, googleTitles, typed);
+        if (factId) return (await updateFact(userId, factId, clean)) ? { id: factId } : null;
+        return addFact(userId, clean, 'ai');
+      },
       eventsIn: (fromISO, toISO) => calendarFor(userId, fromISO, toISO),
       seen,
       readCtx,
