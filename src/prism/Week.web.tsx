@@ -305,7 +305,8 @@ export function Week({
         key={d}
         className={`col${wd > 4 ? ' we' : ''}`}
         onPointerDown={(e) => {
-          if (e.target !== e.currentTarget) return;
+          // not on a tile, and never in the middle of another drag
+          if (e.target !== e.currentTarget || dragRef.current) return;
           setPop(null);
           const s = Math.min(we * 60 - SNAP, Math.max(ws * 60, Math.floor((toMinAt(e.clientY) - 7) / SNAP) * SNAP));
           begin(e, { mode: 'create', x0: e.clientX, y0: e.clientY, day0: di, s0: s, t0: s + 30, day: di, s, t: s + 30, moved: false });

@@ -299,9 +299,39 @@
 .px .pop .chips .chip[aria-pressed='true'] { background: var(--ink); color: #fff; border-color: var(--ink); }
 .px .pop .saved { margin-left: auto; font-size: 11.5px; color: var(--muted); }
 .px .pop .acts { align-items: center; border-top: 1px solid var(--line); padding-top: 10px; }
-.px .pop .datepick { position: relative; display: flex; align-items: center; background: var(--sunken); border: 1px solid transparent; border-radius: 8px; padding: 5px 8px; font-size: 13px; color: var(--ink); cursor: pointer; }
-.px .pop .datepick:hover { border-color: var(--line-strong); }
-.px .pop .datepick:focus-within { border-color: var(--blue); background: var(--surface); }
-.px .pop .datepick input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; padding: 0; border: 0; }
-.px .pop .datepick.off { opacity: .6; cursor: not-allowed; }
-.px .pop .datepick.off input { cursor: not-allowed; }
+
+/* ---------- Prism pickers: dropdown + month calendar (no browser controls) ---------- */
+.px .dd { position: relative; display: inline-flex; min-width: 0; }
+.px .dd.wide, .px .dd.wide .dd-btn { width: 100%; }
+.px .times .dd { flex: 1; }
+.px .times .dd .dd-btn { width: 100%; }
+.px .dd-btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid transparent; background: var(--sunken); border-radius: 8px; padding: 5px 8px 5px 10px; font: 400 13px var(--body); color: var(--ink); cursor: pointer; min-width: 0; text-align: left; font-variant-numeric: tabular-nums; }
+.px .dd-btn:hover { border-color: var(--line-strong); }
+.px .dd-btn[aria-expanded='true'] { border-color: var(--blue); background: var(--surface); box-shadow: 0 0 0 3px rgba(29, 107, 255, .12); }
+.px .dd-btn:disabled { opacity: .55; cursor: not-allowed; }
+.px .dd-v { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.px .dd-h { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.px .dd-c { width: 12px; height: 12px; color: var(--muted); flex: none; transition: transform .15s; }
+.px .dd-btn[aria-expanded='true'] .dd-c { transform: rotate(180deg); }
+.px .dd-list { position: fixed; z-index: 50; margin: 0; padding: 5px; list-style: none; background: var(--surface); border-radius: 12px; box-shadow: 0 18px 40px -12px rgba(11, 16, 32, .35), 0 0 0 1px rgba(11, 16, 32, .07); overflow: auto; overscroll-behavior: contain; }
+.px .dd-list li { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 8px; font-size: 13px; cursor: pointer; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--ink); }
+.px .dd-list li small { color: var(--muted); font-size: 12px; }
+.px .dd-list li svg { width: 12px; height: 12px; margin-left: auto; color: var(--blue); flex: none; }
+.px .dd-list li.on { background: var(--sunken); }
+.px .dd-list li[aria-selected='true'] { font-weight: 600; }
+.px .dp-cal { position: fixed; z-index: 50; width: 268px; background: var(--surface); border-radius: 14px; padding: 12px; box-shadow: 0 18px 40px -12px rgba(11, 16, 32, .35), 0 0 0 1px rgba(11, 16, 32, .07); }
+.px .dp-head { display: flex; align-items: center; gap: 4px; margin-bottom: 8px; }
+.px .dp-head b { flex: 1; font-family: var(--display); font-weight: 400; font-size: 20px; }
+.px .dp-head b em { color: var(--muted); }
+.px .dp-head button { width: 28px; height: 28px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-size: 16px; line-height: 1; }
+.px .dp-head button:hover { background: var(--sunken); }
+.px .dp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.px .dp-wd { font: 500 10px var(--mono); color: var(--faint); text-align: center; padding: 4px 0; text-transform: uppercase; }
+.px .dp-d { aspect-ratio: 1; border: 0; background: transparent; border-radius: 999px; font: 400 13px var(--body); cursor: pointer; color: var(--ink); font-variant-numeric: tabular-nums; }
+.px .dp-d:hover, .px .dp-d:focus-visible { background: var(--sunken); }
+.px .dp-d.out { color: var(--faint); }
+.px .dp-d.today { box-shadow: inset 0 0 0 1.5px var(--pink); }
+.px .dp-d.sel { background: var(--ink); color: #fff; font-weight: 600; }
+.px .dp-foot { display: flex; gap: 6px; margin-top: 8px; border-top: 1px solid var(--line); padding-top: 8px; }
+.px .dp-foot button { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 10px; font-size: 12px; cursor: pointer; color: var(--ink2); }
+.px .dp-foot button:hover { background: var(--sunken); }

@@ -6,6 +6,7 @@ import type { CatKey } from '@/calendar/tokens';
 import type { CalEvent } from '@/calendar/types';
 import { apiFetch } from '@/lib/api';
 
+import { DatePicker, Dropdown } from './Pickers.web';
 import { paintScene } from './scene';
 
 /**
@@ -50,11 +51,6 @@ export const POP_H = 470;
 const dayLabel = (d: string) => {
   const [y, m, dd] = d.split('-').map(Number);
   return `${WD[wdIndex(new Date(y, m - 1, dd))]} ${dd} ${MO[m - 1].slice(0, 3)}`;
-};
-const WD_FULL = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-const longDay = (d: string) => {
-  const [y, m, dd] = d.split('-').map(Number);
-  return `${WD_FULL[wdIndex(new Date(y, m - 1, dd))]} ${dd} ${MO[m - 1]}`;
 };
 const span = (min: number) => (min < 60 ? `${min} min` : `${Math.floor(min / 60)} h${min % 60 ? ` ${min % 60}` : ''}`);
 
@@ -336,13 +332,14 @@ function Editor({
         cat: d.kind === 'focus' ? 'deep' : d.cat,
         kind: d.kind,
         rrule: d.rrule || undefined,
-        location: d.location.trim() || undefined,
-        videoUrl: d.videoUrl.trim() || undefined,
+        // where only belongs to events
+        location: (d.kind === 'event' && d.location.trim()) || undefined,
+        videoUrl: (d.kind === 'event' && d.videoUrl.trim()) || undefined,
         project: d.project.trim(),
         notes: d.notes,
       });
       toast(`${d.title.trim() || 'New block'} added ${dayLabel(d.date)} ${fromMin(d.s)}`);
-      if (wantMeet && d.where === 'online' && !d.videoUrl) {
+      if (d.kind === 'event' && wantMeet && d.where === 'online' && !d.videoUrl) {
         const out = await createMeetLink(created.id);
         if (!out.ok) toast(`Saved, but no Meet link: ${out.error}`);
       }
@@ -428,34 +425,26 @@ function Editor({
           <div className="rc">{dayLabel(d.date)} · all day</div>
         ) : timeEditable ? (
           <div className="rc when-edit">
-            {/* the day in words; the browser's own date picker opens on click */}
-            <label className={`datepick${d.rrule && !isNew ? ' off' : ''}`} title={d.rrule && !isNew ? 'A repeating block keeps its day. Change the time, or stop it repeating.' : undefined}>
-              <span>{longDay(d.date)}</span>
-              <input
-                type="date"
-                value={d.date}
-                aria-label="Day"
-                disabled={!!d.rrule && !isNew}
-                onClick={(e) => (e.currentTarget as HTMLInputElement & { showPicker?: () => void }).showPicker?.()}
-                onChange={(e) => e.target.value && change({ date: e.target.value })}
-              />
-            </label>
+            <DatePicker
+              value={d.date}
+              disabled={!!d.rrule && !isNew}
+              title={d.rrule && !isNew ? 'A repeating block keeps its day. Change the time, or stop it repeating.' : undefined}
+              onChange={(v) => change({ date: v })}
+            />
             <span className="times">
-              <select aria-label="Starts" value={d.s} onChange={(e) => change({ s: +e.target.value, t: +e.target.value + (d.t - d.s) })}>
-                {starts.map((m) => (
-                  <option key={m} value={m}>
-                    {fromMin(m)}
-                  </option>
-                ))}
-              </select>
+              <Dropdown
+                label="Starts"
+                value={d.s}
+                options={starts.map((m) => ({ value: m, label: fromMin(m) }))}
+                onChange={(v) => change({ s: v, t: Math.min(23 * 60 + 45, v + (d.t - d.s)) })}
+              />
               <span className="to">–</span>
-              <select aria-label="Ends" value={d.t} onChange={(e) => change({ t: +e.target.value })}>
-                {ends.map((m) => (
-                  <option key={m} value={m}>
-                    {fromMin(m)} ({span(m - d.s)})
-                  </option>
-                ))}
-              </select>
+              <Dropdown
+                label="Ends"
+                value={d.t}
+                options={ends.map((m) => ({ value: m, label: fromMin(m), hint: span(m - d.s) }))}
+                onChange={(v) => change({ t: v })}
+              />
             </span>
           </div>
         ) : (
@@ -468,20 +457,19 @@ function Editor({
         <div className="row">
           <span className="ri">{I.repeat}</span>
           <div className="rc">
-            <select aria-label="Repeats" value={d.rrule} onChange={(e) => change({ rrule: e.target.value })}>
-              {!repeatKnown && <option value={d.rrule}>Repeats (custom)</option>}
-              {repeats.map(([v, l]) => (
-                <option key={v} value={v}>
-                  {l}
-                </option>
-              ))}
-            </select>
+            <Dropdown
+              label="Repeats"
+              className="wide"
+              value={d.rrule}
+              options={[...(repeatKnown ? [] : [{ value: d.rrule, label: 'Repeats (custom)' }]), ...repeats.map(([v, l]) => ({ value: v, label: l }))]}
+              onChange={(v) => change({ rrule: v })}
+            />
           </div>
         </div>
       )}
 
-      {/* 4 · where: in person or online */}
-      {contentEditable ? (
+      {/* 4 · where: in person or online — events only; a task or focus block is just you */}
+      {contentEditable && d.kind !== 'event' ? null : contentEditable ? (
         <div className="row">
           <span className="ri">{d.where === 'online' ? I.video : I.pin}</span>
           <div className="rc where">
@@ -636,7 +624,7 @@ function Editor({
         </div>
       )}
       {proposal && <div className="meta">Proposed by Plan with AI. Not on your calendar until you add it.</div>}
-      {!isNew && ev!.kind === 'focus' && <div className="meta">Protected. Find Time won’t move it.</div>}
+      {!isNew && ev!.kind === 'focus' && <div className="meta">Protected: Plan with AI won’t move this when it plans. You can still change it.</div>}
       <div className="acts">
         {isNew ? (
           <>

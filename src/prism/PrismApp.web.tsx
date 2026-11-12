@@ -168,8 +168,9 @@ export function PrismApp() {
   // [ ] drawer · ← → week · T today. Never while typing.
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement;
-      if (t.closest('input, textarea, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target;
+      const typing = t instanceof Element && !!t.closest('input, textarea, [contenteditable], [role="listbox"], [role="dialog"]');
+      if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === '[') setDrawer(false);
       else if (e.key === ']') setDrawer(true);
       else if (page === 'planner' && e.key === 'ArrowLeft') go(-1);

@@ -137,7 +137,8 @@ export function toRow(
 
 /**
  * May the user move, resize or delete this event from Find Time (edit.ts)?
- * Only a timed, one-off, ordinary event they organise with no other guests:
+ * Only a timed, one-off event they organise with no other guests, either an
+ * ordinary one or their own Focus time block:
  * no one else gets an update email, no series is split, nothing someone else
  * owns is touched. Everything else stays read-only.
  */
@@ -145,7 +146,8 @@ function editableHere(g: GEvent, allDay: boolean): boolean {
   return (
     !allDay &&
     g.organizer?.self === true &&
-    (g.eventType ?? 'default') === 'default' &&
+    // ordinary events, and your own Google "Focus time" blocks
+    ['default', 'focusTime'].includes(g.eventType ?? 'default') &&
     !g.recurringEventId &&
     !g.recurrence?.length &&
     !(g.attendees ?? []).some((a) => !a.self && !a.resource)
