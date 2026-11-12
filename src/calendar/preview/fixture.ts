@@ -93,7 +93,7 @@ export function previewAccounts(): ApiAccount[] {
       calendars: [
         { id: 'cal_work', providerCalendarId: 'primary', name: 'Work', color: '#4285F4', isPrimary: true, readEnabled: true },
         { id: 'cal_family', providerCalendarId: 'family', name: 'Family', color: '#33B679', isPrimary: false, readEnabled: true },
-        { id: 'cal_holidays', providerCalendarId: 'holidays', name: 'Holidays in Germany', color: '#8E24AA', isPrimary: false, readEnabled: false },
+        { id: 'cal_holidays', providerCalendarId: 'en.german#holiday@group.v.calendar.google.com', name: 'Holidays in Germany', color: '#8E24AA', isPrimary: false, readEnabled: true },
       ],
     },
   ];

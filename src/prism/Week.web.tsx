@@ -6,6 +6,7 @@ import { workFor, type Hours } from '@/calendar/hours';
 import { allDayOn, planDay } from '@/calendar/layout';
 import type { CalEvent, LaidBlock } from '@/calendar/types';
 
+import { type CalLooks, lookOf } from './cal-look';
 import { Popover, POP_H, type Pop, type Toast } from './Editor.web';
 
 export type { Toast };
@@ -64,12 +65,15 @@ export function Week({
   hours,
   loading,
   toast,
+  looks,
 }: {
   days: Date[];
   events: CalEvent[];
   hours: Hours;
   loading: boolean;
   toast: Toast;
+  /** calendar id → colour; Google events are drawn in their calendar's colour */
+  looks?: CalLooks;
 }) {
   const ws = hours.start;
   const we = hours.end;
@@ -110,6 +114,8 @@ export function Week({
   const plans = useMemo(() => isoDays.map((d) => planDay(events, d, ws, we, maxCols(n))), [events, isoDays, ws, we, n]);
   const allDay = useMemo(() => isoDays.map((d) => allDayOn(events, d)), [events, isoDays]);
   const anyAllDay = allDay.some((l) => l.length);
+  /** a public holiday from a Google holiday calendar marks the whole day */
+  const holidays = useMemo(() => allDay.map((l) => l.map((ev) => lookOf(ev, looks)).find((c) => c?.holiday) ?? null), [allDay, looks]);
 
   const y = (min: number) => ((min - ws * 60) / 60) * HH;
 
@@ -232,6 +238,7 @@ export function Week({
     const s = live ? drag.s : b.s;
     const t = live ? drag.t : b.t;
     const k = cls(ev);
+    const cal = k === 'event' ? lookOf(ev, looks) : null;
     const short = t - s <= 45;
     const past = isoDays[di] < todayIso || (isoDays[di] === todayIso && t <= now);
     const sel = pop?.type === 'event' && pop.ev.id === ev.id;
@@ -240,17 +247,18 @@ export function Week({
     return (
       <div
         key={`${ev.id}-${isoDays[di]}`}
-        className={`ev ${k}${short ? ' short' : ''}${past && !live ? ' past' : ''}${sel ? ' sel' : ''}${live ? ' dragging' : ''}`}
+        className={`ev ${cal ? 'gcal' : k}${short ? ' short' : ''}${past && !live ? ' past' : ''}${sel ? ' sel' : ''}${live ? ' dragging' : ''}`}
         style={{
           top: y(s) + 1,
           height: Math.max(14, ((t - s) / 60) * HH - 3),
           left: `calc(${(b.col / b.cols) * 100}% + 3px)`,
           width: `calc(${100 / b.cols}% - 6px)`,
           cursor: locked ? 'pointer' : live ? 'grabbing' : 'grab',
+          ...(cal ? { ['--cc' as string]: cal.color } : {}),
         }}
         role="button"
         tabIndex={0}
-        aria-label={`${LBL[k]}: ${ev.title}, ${dayLabel(isoDays[di])}, ${times}`}
+        aria-label={`${cal ? cal.name : LBL[k]}: ${ev.title}, ${dayLabel(isoDays[di])}, ${times}`}
         title={locked ?? undefined}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
@@ -303,7 +311,8 @@ export function Week({
     return (
       <div
         key={d}
-        className={`col${wd > 4 ? ' we' : ''}`}
+        className={`col${wd > 4 ? ' we' : ''}${holidays[di] ? ' hol' : ''}`}
+        style={holidays[di] ? { ['--cc' as string]: holidays[di]!.color } : undefined}
         onPointerDown={(e) => {
           // not on a tile, and never in the middle of another drag
           if (e.target !== e.currentTarget || dragRef.current) return;
@@ -361,6 +370,11 @@ export function Week({
             return (
               <div key={isoDays[i]} className={isoDays[i] === todayIso ? 'td' : undefined}>
                 {WD[wdIndex(d)]} <b>{d.getDate()}</b>
+                {holidays[i] && (
+                  <span className="hol" style={{ ['--cc' as string]: holidays[i]!.color }}>
+                    Holiday
+                  </span>
+                )}
                 {outside.length > 0 && (
                   <button
                     type="button"
@@ -379,15 +393,20 @@ export function Week({
             <div className="lbl">all day</div>
             {allDay.map((list, i) => (
               <div key={isoDays[i]}>
-                {list.map((ev) => (
+                {list.map((ev) => {
+                  const cal = lookOf(ev, looks);
+                  return (
                   <button
                     type="button"
                     key={ev.id}
-                    className="adv"
+                    className={cal ? 'adv gcal' : 'adv'}
+                    style={cal ? { ['--cc' as string]: cal.color } : undefined}
+                    title={cal?.name}
                     onClick={(e) => setPop({ type: 'event', ev, ...anchor((e.currentTarget as HTMLElement).getBoundingClientRect()) })}>
                     {ev.title}
                   </button>
-                ))}
+                  );
+                })}
               </div>
             ))}
           </div>
@@ -397,7 +416,7 @@ export function Week({
           {cols}
         </div>
         {loading && events.length === 0 && <div className="loading">Loading your week…</div>}
-        {pop && <Popover key={pop.type === 'event' ? `e${pop.ev.id}` : `${pop.type}${pop.x},${pop.y}`} pop={pop} events={events} onClose={() => setPop(null)} onOpen={(ev) => setPop({ ...pop, type: 'event', ev } as Pop)} toast={toast} />}
+        {pop && <Popover key={pop.type === 'event' ? `e${pop.ev.id}` : `${pop.type}${pop.x},${pop.y}`} pop={pop} events={events} looks={looks} onClose={() => setPop(null)} onOpen={(ev) => setPop({ ...pop, type: 'event', ev } as Pop)} toast={toast} />}
       </div>
     </div>
   );

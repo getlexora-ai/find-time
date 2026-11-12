@@ -12,6 +12,7 @@ import type { ApiTask } from '@/lib/api-types';
 
 import './prism.css';
 import { paintScene } from './scene';
+import { calLooks } from './cal-look';
 import { cls, LBL, Week, type Toast } from './Week.web';
 
 type Page = 'planner' | 'tasks' | 'insights' | 'habits';
@@ -192,6 +193,7 @@ export function PrismApp() {
   })();
 
   const calendars = accounts.flatMap((a) => a.calendars.map((c) => ({ ...c, account: a.email })));
+  const looks = useMemo(() => calLooks(accounts.flatMap((a) => a.calendars)), [accounts]);
 
   const nav = (p: Page, label: string, icon: React.ReactNode, extra?: React.ReactNode) => (
     <button type="button" className="d-item" aria-current={page === p ? 'page' : undefined} title={label} onClick={() => setPage(p)}>
@@ -288,7 +290,7 @@ export function PrismApp() {
                     </button>
                   </div>
                 ) : (
-                  <Week days={days} events={events} hours={hours} loading={load.status === 'loading'} toast={toast} />
+                  <Week days={days} events={events} hours={hours} loading={load.status === 'loading'} toast={toast} looks={looks} />
                 )}
               </section>
             </div>

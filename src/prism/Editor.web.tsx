@@ -6,6 +6,7 @@ import type { CatKey } from '@/calendar/tokens';
 import type { CalEvent } from '@/calendar/types';
 import { apiFetch } from '@/lib/api';
 
+import { type CalLooks, lookOf } from './cal-look';
 import { DatePicker, Dropdown } from './Pickers.web';
 import { paintScene } from './scene';
 
@@ -179,12 +180,14 @@ export function Popover({
   onClose,
   onOpen,
   toast,
+  looks,
 }: {
   pop: Pop;
   events: CalEvent[];
   onClose: () => void;
   onOpen: (ev: CalEvent) => void;
   toast: Toast;
+  looks?: CalLooks;
 }) {
   const box = useRef<HTMLDivElement>(null);
 
@@ -219,12 +222,20 @@ export function Popover({
         {close}
         <div className="in">
           <span className="k">{pop.title}</span>
-          {pop.items.map((ev) => (
-            <button key={ev.id} type="button" className={`ev ${cls(ev)} short`} style={{ position: 'relative', padding: '5px 8px' }} onClick={() => onOpen(ev)}>
-              <b>{ev.title}</b>
-              <span>{ev.allDay ? 'all day' : ev.start}</span>
-            </button>
-          ))}
+          {pop.items.map((ev) => {
+            const cal = cls(ev) === 'event' ? lookOf(ev, looks) : null;
+            return (
+              <button
+                key={ev.id}
+                type="button"
+                className={`ev ${cal ? 'gcal' : cls(ev)} short`}
+                style={{ position: 'relative', padding: '5px 8px', ...(cal ? { ['--cc' as string]: cal.color } : {}) }}
+                onClick={() => onOpen(ev)}>
+                <b>{ev.title}</b>
+                <span>{ev.allDay ? 'all day' : ev.start}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
     );
