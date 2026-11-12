@@ -26,7 +26,7 @@ export const IMPORTED_ORIGIN = 'imported';
  * event of the one marker that says Google owns it, after which every lock here
  * silently stops applying.
  */
-export const PROVIDER_OWNED_FIELDS = ['title', 'start', 'end', 'notes', 'origin'] as const;
+export const PROVIDER_OWNED_FIELDS = ['title', 'start', 'end', 'notes', 'origin', 'location', 'videoUrl'] as const;
 
 export const IMPORTED_LOCKED_MESSAGE = 'This event is synced from Google Calendar. Change it there.';
 

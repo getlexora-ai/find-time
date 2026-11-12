@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { query, queryOne } from '../db';
 import { getValidAccessToken } from './oauth';
 
@@ -19,6 +21,7 @@ const WRITE_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
 
 type EvRow = {
   title: string;
+  location?: string | null;
   start_at: Date;
   end_at: Date;
   all_day: boolean;
@@ -38,7 +41,7 @@ export function wantsCopy(ev: Pick<EvRow, 'origin' | 'deleted_at' | 'is_draft' |
 }
 
 /** The Google event for a block. Times are wall-clock, see api-adapter.ts. */
-export function copyBody(ev: Pick<EvRow, 'title' | 'start_at' | 'end_at' | 'all_day'>, zone: string) {
+export function copyBody(ev: Pick<EvRow, 'title' | 'start_at' | 'end_at' | 'all_day' | 'location'>, zone: string) {
   const wall = (d: Date) => d.toISOString().slice(0, 19);
   const day = (d: Date) => d.toISOString().slice(0, 10);
   return {
@@ -48,6 +51,8 @@ export function copyBody(ev: Pick<EvRow, 'title' | 'start_at' | 'end_at' | 'all_
     end: ev.all_day ? { date: day(ev.end_at) } : { dateTime: wall(ev.end_at), timeZone: zone },
     transparency: 'opaque',
     visibility: 'private',
+    // only sent when set: a PATCH without it leaves Google's copy alone
+    ...(ev.location ? { location: ev.location } : {}),
   };
 }
 
@@ -71,7 +76,7 @@ export async function pushEvent(userId: string, id: string): Promise<boolean> {
   try {
     const target = await targetFor(userId);
     const ev = await queryOne<EvRow>(
-      `select title, start_at, end_at, all_day, origin, is_draft, rrule,
+      `select title, location, start_at, end_at, all_day, origin, is_draft, rrule,
               deleted_at, provider_event_id, calendar_id
          from calendar_events where id = $1 and user_id = $2`,
       [id, userId],
@@ -106,6 +111,70 @@ export async function pushEvent(userId: string, id: string): Promise<boolean> {
     ).catch(() => {});
     return false;
   }
+}
+
+export type MeetResult =
+  | { ok: true; url: string }
+  | { ok: false; status: number; error: string; code?: 'needs-write-back' | 'repeats' | 'imported' };
+
+/**
+ * A Google Meet link for one of your blocks. Meet links only exist on Google
+ * Calendar events, so the block's Google copy (write-back) is made first, then
+ * Google is asked to attach a Meet to it (conferenceData.createRequest). No
+ * guests are added and nobody is emailed (sendUpdates=none). The link is kept
+ * on the row (conference_url), like any other field of your own block.
+ */
+export async function createMeet(userId: string, id: string): Promise<MeetResult> {
+  const ev = await queryOne<{ origin: string; rrule: string | null; deleted_at: Date | null }>(
+    `select origin, rrule, deleted_at from calendar_events where id = $1 and user_id = $2`,
+    [id, userId],
+  );
+  if (!ev || ev.deleted_at) return { ok: false, status: 404, error: 'Not found.' };
+  if (ev.origin === 'imported') {
+    return { ok: false, status: 409, code: 'imported', error: 'This event belongs to Google Calendar. Add a Meet link there.' };
+  }
+  if (ev.rrule) {
+    return { ok: false, status: 409, code: 'repeats', error: "Repeating blocks aren't copied to Google, so they can't get a Meet link. Paste a link instead." };
+  }
+  const target = await targetFor(userId);
+  if (!target) {
+    return {
+      ok: false,
+      status: 409,
+      code: 'needs-write-back',
+      error: 'Meet links come from Google Calendar. Turn on “Add my blocks to Google Calendar” first.',
+    };
+  }
+  if (!(await pushEvent(userId, id))) return { ok: false, status: 502, error: "Google didn't take the block. Try again." };
+  const row = await queryOne<{ provider_event_id: string | null }>(
+    `select provider_event_id from calendar_events where id = $1 and user_id = $2`,
+    [id, userId],
+  );
+  if (!row?.provider_event_id) return { ok: false, status: 502, error: "Google didn't take the block. Try again." };
+
+  const token = await getValidAccessToken(target.accountId);
+  const url = `${API}/calendars/${encodeURIComponent(target.providerCalendarId)}/events/${encodeURIComponent(row.provider_event_id)}`;
+  type GEv = { hangoutLink?: string; conferenceData?: { entryPoints?: { entryPointType: string; uri: string }[] } };
+  const linkOf = (g: GEv) => g.hangoutLink ?? g.conferenceData?.entryPoints?.find((e) => e.entryPointType === 'video')?.uri ?? null;
+
+  const res = await fetch(`${url}?conferenceDataVersion=1&sendUpdates=none`, {
+    method: 'PATCH',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      conferenceData: { createRequest: { requestId: randomUUID(), conferenceSolutionKey: { type: 'hangoutsMeet' } } },
+    }),
+  });
+  if (!res.ok) return { ok: false, status: 502, error: `Google couldn't create a Meet link (${res.status}). Try again.` };
+  let link = linkOf((await res.json()) as GEv);
+  // Google may still be making it ("pending"): look again, briefly.
+  for (let i = 0; !link && i < 3; i++) {
+    await new Promise((r) => setTimeout(r, 700));
+    const again = await fetch(`${url}?conferenceDataVersion=1`, { headers: { authorization: `Bearer ${token}` } });
+    if (again.ok) link = linkOf((await again.json()) as GEv);
+  }
+  if (!link) return { ok: false, status: 504, error: 'Google is still making the Meet link. Try again in a moment.' };
+  await queryOne(`update calendar_events set conference_url = $3 where id = $1 and user_id = $2 returning id`, [id, userId, link]);
+  return { ok: true, url: link };
 }
 
 /** After the switch changes: every upcoming block of yours gets its copy, or loses it. */

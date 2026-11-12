@@ -222,6 +222,8 @@ export type NewEvent = {
   rrule?: string;
   /** set only when the block runs past midnight (see CalEvent.endDate) */
   endDate?: string;
+  location?: string;
+  videoUrl?: string;
 };
 
 function optimistic(input: NewEvent): CalEvent {
@@ -462,6 +464,33 @@ const API_CAT_TO_CAT: Record<string, CatKey> = {
   // No calendar colour for personal time yet; admin is the neutral one.
   personal: 'admin',
 };
+
+export type MeetOutcome = { ok: true; url: string } | { ok: false; error: string; code?: string };
+
+/**
+ * Ask Google for a Meet link on one of your blocks (POST /api/events/:id/meet).
+ * The block must already be saved. On success the link is on the event.
+ */
+export async function createMeetLink(id: number): Promise<MeetOutcome> {
+  if (preview) {
+    const url = `https://meet.google.com/${Math.random().toString(36).slice(2, 5)}-${Math.random().toString(36).slice(2, 6)}-${Math.random().toString(36).slice(2, 5)}`;
+    events = events.map((e) => (e.id === id ? { ...e, videoUrl: url } : e));
+    emit();
+    return { ok: true, url };
+  }
+  const serverId = idMap.get(id);
+  if (!serverId) return { ok: false, error: 'Still saving this block. Try again in a moment.' };
+  try {
+    const res = await apiFetch(`/api/events/${serverId}/meet`, { method: 'POST' });
+    const body = (await res.json().catch(() => ({}))) as { url?: string; error?: string; code?: string };
+    if (!res.ok || !body.url) return { ok: false, error: body.error ?? "Couldn't create a Meet link. Try again.", code: body.code };
+    events = events.map((e) => (e.id === id ? { ...e, videoUrl: body.url } : e));
+    emit();
+    return { ok: true, url: body.url };
+  } catch {
+    return { ok: false, error: "Couldn't reach Find Time. Check your connection and try again." };
+  }
+}
 
 /** Accept an AI-proposed block: `kind: 'ai'` is what renders the dashed lime
  *  "tap to accept" state, and it comes back from the server as `origin: 'ai'`,

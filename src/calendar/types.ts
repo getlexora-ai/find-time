@@ -54,6 +54,10 @@ export type CalEvent = {
   calendarId?: string;
   /** Google all-day event — drawn in the all-day lane, never on the hours. */
   allDay?: boolean;
+  /** where it happens, in person */
+  location?: string;
+  /** the video call link (Meet, Zoom, Teams…) */
+  videoUrl?: string;
   /**
    * yyyy-mm-dd the event ends on, only when that is not `date`: an overnight
    * block (22:00 → 02:00) or a multi-day all-day event. For all-day events it

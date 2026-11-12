@@ -23,7 +23,8 @@ export type RateRoute =
   | 'google-connect'
   | 'onboarding'
   | 'onboarding-event'
-  | 'consent';
+  | 'consent'
+  | 'meet';
 
 const LIMITS: Record<RateRoute, Pair> = {
   // unauthenticated — spammable to junk; keep tight
@@ -32,6 +33,8 @@ const LIMITS: Record<RateRoute, Pair> = {
   // turns to land on the right slot, so the per-request cap has to be looser
   // than the one-shot planner's or normal use hits a wall mid-thread.
   'ai-chat': { hour: 60, day: 200 },
+  // each one writes to Google Calendar; a person makes a handful a day
+  meet: { hour: 30, day: 100 },
   // authed, no tokens burned — capped only so a stuck client can't flood the
   // review queue; one report per reply is enforced separately
   'ai-report': { hour: 30, day: 100 },

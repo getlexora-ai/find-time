@@ -107,6 +107,8 @@ export function toCalEvent(e: ApiEvent): CalEvent {
   if (e.pushFailed) cal.pushFailed = true;
   if (e.calendarId) cal.calendarId = e.calendarId;
   if (e.allDay) cal.allDay = true;
+  if (e.location) cal.location = e.location;
+  if (e.videoUrl) cal.videoUrl = e.videoUrl;
   if (en.date !== s.date) cal.endDate = en.date;
   return cal;
 }
@@ -121,6 +123,8 @@ export function toEventInput(c: Partial<CalEvent>): Partial<EventInput> {
   if (c.cat !== undefined) out.category = CAT_TO_CATEGORY[c.cat];
   if (c.notes !== undefined) out.notes = c.notes || null;
   if (c.project !== undefined) out.projectLabel = c.project || null;
+  if (c.location !== undefined) out.location = c.location || null;
+  if (c.videoUrl !== undefined) out.videoUrl = c.videoUrl || null;
 
   if (c.kind !== undefined) {
     out.itemType = KIND_TO_ITEM_TYPE[c.kind];
@@ -166,6 +170,8 @@ export function toEventPatch(current: CalEvent, patch: Partial<CalEvent>): Parti
   if (patch.cat !== undefined) out.category = CAT_TO_CATEGORY[patch.cat];
   if (patch.notes !== undefined) out.notes = patch.notes || null;
   if (patch.project !== undefined) out.projectLabel = patch.project || null;
+  if (patch.location !== undefined) out.location = patch.location || null;
+  if (patch.videoUrl !== undefined) out.videoUrl = patch.videoUrl || null;
 
   if (patch.kind !== undefined) {
     const k = toEventInput({ kind: patch.kind, flexible: merged.flexible, rrule: merged.rrule });

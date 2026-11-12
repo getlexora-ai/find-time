@@ -1,20 +1,20 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { fromMin, iso, MO, nowMin, pad, WD, wdIndex } from '@/calendar/cal-date';
-import { acceptEvent, createEventAsync, deleteEvent, setKind, updateEvent } from '@/calendar/cal-store';
+import { updateEvent } from '@/calendar/cal-store';
 import { workFor, type Hours } from '@/calendar/hours';
 import { allDayOn, planDay } from '@/calendar/layout';
 import type { CalEvent, LaidBlock } from '@/calendar/types';
 
-import { paintScene } from './scene';
+import { Popover, POP_H, type Pop, type Toast } from './Editor.web';
+
+export type { Toast };
 
 /** px per hour — matches `--hh` in prism.css. */
 export const HH = 44;
 const SNAP = 15;
 /** side-by-side blocks before the rest fold into "+n more": two in a week, three in a single day */
 const maxCols = (days: number) => (days === 1 ? 3 : 2);
-/** tallest popover (a new block with its kind chips), for keeping it on screen */
-const POP_H = 250;
 
 type Kind = 'focus' | 'event' | 'task' | 'routine' | 'ai';
 /** The five tile looks of the Prism grid. A break reads as a routine. */
@@ -51,13 +51,6 @@ type Drag = {
   moved: boolean;
 };
 
-type Pop = { wk?: string } & (
-  | { type: 'event'; ev: CalEvent; x: number; y: number }
-  | { type: 'draft'; date: string; s: number; t: number; x: number; y: number }
-  | { type: 'list'; title: string; items: CalEvent[]; x: number; y: number }
-);
-
-export type Toast = (msg: string, undo?: () => void) => void;
 
 const dayLabel = (d: string) => {
   const [y, m, dd] = d.split('-').map(Number);
@@ -128,7 +121,7 @@ export function Week({
     const g = grid.current!.getBoundingClientRect();
     const view = scroller.current!.getBoundingClientRect();
     let x = r.right - g.left + 6;
-    if (x + 270 > g.width) x = Math.max(4, r.left - g.left - 270);
+    if (x + 356 > g.width) x = Math.max(4, r.left - g.left - 356);
     const top = view.top - g.top + 56;
     const bottom = view.bottom - g.top - POP_H - 8;
     return { x, y: Math.max(top, Math.min(r.top - g.top, bottom)) };
@@ -403,244 +396,7 @@ export function Week({
           {cols}
         </div>
         {loading && events.length === 0 && <div className="loading">Loading your week…</div>}
-        {pop && <Popover key={pop.type === 'event' ? `e${pop.ev.id}` : `${pop.type}${pop.x},${pop.y}`} pop={pop} onClose={() => setPop(null)} onOpen={(ev) => setPop({ ...pop, type: 'event', ev } as Pop)} toast={toast} />}
-      </div>
-    </div>
-  );
-}
-
-/* ───────────────────────── popover ───────────────────────── */
-
-function Strip() {
-  const ref = useRef<HTMLCanvasElement>(null);
-  useLayoutEffect(() => {
-    if (ref.current) paintScene(ref.current, 0.7, 0.8);
-  }, []);
-  return (
-    <div className="strip">
-      <canvas ref={ref} className="scene" aria-hidden />
-    </div>
-  );
-}
-
-function Popover({
-  pop,
-  onClose,
-  onOpen,
-  toast,
-}: {
-  pop: Pop;
-  onClose: () => void;
-  onOpen: (ev: CalEvent) => void;
-  toast: Toast;
-}) {
-  const box = useRef<HTMLDivElement>(null);
-  const [title, setTitle] = useState(pop.type === 'event' ? pop.ev.title : '');
-  const [kind, setDraftKind] = useState<'event' | 'focus' | 'task'>('event');
-  const [busy, setBusy] = useState(false);
-
-  // Click outside closes; Escape closes.
-  useEffect(() => {
-    const down = (e: PointerEvent) => {
-      if (box.current && !box.current.contains(e.target as Node) && !(e.target as HTMLElement).closest('.ev, .adv')) {
-        // save a half-typed title first: the press outside no longer blurs it
-        (document.activeElement as HTMLElement | null)?.blur();
-        onClose();
-      }
-    };
-    const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    document.addEventListener('pointerdown', down);
-    document.addEventListener('keydown', key);
-    return () => {
-      document.removeEventListener('pointerdown', down);
-      document.removeEventListener('keydown', key);
-    };
-  }, [onClose]);
-
-  const style = { left: pop.x, top: pop.y };
-  const close = (
-    <button type="button" className="x" onClick={onClose} aria-label="Close">
-      ×
-    </button>
-  );
-
-  if (pop.type === 'list') {
-    return (
-      <div className="pop" role="dialog" aria-label={pop.title} style={style} ref={box}>
-        <Strip />
-        {close}
-        <div className="in">
-          <span className="k">{pop.title}</span>
-          {pop.items.map((ev) => (
-            <button key={ev.id} type="button" className={`ev ${cls(ev)} short`} style={{ position: 'relative', padding: '5px 8px' }} onClick={() => onOpen(ev)}>
-              <b>{ev.title}</b>
-              <span>{ev.allDay ? 'all day' : ev.start}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (pop.type === 'draft') {
-    const save = async () => {
-      if (busy) return;
-      setBusy(true);
-      try {
-        await createEventAsync({
-          date: pop.date,
-          start: fromMin(pop.s),
-          end: fromMin(pop.t),
-          title: title.trim() || 'New block',
-          cat: kind === 'focus' ? 'deep' : 'admin',
-          kind,
-        });
-        toast(`${title.trim() || 'New block'} added ${dayLabel(pop.date)} ${fromMin(pop.s)}`);
-        onClose();
-      } catch {
-        toast("Couldn't save that block. Check your connection and try again.");
-        setBusy(false);
-      }
-    };
-    return (
-      <div className="pop" role="dialog" aria-label="New block" style={style} ref={box}>
-        <Strip />
-        {close}
-        <form
-          className="in"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void save();
-          }}>
-          <span className="k">
-            <i style={{ background: SW[kind] }} />
-            New {LBL[kind].toLowerCase()}
-          </span>
-          <input className="title-in" autoFocus placeholder="What is it?" value={title} onChange={(e) => setTitle(e.target.value)} aria-label="Title" />
-          <div className="when">
-            {dayLabel(pop.date)} · {fromMin(pop.s)}–{fromMin(pop.t)}
-          </div>
-          <div className="kinds" role="group" aria-label="Kind">
-            {(['event', 'focus', 'task'] as const).map((k) => (
-              <button key={k} type="button" aria-pressed={kind === k} onClick={() => setDraftKind(k)}>
-                {LBL[k]}
-              </button>
-            ))}
-          </div>
-          <div className="acts">
-            <button type="submit" className="btn ink sm" disabled={busy}>
-              Save
-            </button>
-            <button type="button" className="btn line sm" onClick={onClose}>
-              Cancel
-            </button>
-          </div>
-        </form>
-      </div>
-    );
-  }
-
-  const ev = pop.ev;
-  const k = cls(ev);
-  const own = !ev.imported;
-  const editable = own || !!ev.googleEditable;
-  const when = ev.allDay ? `${dayLabel(ev.date)} · all day` : `${dayLabel(ev.date)} · ${ev.start}–${ev.end}`;
-  const meta = ev.imported
-    ? ev.googleEditable
-      ? 'From Google Calendar. Changes you make here go to Google.'
-      : 'From Google Calendar. Change it in Google.'
-    : k === 'ai'
-      ? 'Proposed by Plan with AI. Not on your calendar yet.'
-      : k === 'focus'
-        ? 'Protected. Find Time won’t move it.'
-        : ev.rrule
-          ? 'Repeats. Moving it moves every one.'
-          : k === 'task'
-            ? 'Your task, time-boxed.'
-            : 'Your block, in Find Time.';
-
-  const saveTitle = () => {
-    const t = title.trim();
-    if (!own || !t || t === ev.title) return;
-    void updateEvent(ev.id, { title: t }).then((ok) => !ok && toast("Couldn't rename it. Try again."));
-  };
-
-  const remove = async () => {
-    setBusy(true);
-    const ok = await deleteEvent(ev.id);
-    setBusy(false);
-    if (!ok) return toast("Couldn't delete it. Try again.");
-    onClose();
-    toast(
-      `Deleted ${ev.title}`,
-      own && !ev.rrule
-        ? () =>
-            void createEventAsync({ date: ev.date, start: ev.start, end: ev.end, title: ev.title, cat: ev.cat, kind: ev.kind, notes: ev.notes, project: ev.project })
-        : undefined,
-    );
-  };
-
-  return (
-    <div className="pop" role="dialog" aria-label="Event details" style={style} ref={box}>
-      <Strip />
-      {close}
-      <div className="in">
-        <span className="k">
-          <i style={{ background: SW[k] }} />
-          {LBL[k]}
-        </span>
-        {own ? (
-          <input
-            className="title-in"
-            value={title}
-            aria-label="Title"
-            onChange={(e) => setTitle(e.target.value)}
-            onBlur={saveTitle}
-            onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
-          />
-        ) : (
-          <h4>{ev.title}</h4>
-        )}
-        <div className="when">{when}</div>
-        {own && k !== 'ai' && !ev.allDay && (
-          <div className="kinds" role="group" aria-label="Kind">
-            {(['event', 'focus', 'task'] as const).map((kk) => (
-              <button
-                key={kk}
-                type="button"
-                aria-pressed={ev.kind === kk}
-                onClick={() => void setKind(ev.id, kk).then((ok) => (ok ? onOpen({ ...ev, kind: kk }) : toast("Couldn't change it. Try again.")))}>
-                {LBL[kk]}
-              </button>
-            ))}
-          </div>
-        )}
-        <div className="meta">{meta}</div>
-        <div className="acts">
-          {k === 'ai' ? (
-            <>
-              <button
-                type="button"
-                className="btn grad sm"
-                disabled={busy}
-                onClick={() =>
-                  void acceptEvent(ev.id).then((ok) => {
-                    onClose();
-                    toast(ok ? `${ev.title} added to your calendar` : "Couldn't add it. Try again.");
-                  })
-                }>
-                Add to calendar
-              </button>
-              <button type="button" className="btn line sm" disabled={busy} onClick={() => void remove()}>
-                Discard
-              </button>
-            </>
-          ) : editable && !ev.allDay ? (
-            <button type="button" className="btn danger sm" disabled={busy} onClick={() => void remove()}>
-              Delete
-            </button>
-          ) : null}
-        </div>
+        {pop && <Popover key={pop.type === 'event' ? `e${pop.ev.id}` : `${pop.type}${pop.x},${pop.y}`} pop={pop} events={events} onClose={() => setPop(null)} onOpen={(ev) => setPop({ ...pop, type: 'event', ev } as Pop)} toast={toast} />}
       </div>
     </div>
   );

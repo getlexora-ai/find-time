@@ -63,7 +63,14 @@ export type EventInput = {
   rrule?: string | null;
   projectLabel?: string | null;
   notes?: string | null;
+  /** where it happens, in person (your own blocks; Google's live in Google) */
+  location?: string | null;
+  /** the video call link: a pasted one, or the Meet link POST /api/events/:id/meet created */
+  videoUrl?: string | null;
 };
+
+/** POST /api/events/:id/meet */
+export type MeetResponse = { url: string } | { error: string; code?: 'needs-write-back' | 'repeats' | 'imported' };
 
 /** GET /api/calendar/accounts — Google connections for the "Calendars" panel. */
 export type ApiCalendar = {

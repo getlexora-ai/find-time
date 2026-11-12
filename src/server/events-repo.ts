@@ -147,10 +147,10 @@ export async function createEvent(userId: string, input: EventInput): Promise<Ap
     `insert into calendar_events
        (id, user_id, title, start_at, end_at, time_zone, category, item_type,
         flexibility, origin, is_draft, rrule, project_label, description,
-        all_day, recurrence_parent_id, exdates)
+        all_day, recurrence_parent_id, exdates, location, conference_url)
      values ($1,$2,$3,$4,$5,
              coalesce((select timezone from scheduler_profiles where user_id = $2), 'Europe/Berlin'),
-             $6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::timestamptz[])
+             $6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::timestamptz[],$17,$18)
      returning ${COLS}`,
     [
       `evt_${randomUUID()}`,
@@ -169,10 +169,16 @@ export async function createEvent(userId: string, input: EventInput): Promise<Ap
       input.allDay ?? false,
       input.seriesId ?? null,
       (input.exdates ?? []).map(dateToInstant),
+      input.location ?? null,
+      safeLink(input.videoUrl),
     ],
   );
   return toApi(row!);
 }
+
+/** A video link is opened from a button: only ever an http(s) address, never `javascript:` and friends. */
+export const safeLink = (v: string | null | undefined): string | null =>
+  v && /^https?:\/\/[^\s]+$/i.test(v.trim()) ? v.trim().slice(0, 2048) : null;
 
 /** 'YYYY-MM-DD' → the wall-clock midnight instant exdates are keyed by. */
 const dateToInstant = (d: string) => `${d.slice(0, 10)}T00:00:00.000Z`;
@@ -190,6 +196,8 @@ const PATCHABLE: Record<string, string> = {
   projectLabel: 'project_label',
   notes: 'description',
   allDay: 'all_day',
+  location: 'location',
+  videoUrl: 'conference_url',
 };
 
 /** An event's origin and whether Google lets you edit it here, or null when it does not exist for this user. */
@@ -215,7 +223,8 @@ export async function updateEvent(
   const ref: Record<string, string> = {};
   for (const [key, col] of Object.entries(PATCHABLE)) {
     if (key in patch) {
-      params.push((patch as Record<string, unknown>)[key]);
+      const v = (patch as Record<string, unknown>)[key];
+      params.push(key === 'videoUrl' ? safeLink(v as string | null) : v);
       ref[key] = `$${params.length}`;
       sets.push(`${col} = ${ref[key]}`);
     }
