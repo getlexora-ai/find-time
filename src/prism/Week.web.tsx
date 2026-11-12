@@ -11,7 +11,8 @@ import { paintScene } from './scene';
 /** px per hour — matches `--hh` in prism.css. */
 export const HH = 44;
 const SNAP = 15;
-const MAX_COLS = 4;
+/** side-by-side blocks before the rest fold into "+n more": two in a week, three in a single day */
+const maxCols = (days: number) => (days === 1 ? 3 : 2);
 /** tallest popover (a new block with its kind chips), for keeping it on screen */
 const POP_H = 250;
 
@@ -113,7 +114,7 @@ export function Week({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wkKey, ws]);
 
-  const plans = useMemo(() => isoDays.map((d) => planDay(events, d, ws, we, MAX_COLS)), [events, isoDays, ws, we]);
+  const plans = useMemo(() => isoDays.map((d) => planDay(events, d, ws, we, maxCols(n))), [events, isoDays, ws, we, n]);
   const allDay = useMemo(() => isoDays.map((d) => allDayOn(events, d)), [events, isoDays]);
   const anyAllDay = allDay.some((l) => l.length);
 
@@ -318,14 +319,9 @@ export function Week({
         }}
         onPointerMove={onMove}
         onPointerUp={onUp}>
-        {work ? (
-          <>
-            {work.start > ws && <div className="off" style={{ top: 0, height: y(work.start * 60) }} />}
-            {work.end < we && <div className="off" style={{ top: y(work.end * 60), bottom: 0 }} />}
-          </>
-        ) : (
-          <div className="off" style={{ top: 0, bottom: 0 }} />
-        )}
+        {/* outside work hours: a faint tint. A day off stays plain — not a grey wall. */}
+        {work && work.start > ws && <div className="off" style={{ top: 0, height: y(work.start * 60) }} />}
+        {work && work.end < we && <div className="off" style={{ top: y(work.end * 60), bottom: 0 }} />}
         {d === todayIso && now >= ws * 60 && now < we * 60 && <div className="now" style={{ top: y(now) }} />}
         {plan.blocks.map((b) => tile(b, di))}
         {ghostIn(di)}
@@ -336,8 +332,9 @@ export function Week({
             className="ev event short"
             style={{ top: y(o.s) + 1, height: 18, left: `calc(${(o.col / o.cols) * 100}% + 3px)`, width: `calc(${100 / o.cols}% - 6px)` }}
             onPointerDown={(e) => e.stopPropagation()}
+            aria-label={`${o.items.length} more at ${fromMin(o.s)}`}
             onClick={listAt(`${dayLabel(d)} · ${fromMin(o.s)}`, o.items)}>
-            <b>+{o.items.length} more</b>
+            <b>+{o.items.length}</b>
           </button>
         ))}
         {(creating || draft) && (
@@ -373,8 +370,7 @@ export function Week({
                 {outside.length > 0 && (
                   <button
                     type="button"
-                    className="chip"
-                    style={{ marginLeft: 'auto', padding: '0 7px', fontSize: 11 }}
+                    className="more"
                     title="Outside the hours shown"
                     onClick={listAt(`${dayLabel(isoDays[i])} · outside your hours`, outside)}>
                     +{outside.length}
