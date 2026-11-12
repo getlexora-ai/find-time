@@ -5,7 +5,7 @@ import { View } from 'react-native';
 import { previewAccounts as setPreviewAccounts } from '@/calendar/account-store';
 import { startPreviewChat } from '@/calendar/agent-store';
 import { startPreview } from '@/calendar/cal-store';
-import { CalendarScreen } from '@/calendar/CalendarScreen';
+import { PrismApp } from '@/prism/PrismApp';
 import { ToastProvider } from '@/calendar/components/Toast';
 import { previewAccounts, previewChat, previewEvents, previewTaskData } from '@/calendar/preview/fixture';
 import { previewTasks } from '@/calendar/tasks-store';
@@ -34,7 +34,7 @@ export default function Preview() {
   if (!mounted || !ready) return <View style={{ flex: 1, backgroundColor: '#FAFAFA' }} />;
   return (
     <ToastProvider>
-      <CalendarScreen />
+      <PrismApp />
     </ToastProvider>
   );
 }

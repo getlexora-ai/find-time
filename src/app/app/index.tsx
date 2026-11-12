@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { View } from 'react-native';
 
 import { refreshAccounts } from '@/calendar/account-store';
-import { CalendarScreen } from '@/calendar/CalendarScreen';
+import { PrismApp } from '@/prism/PrismApp';
 import { useMounted } from '@/design/useMounted';
 import { useAuthState } from '@/lib/session';
 
@@ -30,8 +30,8 @@ export default function CalendarRoute() {
     if (isLoaded && isSignedIn) void refreshAccounts();
   }, [isLoaded, isSignedIn]);
 
-  if (!mounted || !isLoaded) return <View style={{ flex: 1, backgroundColor: '#FAFAFA' }} />;
+  if (!mounted || !isLoaded) return <View style={{ flex: 1, backgroundColor: '#EEF0FB' }} />;
   if (!isSignedIn) return <Redirect href="/login" />;
   if (!user?.onboarded) return <Redirect href="/welcome" />;
-  return <CalendarScreen />;
+  return <PrismApp />;
 }

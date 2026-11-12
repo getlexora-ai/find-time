@@ -1,5 +1,17 @@
 # Prism look + Plan with AI features — build plan
 
+> **Update 2026-11-12 (later):** the user asked to start from scratch from the Prism
+> artifact instead of repainting the old components. Phase A below (editing
+> `tokens.ts`, restyling old tiles) is **replaced** by `src/prism/`: the Dashboard
+> rebuilt as web DOM from the artifact's own markup and CSS (`prism.css`), on the
+> existing stores (cal-store, tasks-store, hours, account-store, layout.ts). `/app`
+> and `/preview` render `PrismApp` on web; native keeps `CalendarScreen` for now.
+> Done so far: drawer, header band on the painted scene, tasks column, week grid
+> (popover, accept/discard proposals, drag to move/resize, click or drag to create,
+> rename, change kind, delete with Undo, all-day lane), Tasks board, Insights,
+> Habits. Next: the Plan with AI column (slice 1 below, built from the artifact's
+> `aiHTML`), then history.
+
 Written 2026-11-12 on branch `prism-ai` (off `origin/ai-loop` @ a5ea935). Every file
 reference below was checked against that commit.
 
