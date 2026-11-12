@@ -8,6 +8,7 @@ import { AccountButton } from '@/calendar/components/AccountButton';
 import { useHours, workFor, type Hours } from '@/calendar/hours';
 import { addPreviewTask, finishTask, isPreviewTasks, refreshTasks, stopHabit, useTasks } from '@/calendar/tasks-store';
 import type { CalEvent } from '@/calendar/types';
+import { apiFetch } from '@/lib/api';
 import type { ApiTask } from '@/lib/api-types';
 
 import './prism.css';
@@ -200,6 +201,65 @@ export function PrismApp() {
     return off.size ? events.filter((e) => !(e.calendarId && off.has(e.calendarId))) : events;
   }, [accounts, events]);
 
+  // Find Time is a calendar too: its own blocks (focus, routines, tasks, proposals,
+  // events made here). Hiding it is a view: the planner still plans around them.
+  const [ftShown, setFtShown] = useState(() => {
+    try {
+      return typeof window === 'undefined' || window.localStorage.getItem('ft.showFindTime') !== '0';
+    } catch {
+      return true;
+    }
+  });
+  const showFindTime = (v: boolean) => {
+    setFtShown(v);
+    try {
+      window.localStorage.setItem('ft.showFindTime', v ? '1' : '0');
+    } catch {
+      /* private window: remembered for this visit only */
+    }
+  };
+  const onGrid = useMemo(() => (ftShown ? shown : shown.filter((e) => e.imported)), [ftShown, shown]);
+
+  // Write-back (scheduler_profiles.push_focus): a copy of each kept Find Time block,
+  // private and busy, on your primary Google calendar, so people booking you see it.
+  const primary = calendars.find((c) => c.isPrimary);
+  const [copyOn, setCopyOn] = useState(false);
+  const [copyBusy, setCopyBusy] = useState(false);
+  useEffect(() => {
+    if (!signedIn || isPreviewTasks()) return;
+    apiFetch('/api/calendar/settings')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b: { settings?: { pushFocus?: boolean } } | null) => b?.settings && setCopyOn(!!b.settings.pushFocus))
+      .catch(() => {});
+  }, [signedIn]);
+  const setCopy = async (on: boolean) => {
+    if (copyBusy) return;
+    if (isPreviewTasks()) {
+      setCopyOn(on);
+      return;
+    }
+    setCopyBusy(true);
+    try {
+      const res = await apiFetch('/api/calendar/settings', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ pushFocus: on }),
+      });
+      if (!res.ok) {
+        const b = (await res.json().catch(() => ({}))) as { error?: string };
+        toast(b.error ?? "Couldn't change that. Try again.");
+        return;
+      }
+      setCopyOn(on);
+      toast(on ? `Find Time blocks are now copied to ${primary?.name ?? 'your Google calendar'}, as busy.` : 'Find Time blocks stay in Find Time only.');
+      void refresh();
+    } catch {
+      toast("Couldn't reach Find Time. Try again.");
+    } finally {
+      setCopyBusy(false);
+    }
+  };
+
   const nav = (p: Page, label: string, icon: React.ReactNode, extra?: React.ReactNode) => (
     <button type="button" className="d-item" aria-current={page === p ? 'page' : undefined} title={label} onClick={() => setPage(p)}>
       {icon}
@@ -230,6 +290,17 @@ export function PrismApp() {
           {nav('habits', 'Habits', I.habits, habits.length ? <span className="ct">{habits.length}</span> : null)}
           <div className="d-sec">
             <h5>Calendars</h5>
+            <label className="d-cal" style={{ ['--c' as string]: 'var(--focus-sw)' }} title="What Find Time made: focus, routines, tasks, proposals and events you added here">
+              <input type="checkbox" checked={ftShown} onChange={() => showFindTime(!ftShown)} />
+              <span>Find Time</span>
+              <small>This app</small>
+            </label>
+            {calendars.length > 0 && (
+              <label className="d-sub" title="Copies each block you keep (not repeating ones) to your primary Google calendar, private and busy">
+                <input type="checkbox" role="switch" checked={copyOn} disabled={copyBusy} onChange={() => void setCopy(!copyOn)} />
+                <span>Copy to Google{primary ? ` · ${primary.name}` : ''}</span>
+              </label>
+            )}
             {calendars.length ? (
               calendars.map((c) => (
                 <label key={c.id} className="d-cal" style={{ ['--c' as string]: c.color || 'var(--event-bd)' }} title={c.account}>
@@ -250,7 +321,8 @@ export function PrismApp() {
             )}
           </div>
           <div className="d-mini" aria-hidden>
-            {calendars.slice(0, 4).map((c) => (
+            <i style={{ background: 'var(--focus-sw)' }} />
+            {calendars.slice(0, 3).map((c) => (
               <i key={c.id} style={{ background: c.color }} />
             ))}
           </div>
@@ -295,7 +367,7 @@ export function PrismApp() {
                     </button>
                   </div>
                 ) : (
-                  <Week days={days} events={shown} hours={hours} loading={load.status === 'loading'} toast={toast} looks={looks} />
+                  <Week days={days} events={onGrid} hours={hours} loading={load.status === 'loading'} toast={toast} looks={looks} />
                 )}
               </section>
             </div>
