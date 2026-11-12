@@ -3,6 +3,7 @@ import { listEvents } from '@/server/events-repo';
 import { createHabit, findHabits, updateHabit as saveHabit } from '@/server/habits-repo';
 import { finishTask, postponeTask as savePostpone, stopHabit } from '@/server/task-actions';
 import { type ApiTask, createTask, findOpenTasks, updateTask as saveTask } from '@/server/tasks-repo';
+import { onCalendars, plannedAroundNote } from '../holidays';
 import { planInputFor } from '../plan-input';
 import { MAX_HORIZON_DAYS, dueLabel, habitWeeks, planWeek as buildPlan, startLabel, verifyPlan } from '../plan-week';
 import { saveProposals } from '../repo';
@@ -223,7 +224,8 @@ export const planWeek: ToolHandler = async (_args, ctx) => {
     return { fail: 'Could not read your calendar.' };
   }
 
-  const { input, others } = planInputFor(planEvents, openTasks, habits, profile, nowISO);
+  // Marked with their calendars, so a public holiday is planned as a day off.
+  const { input, others } = planInputFor(onCalendars(planEvents, ctx.calendars), openTasks, habits, profile, nowISO);
   const plan = buildPlan(input);
   // Bad rows are left out or repaired by the planner, never guessed at; say so in the logs.
   if (plan.issues.length) console.warn('ai/chat planWeek input', plan.issues);
@@ -300,10 +302,13 @@ export const planWeek: ToolHandler = async (_args, ctx) => {
   // Low priority, no deadline: said once, as a group — not as failures.
   if (leftOut.length) lines.push(`Left out for now (low priority, no deadline): ${leftOut.map((u) => u.title).join(', ')}.`);
   for (const n of plan.notes.slice(0, 3)) lines.push(n);
+  if (plan.holidays.length) lines.push(plannedAroundNote(plan.holidays));
   return {
     ...(proposals ? { kind: 'plan' as const, proposals } : {}),
     reply: lines.join('\n'),
     // The planner states what doesn't fit; the AI turns it into a choice (turn.ts).
+    // Holiday names past the turn's window are read here: the saved copy leaves them out.
+    titlesRead: plan.holidays.flatMap((h) => (h.name ? [h.name] : [])),
     ...(needed.length ? { facts: needed.map((u) => `${u.title} doesn't fit: ${u.reason}.${u.options.length ? ` What would help: ${u.options.join('; ')}.` : ''}`) } : {}),
   };
 };

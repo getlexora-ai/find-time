@@ -1,7 +1,7 @@
 import { requireUserId, unauthorized } from '@/server/auth/user';
 import { isConfigured } from '@/server/db';
 import { createEvent, listEvents, type EventInput } from '@/server/events-repo';
-import { pushEvent } from '@/server/google/push';
+import { canCopyTo, pushEvent } from '@/server/google/push';
 
 function guard(): Response | null {
   if (!isConfigured()) {
@@ -37,8 +37,12 @@ export async function POST(request: Request): Promise<Response> {
     if (!body.title || !body.start || !body.end) {
       return Response.json({ error: 'title, start and end are required.' }, { status: 400 });
     }
+    // A calendar chosen in the editor: only one you can write to (null = Find Time only).
+    if (body.copyTo != null && (typeof body.copyTo !== 'string' || !(await canCopyTo(userId, body.copyTo)))) {
+      return Response.json({ error: "Find Time can't add events to that calendar." }, { status: 400 });
+    }
     const event = await createEvent(userId, body as EventInput);
-    const pushed = await pushEvent(userId, event.id); // no-op unless write-back is on; never throws
+    const pushed = await pushEvent(userId, event.id); // no-op for Find Time only; never throws
     return Response.json({ event: { ...event, pushFailed: pushed ? undefined : true } }, { status: 201 });
   } catch (err) {
     console.error('POST /api/events', err);

@@ -46,6 +46,8 @@ export type BusyCandidate = {
   rsvp?: string | null;
   allDay?: boolean;
   origin?: string;
+  /** on a public-holiday calendar (holidays.ts): a day off for work, not busy time */
+  holiday?: boolean;
 };
 
 /**
@@ -57,8 +59,13 @@ export type BusyCandidate = {
  *     its hours. Google shows all-day events as free unless someone marked
  *     them busy, so an imported one that still reads busy — a holiday, an
  *     offsite — was marked on purpose and does block the day.
+ *   - a public holiday is the exception: it is a day off for work, handled
+ *     as one by the planners (holidays.ts), never busy time.
  */
 export function blocksTime(e: BusyCandidate): boolean {
+  // A public holiday is a day off, not an event: work stays off the day
+  // (offDates, plan-week `holidays`), personal time and kept blocks don't move.
+  if (e.holiday) return false;
   if (e.flexibility === 'flexible') return false;
   if (e.free) return false;
   if (e.rsvp === 'declined') return false;
@@ -86,6 +93,8 @@ export type FindSpec = {
   maxPerDay?: number;
   /** Skip Saturday and Sunday (UTC weekday, matching the wall-clock convention). */
   skipWeekends?: boolean;
+  /** Whole days (YYYY-MM-DD) with no slots: public holidays for work (holidays.ts). */
+  offDates?: string[];
   /** Work category, used by the scorer to pick the right learned preferences.
    *  Ignored by the first-fit `findFreeSlots`. */
   category?: string;
@@ -128,12 +137,14 @@ export function findFreeSlots(busy: Busy[], spec: FindSpec): Slot[] {
     placedIntervals.some((b) => s < b.e && e > b.s);
 
   const perDay = spec.maxPerDay && spec.maxPerDay > 0 ? spec.maxPerDay : Infinity;
+  const off = new Set(spec.offDates ?? []);
 
   for (let day = dayStart(earliest); day <= latest && placed.length < count; day += DAY) {
     if (spec.skipWeekends) {
       const dow = new Date(day).getUTCDay();
       if (dow === 0 || dow === 6) continue;
     }
+    if (off.has(iso(day).slice(0, 10))) continue;
     const windowStart = Math.max(earliest, day + spec.dayStartHour * 60 * MIN);
     const windowEnd = Math.min(latest, day + spec.dayEndHour * 60 * MIN);
     // Align the first candidate to the 15-minute grid.
@@ -216,12 +227,14 @@ export function rankFreeSlots(busy: Busy[], spec: FindSpec, profile: AgentProfil
 
   const hardRules = profile.rules.filter((r) => r.hard);
   const out: RankedSlot[] = [];
+  const off = new Set(spec.offDates ?? []);
 
   for (let day = dayStart(earliest); day <= latest; day += DAY) {
     if (spec.skipWeekends) {
       const dow = new Date(day).getUTCDay();
       if (dow === 0 || dow === 6) continue;
     }
+    if (off.has(iso(day).slice(0, 10))) continue;
     const windowStart = Math.max(earliest, day + spec.dayStartHour * 60 * MIN);
     const windowEnd = Math.min(latest, day + spec.dayEndHour * 60 * MIN);
     let c = Math.ceil(windowStart / stepMs) * stepMs;

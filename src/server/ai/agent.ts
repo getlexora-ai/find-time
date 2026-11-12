@@ -4,6 +4,7 @@ import { dayWindowFor, whenOptions } from './clarify.ts';
 import { conflictQuestion, findConflict, type NewItem } from './contradictions.ts';
 import { blocksTime } from './find-time.ts';
 import { FORM_TOOL, fromForm } from './form.ts';
+import { type CalEvent, holidaysIn } from './holidays.ts';
 import { saidClock, saidLength, type Said } from './grounded.ts';
 import { preferenceCard } from './learn.ts';
 import { type AgentItem, agentStep, type ToolDef } from './llm.ts';
@@ -54,7 +55,7 @@ const categoryProp = { type: ['string', 'null'], enum: [...CATEGORIES, null], de
 export const AGENT_TOOLS: ToolDef[] = [
   {
     name: 'free_time',
-    description: 'How much free time the user has: free minutes and the free gaps per day, counted by the engine. Use for any question about free or busy time.',
+    description: 'How much free time the user has: free minutes and the free gaps per day, counted by the engine. Use for any question about free or busy time. A public holiday is not a working day: public_holiday says so, and the app plans no work on it.',
     strict: true,
     input_schema: obj({ date: { type: 'string', description: 'YYYY-MM-DD, the first day' }, days: nul('integer', '1-7 days from date; null = 1') }),
   },
@@ -314,7 +315,8 @@ export type AgentCtx = {
   nowISO: string;
   horizonISO: string;
   profile: AgentProfile;
-  events: ApiEvent[];
+  /** with their calendar's name and public holidays marked (holidays.ts) */
+  events: CalEvent[];
   tasks?: ApiTask[];
   habits?: ApiHabit[];
   /** the About you page: their instructions and the facts in memory */
@@ -324,9 +326,9 @@ export type AgentCtx = {
   /** memory writes this turn, capped */
   memoryWrites?: number;
   /** the calendar past the turn's window, for a lookup that reaches further */
-  eventsIn?: (fromISO: string, toISO: string) => Promise<ApiEvent[]>;
+  eventsIn?: (fromISO: string, toISO: string) => Promise<CalEvent[]>;
   /** what lookups found this turn: an anchor can be one, and scrub.ts needs their titles */
-  seen?: ApiEvent[];
+  seen?: CalEvent[];
   readCtx: UnderstandContext;
   step: (s: { tool: string; label: string; detail?: string; ms?: number }) => void;
   /** count one model call against the user's credit */
@@ -435,6 +437,8 @@ export async function dispatch(name: string, args: Record<string, unknown>, c: A
       const wider = lastISO > c.horizonISO ? await c.eventsIn?.(`${date}T00:00:00.000Z`, lastISO).catch(() => null) : c.events;
       if (!wider) return { kind: 'feedback', output: { error: 'That date could not be read. Tell the user you could not check it, and never say it is free.' } };
       const days = freeTime(wider, c.profile, c.nowISO, date, span);
+      // A holiday's name read past the turn's window: scrub.ts keeps it out of the saved reply.
+      if (wider !== c.events) c.seen?.push(...wider.filter((e) => e.holiday));
       const total = days.reduce((n, d) => n + d.free_min, 0);
       c.step({ tool: STEP.freeTime, label: 'Counted your free time', detail: `${Math.floor(total / 60)}h ${total % 60}m free · ${days.length} day${days.length === 1 ? '' : 's'}` });
       return { kind: 'feedback', output: { days } };
@@ -519,7 +523,7 @@ export async function dispatch(name: string, args: Record<string, unknown>, c: A
       const latestISO = before?.start ?? (to || from ? `${nextDay(to ?? from!)}T00:00:00.000Z` : undefined);
       if (!earliestISO && !latestISO) {
         const busy = c.events.filter(blocksTime).map((e) => ({ start: e.start, end: e.end }));
-        const options = whenOptions({ busy, profile: c.profile, category, durationMin: duration, nowMs: Date.parse(c.nowISO), horizonMs: Date.parse(c.horizonISO) });
+        const options = whenOptions({ busy, profile: c.profile, category, durationMin: duration, nowMs: Date.parse(c.nowISO), horizonMs: Date.parse(c.horizonISO), holidays: holidaysIn(c.events) });
         return asOutcome(missing(['which day'], { days_with_room: options }));
       }
       if (earliestISO && earliestISO >= c.horizonISO) {

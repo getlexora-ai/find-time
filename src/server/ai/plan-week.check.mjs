@@ -499,4 +499,39 @@ const dayOfB = (b) => b.startISO.slice(0, 10);
   assert.match(problems, /Gym: 2 sessions in a week for 1x a week/);
 }
 
+// ── public holidays: a day off for work, like a weekend ─────────────────────
+{
+  const XMAS = [{ date: '2026-09-09', name: 'Test Day' }];
+  const t = task({ id: 'r', title: 'Report', notBeforeISO: D(9, '00:00'), dueByISO: due(10) });
+  // Without the holiday it goes on Wed 9; with it, on Thu 10 — and the plan says why.
+  assert.equal(of(run({ tasks: [t] }), 'r')[0].startISO.slice(0, 10), '2026-09-09');
+  const p = run({ tasks: [t], holidays: XMAS });
+  assert.equal(of(p, 'r')[0].startISO.slice(0, 10), '2026-09-10');
+  assert.deepEqual(p.holidays, XMAS);
+  // Only the holiday left before the deadline: a miss, never a block on it.
+  const only = run({ tasks: [task({ id: 'r', title: 'Report', notBeforeISO: D(9, '00:00'), dueByISO: due(9) })], holidays: XMAS });
+  assert.equal(of(only, 'r').length, 0);
+  assert.equal(only.unplaced.length, 1);
+  // Personal time still goes on it, every day.
+  const gym = run({ tasks: [], habits: [habit({ id: 'g', perWeek: 7 })], holidays: XMAS });
+  assert.ok(ofH(gym, 'g').some((b) => b.startISO.startsWith('2026-09-09')));
+  assert.deepEqual(gym.holidays, [], 'no work to plan: nothing to say about the holiday');
+  // A block already on the holiday stays where it is.
+  const kept = run({
+    tasks: [task({ id: 'r', title: 'Report', dueByISO: due(11) })],
+    existing: [{ eventId: 'e1', taskId: 'r', startISO: D(9, '10:00'), endISO: D(9, '11:00'), pinned: false }],
+    holidays: XMAS,
+  });
+  assert.deepEqual(of(kept, 'r').map((b) => [b.status, b.startISO]), [['kept', D(9, '10:00')]]);
+  assert.deepEqual(kept.moved, []);
+  // On a weekend it changes nothing, and isn't mentioned.
+  const tasks = [task({ id: 'r', title: 'Report', durationMin: 240, splittable: true, dueByISO: due(14) })];
+  const sat = run({ tasks, holidays: [{ date: '2026-09-12', name: null }] });
+  assert.deepEqual(sat.blocks, run({ tasks }).blocks);
+  assert.deepEqual(sat.holidays, []);
+  // verifyPlan names it.
+  const bad = { blocks: [{ taskId: 'r', title: 'Report', category: 'deep-work', status: 'new', score: 0, reason: '', startISO: D(9, '10:00'), endISO: D(9, '11:00') }], unplaced: [], order: ['r'], moved: [] };
+  assert.match(verifyPlan({ nowISO: NOW, busy: [], existing: [], profile, tasks: [t], holidays: XMAS }, bad).join('\n'), /on a day off \(a public holiday\)/);
+}
+
 console.log('plan-week.check: ok');

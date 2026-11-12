@@ -13,8 +13,8 @@ import type { ApiTask } from '@/lib/api-types';
 
 import './prism.css';
 import { paintScene } from './scene';
-import { calLooks } from './cal-look';
-import { cls, LBL, TASK_DRAG, Week, type Toast } from './Week.web';
+import { calLooks, lookOf } from './cal-look';
+import { cls, LBL, TASK_DRAG, Week, type TaskPick, type Toast } from './Week.web';
 
 type Page = 'planner' | 'tasks' | 'insights' | 'habits';
 const DRAWER_KEY = 'ft.px.drawer';
@@ -44,7 +44,9 @@ function busyIn(events: CalEvent[], day: string, a: number, b: number): number {
   }
   return total;
 }
-const freeOn = (events: CalEvent[], hours: Hours, d: Date) => {
+/** Free working minutes on `d`. A public holiday (`off`) is a day off: no working time, as the planner sees it. */
+const freeOn = (events: CalEvent[], hours: Hours, d: Date, off?: ReadonlySet<string>) => {
+  if (off?.has(iso(d))) return 0;
   const w = workFor(hours, wdIndex(d));
   if (!w) return 0;
   return Math.max(0, (w.end - w.start) * 60 - busyIn(events, iso(d), w.start * 60, w.end * 60));
@@ -53,6 +55,7 @@ const freeOn = (events: CalEvent[], hours: Hours, d: Date) => {
 const dueDate = (t: ApiTask) => (t.dueBy ? new Date(t.dueBy) : null);
 const shortDay = (d: Date) => `${WD_LONG[wdIndex(d)].slice(0, 3)} ${d.getDate()} ${MO[d.getMonth()].slice(0, 3)}`;
 const isOpen = (t: ApiTask) => t.status !== 'done' && t.status !== 'archived';
+const pickOf = (t: ApiTask): TaskPick => ({ id: t.id, title: t.title, durationMin: t.durationMin, category: t.category });
 
 /* ───────────────────────── icons (from the artifact) ───────────────────────── */
 
@@ -167,9 +170,23 @@ export function PrismApp() {
 
   const go = useCallback((dir: number) => setCursor((c) => addDays(c, dir * step)), [step]);
 
-  // [ ] drawer · ← → week · T today. Never while typing.
+  // A task picked to place by tap (touch) or keyboard; the grid's next tap on a time places it.
+  const [picked, setPicked] = useState<TaskPick | null>(null);
+  const pickTask = (t: ApiTask) => setPicked((p) => (p?.id === t.id ? null : pickOf(t)));
+  // a picked task that was finished elsewhere can't be placed
+  useEffect(() => {
+    if (picked && !tasks.some((t) => t.id === picked.id && isOpen(t))) setPicked(null);
+  }, [picked, tasks]);
+
+  // [ ] drawer · ← → week · T today. Never while typing. Esc drops a picked task;
+  // while one is picked the arrows move it on the grid instead (Week).
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && picked) {
+        setPicked(null);
+        return;
+      }
+      if (picked && e.key.startsWith('Arrow')) return;
       const t = e.target;
       const typing = t instanceof Element && !!t.closest('input, textarea, [contenteditable], [role="listbox"], [role="dialog"]');
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -181,7 +198,7 @@ export function PrismApp() {
     };
     document.addEventListener('keydown', key);
     return () => document.removeEventListener('keydown', key);
-  }, [go, page]);
+  }, [go, page, picked]);
 
   const open = tasks.filter(isOpen);
   const rangeTitle = (() => {
@@ -218,6 +235,17 @@ export function PrismApp() {
       /* private window: remembered for this visit only */
     }
   };
+  // Days covered by an all-day event from a Google holiday calendar.
+  const holidayDays = useMemo(() => {
+    const set = new Set<string>();
+    for (const e of shown) {
+      if (!e.allDay || !lookOf(e, looks)?.holiday) continue;
+      const [y, m, dd] = e.date.split('-').map(Number);
+      const end = e.endDate ?? iso(new Date(y, m - 1, dd + 1));
+      for (let d = new Date(y, m - 1, dd); iso(d) < end; d = addDays(d, 1)) set.add(iso(d));
+    }
+    return set;
+  }, [shown, looks]);
   const onGrid = useMemo(() => (ftShown ? shown : shown.filter((e) => e.imported)), [ftShown, shown]);
 
   // Write-back (scheduler_profiles.push_focus): a copy of each kept Find Time block,
@@ -251,7 +279,11 @@ export function PrismApp() {
         return;
       }
       setCopyOn(on);
-      toast(on ? `Find Time blocks are now copied to ${primary?.name ?? 'your Google calendar'}, as busy.` : 'Find Time blocks stay in Find Time only.');
+      toast(
+        on
+          ? `New Find Time blocks now go to ${primary?.name ?? 'your Google calendar'}. Planned sessions show as free until the day before.`
+          : 'Find Time blocks stay in Find Time only.',
+      );
       void refresh();
     } catch {
       toast("Couldn't reach Find Time. Try again.");
@@ -296,7 +328,7 @@ export function PrismApp() {
               <small>This app</small>
             </label>
             {calendars.length > 0 && (
-              <label className="d-sub" title="Copies each block you keep (not repeating ones) to your primary Google calendar, private and busy">
+              <label className="d-sub" title="New blocks go to your primary Google calendar, private (not repeating ones). Change a single block in its editor.">
                 <input type="checkbox" role="switch" checked={copyOn} disabled={copyBusy} onChange={() => void setCopy(!copyOn)} />
                 <span>Copy to Google{primary ? ` · ${primary.name}` : ''}</span>
               </label>
@@ -334,10 +366,10 @@ export function PrismApp() {
         </nav>
 
         <div className="main">
-          <Band events={shown} hours={hours} />
+          <Band events={shown} hours={hours} off={holidayDays} />
           {page === 'planner' ? (
             <div className="work">
-              <TaskColumn tasks={open} events={shown} hours={hours} days={days} toast={toast} />
+              <TaskColumn tasks={open} events={shown} hours={hours} off={holidayDays} days={days} toast={toast} picked={picked?.id ?? null} onPick={pickTask} />
               <section className="cal" aria-label="Week">
                 <div className="cal-top">
                   <span className="m">{rangeTitle}</span>
@@ -352,13 +384,33 @@ export function PrismApp() {
                   </button>
                   <div className="legend">
                     {(['focus', 'event', 'task', 'routine', 'ai'] as const).map((k) => (
-                      <span key={k}>
+                      <span key={k} title={k === 'event' ? 'An event you made in Find Time' : undefined}>
                         <i className={`ev ${k}`} style={{ position: 'static', padding: 0, width: 12, height: 9, borderRadius: 3 }} />
                         {LBL[k]}
                       </span>
                     ))}
+                    {calendars.length > 0 && (
+                      <span title="Events from Google take their calendar's colour">
+                        <i
+                          className="ev gcal"
+                          style={{ position: 'static', padding: 0, width: 12, height: 9, borderLeftWidth: 2, ['--cc' as string]: primary?.color || 'var(--blue)' }}
+                        />
+                        Google · calendar colour
+                      </span>
+                    )}
                   </div>
                 </div>
+                {picked && (
+                  <div className="pick" role="status">
+                    <span>
+                      Tap a time to place <b>{picked.title}</b>
+                      <span className="keys"> · or arrow keys and Enter</span> · Esc to cancel
+                    </span>
+                    <button type="button" className="chip" onClick={() => setPicked(null)}>
+                      Cancel
+                    </button>
+                  </div>
+                )}
                 {load.status === 'error' && events.length === 0 ? (
                   <div className="loading">
                     Couldn&apos;t load your calendar.{' '}
@@ -367,14 +419,22 @@ export function PrismApp() {
                     </button>
                   </div>
                 ) : (
-                  <Week days={days} events={onGrid} hours={hours} loading={load.status === 'loading'} toast={toast} looks={looks} />
+                  <Week days={days} events={onGrid} hours={hours} loading={load.status === 'loading'} toast={toast} looks={looks} pick={picked} onPick={setPicked} />
                 )}
               </section>
             </div>
           ) : page === 'tasks' ? (
-            <TasksBoard tasks={tasks} toast={toast} />
+            <TasksBoard
+              tasks={tasks}
+              toast={toast}
+              onPlace={(t) => {
+                // the phone's way onto the calendar: no tasks column there, so pick here and go
+                setPicked(pickOf(t));
+                setPage('planner');
+              }}
+            />
           ) : page === 'insights' ? (
-            <Insights events={shown} hours={hours} tasks={open} />
+            <Insights events={shown} hours={hours} off={holidayDays} tasks={open} />
           ) : (
             <Habits habits={habits} toast={toast} />
           )}
@@ -401,7 +461,7 @@ export function PrismApp() {
 
 /* ───────────────────────── header band ───────────────────────── */
 
-function Band({ events, hours }: { events: CalEvent[]; hours: Hours }) {
+function Band({ events, hours, off }: { events: CalEvent[]; hours: Hours; off: ReadonlySet<string> }) {
   const cv = useRef<HTMLCanvasElement>(null);
   const [now, setNow] = useState(nowMin());
   useEffect(() => {
@@ -423,7 +483,7 @@ function Band({ events, hours }: { events: CalEvent[]; hours: Hours }) {
   const H1 = 22;
   const pct = (m: number) => `${(((Math.min(H1 * 60, Math.max(H0 * 60, m)) - H0 * 60) / ((H1 - H0) * 60)) * 100).toFixed(2)}%`;
   const todays = events.filter((e) => e.date === day && !e.allDay);
-  const free = freeOn(events, hours, d);
+  const free = freeOn(events, hours, d, off);
   const waiting = events.filter((e) => e.kind === 'ai' && e.date >= day).length;
   const hhmm = `${String(Math.floor(now / 60)).padStart(2, '0')}:${String(now % 60).padStart(2, '0')}`;
 
@@ -475,14 +535,22 @@ function TaskColumn({
   tasks,
   events,
   hours,
+  off,
   days,
   toast,
+  picked,
+  onPick,
 }: {
   tasks: ApiTask[];
   events: CalEvent[];
   hours: Hours;
+  /** public holidays: no working time */
+  off: ReadonlySet<string>;
   days: Date[];
   toast: Toast;
+  /** id of the task picked to place by tap, if any */
+  picked: string | null;
+  onPick: (t: ApiTask) => void;
 }) {
   const today = new Date(new Date().toDateString());
   const weekEnd = addDays(startOfWeek(today), 7);
@@ -494,7 +562,7 @@ function TaskColumn({
 
   // Does this week's work fit? Task time due this week vs free time left this week.
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(days[0]), i)).filter((d) => d >= today);
-  const freeWeek = weekDays.reduce((s, d) => s + freeOn(events, hours, d), 0);
+  const freeWeek = weekDays.reduce((s, d) => s + freeOn(events, hours, d, off), 0);
   const need = [...overdue, ...thisWeek].reduce((s, t) => s + t.durationMin, 0);
   const proposed = events.filter((e) => e.kind === 'ai' && weekDays.some((d) => iso(d) === e.date)).reduce((s, e) => s + toMin(e.end) - toMin(e.start), 0);
   const fits = need <= freeWeek;
@@ -504,13 +572,17 @@ function TaskColumn({
     const hold = t.notBefore && new Date(t.notBefore) > today ? new Date(t.notBefore) : null;
     return (
       <div
-        className="tk"
+        className={`tk${picked === t.id ? ' picked' : ''}`}
         key={t.id}
         draggable
-        title="Drag onto the calendar to put it there"
+        title="Drag onto the calendar, or click it and then a time"
         onDragStart={(e) => {
           e.dataTransfer.effectAllowed = 'copy';
-          e.dataTransfer.setData(TASK_DRAG, JSON.stringify({ id: t.id, title: t.title, durationMin: t.durationMin, category: t.category }));
+          e.dataTransfer.setData(TASK_DRAG, JSON.stringify(pickOf(t)));
+        }}
+        onClick={(e) => {
+          // the checkbox finishes the task; anywhere else on the row picks it to place
+          if (!(e.target as Element).closest('.cb')) onPick(t);
         }}>
         <button
           type="button"
@@ -518,7 +590,9 @@ function TaskColumn({
           aria-label={`Mark ${t.title} done`}
           onClick={() => void finishTask(t.id).then(() => toast(`Done: ${t.title}`))}
         />
-        <span className="ti">{t.title}</span>
+        <button type="button" className="ti" aria-pressed={picked === t.id} aria-label={`Place ${t.title} on the calendar`}>
+          {t.title}
+        </button>
         <span className="len">{lenOf(t.durationMin)}</span>
         <span className="sub">
           {!t.durationMin && <span className="pill need">Add a length to plan it</span>}
@@ -548,7 +622,7 @@ function TaskColumn({
         <span>{tasks.length} open</span>
       </header>
       <AddTask toast={toast} />
-      {tasks.length > 0 && <small className="hint">Drag a task onto the calendar to put it there.</small>}
+      {tasks.length > 0 && <small className="hint">Drag a task onto the calendar, or click it and then a time.</small>}
       {group('Overdue', overdue, true)}
       {group('Due this week', thisWeek)}
       {group('Needs a length', needLen)}
@@ -615,7 +689,7 @@ function AddTask({ toast }: { toast: Toast }) {
 
 /* ───────────────────────── other pages ───────────────────────── */
 
-function TasksBoard({ tasks, toast }: { tasks: ApiTask[]; toast: Toast }) {
+function TasksBoard({ tasks, toast, onPlace }: { tasks: ApiTask[]; toast: Toast; onPlace: (t: ApiTask) => void }) {
   const [twoWeeks] = useState(() => Date.now() - 14 * 86400_000);
   const lanes: [string, ApiTask[]][] = [
     ['Needs a length', tasks.filter((t) => isOpen(t) && !t.durationMin)],
@@ -644,6 +718,9 @@ function TasksBoard({ tasks, toast }: { tasks: ApiTask[]; toast: Toast }) {
                 </small>
                 {isOpen(t) && (
                   <div className="acts">
+                    <button type="button" className="chip" onClick={() => onPlace(t)}>
+                      Place on calendar
+                    </button>
                     <button type="button" className="chip" onClick={() => void finishTask(t.id).then(() => toast(`Done: ${t.title}`))}>
                       Mark done
                     </button>
@@ -659,11 +736,11 @@ function TasksBoard({ tasks, toast }: { tasks: ApiTask[]; toast: Toast }) {
   );
 }
 
-function Insights({ events, hours, tasks }: { events: CalEvent[]; hours: Hours; tasks: ApiTask[] }) {
+function Insights({ events, hours, off, tasks }: { events: CalEvent[]; hours: Hours; off: ReadonlySet<string>; tasks: ApiTask[] }) {
   const today = new Date(new Date().toDateString());
   const week = Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(today), i));
   const rest = week.filter((d) => d >= today);
-  const free = rest.reduce((s, d) => s + freeOn(events, hours, d), 0);
+  const free = rest.reduce((s, d) => s + freeOn(events, hours, d, off), 0);
   const weekEnd = addDays(week[0], 7);
   const need = tasks.filter((t) => t.dueBy && new Date(t.dueBy) < weekEnd).reduce((s, t) => s + t.durationMin, 0);
   const per = week.map((d) => {
@@ -674,7 +751,7 @@ function Insights({ events, hours, tasks }: { events: CalEvent[]; hours: Hours; 
   const max = Math.max(8, ...per.map((p) => p.m + p.f + p.a));
   const sc = (v: number) => `${((v / max) * 100).toFixed(1)}%`;
   // only days you work can be "tight"; a free weekend isn't
-  const tight = rest.filter((d) => workFor(hours, wdIndex(d))).sort((a, b) => freeOn(events, hours, a) - freeOn(events, hours, b))[0];
+  const tight = rest.filter((d) => workFor(hours, wdIndex(d)) && !off.has(iso(d))).sort((a, b) => freeOn(events, hours, a, off) - freeOn(events, hours, b, off))[0];
   return (
     <div className="page">
       <div className="ins">
@@ -697,7 +774,7 @@ function Insights({ events, hours, tasks }: { events: CalEvent[]; hours: Hours; 
           </h3>
           <p>
             {hm(need)} of tasks due and {hm(free)} free between meetings for the rest of the week.
-            {tight ? ` ${WD_LONG[wdIndex(tight)]} is the tightest day: ${hm(freeOn(events, hours, tight))} free.` : ''}
+            {tight ? ` ${WD_LONG[wdIndex(tight)]} is the tightest day: ${hm(freeOn(events, hours, tight, off))} free.` : ''}
           </p>
         </div>
         <div className="ans">
@@ -734,7 +811,7 @@ function Habits({ habits, toast }: { habits: ReturnType<typeof useTasks>['habits
             </>
           )}
         </h3>
-        <p>Habits repeat and keep a weekly minimum. On the calendar they show as routines, so they read as backdrop, not work.</p>
+        <p>A habit is time you want every week, like a run three times a week. When you plan your week, Find Time puts its sessions where they fit, as events you can move.</p>
         {habits.map((h) => (
           <div className="card" key={h.id}>
             <b>{h.title}</b>

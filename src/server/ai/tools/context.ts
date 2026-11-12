@@ -1,7 +1,8 @@
-import type { ApiEvent, ChatMessage, ChatProposal, TraceStep } from '@/lib/api-types';
+import type { ChatMessage, ChatProposal, TraceStep } from '@/lib/api-types';
 import { agentTool } from '@/lib/agent-tools';
 import type { ApiHabit } from '@/server/habits-repo';
 import type { ApiTask } from '@/server/tasks-repo';
+import type { CalendarInfo, CalEvent, Holiday } from '../holidays';
 import type { PlanTask } from '../plan-week';
 import { CATEGORIES, type AgentProfile } from '../preferences';
 import type { StoredProposal } from '../repo';
@@ -26,12 +27,16 @@ export type TurnCtx = {
   nowISO: string;
   horizonISO: string;
   profile: AgentProfile;
-  /** events in [now, horizon] */
-  events: ApiEvent[];
+  /** events in [now, horizon], with their calendar's name and holidays marked (holidays.ts) */
+  events: CalEvent[];
   /** what blocks time (blocksTime) */
   busy: Span[];
   /** what a person would see at a time, busy or not */
   shown: Span[];
+  /** public holidays in [now, horizon]: days off for work */
+  holidays: Holiday[];
+  /** the read-enabled calendars, for marking events read over a wider window */
+  calendars: CalendarInfo[];
   openTasks: ApiTask[];
   habits: ApiHabit[];
   /** a step starts (streamed) */
@@ -57,6 +62,8 @@ export type ToolResult = {
   clashAsked?: boolean;
   /** what the planner found and can't decide alone: the AI words the choice for the person (turn.ts) */
   facts?: string[];
+  /** Google titles the handler read beyond the turn's events and may have quoted: kept out of the saved copy (scrub.ts) */
+  titlesRead?: string[];
 };
 
 /** A turn that can't go on: the user sees `fail` as an error (HTTP 500). */

@@ -226,6 +226,8 @@ export type NewEvent = {
   videoUrl?: string;
   /** a session of this task */
   taskId?: string;
+  /** the Google calendar to copy it to; null = Find Time only; left out = the default */
+  copyTo?: string | null;
 };
 
 function optimistic(input: NewEvent): CalEvent {
@@ -514,6 +516,8 @@ export function createAgentBlock(input: {
   endISO: string;
   /** a weekly repeat: saved as one routine (repeating) event from startISO */
   rrule?: string;
+  /** "plan my week": the task this block is a session of, linked as it is created */
+  taskId?: string;
 }): Promise<unknown> {
   return createEventAsync({
     date: input.startISO.slice(0, 10),
@@ -522,6 +526,7 @@ export function createAgentBlock(input: {
     title: input.title,
     cat: API_CAT_TO_CAT[input.category] ?? 'deep',
     ...(input.rrule ? { kind: 'routine' as const, rrule: input.rrule } : { kind: 'ai' as const }),
+    ...(input.taskId ? { taskId: input.taskId } : {}),
   });
 }
 

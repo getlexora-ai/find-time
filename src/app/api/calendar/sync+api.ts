@@ -1,12 +1,17 @@
 import { requireUserId, unauthorized } from '@/server/auth/user';
 import { isConfigured } from '@/server/db';
 import { listAccountsWithCalendars } from '@/server/accounts-repo';
+import { flipNearSessions } from '@/server/google/push';
 import { syncAccount } from '@/server/google/sync';
 
 /**
  * POST /api/calendar/sync — pull every connected Google account for the session
  * user. Throttled: an account synced within the last minute is skipped unless
  * `?force=1`. Called after connect and on the calendar screen's mount.
+ *
+ * Also the one regular moment the app talks to Google, so planned sessions
+ * copied to Google as free turn busy here once they are within a day
+ * (google/push.ts flipNearSessions).
  */
 const THROTTLE_MS = 60_000;
 
@@ -36,6 +41,9 @@ export async function POST(request: Request): Promise<Response> {
       errors.push({ account: a.id, error: err instanceof Error ? err.message : String(err) });
     }
   }
+
+  // Best effort: a failed flip is retried on the next pull.
+  await flipNearSessions(userId).catch((err) => console.error('sync flipNearSessions', err));
 
   return Response.json({ accounts: accounts.length, synced, imported, deleted, errors });
 }

@@ -213,6 +213,8 @@ async function upsertEvent(row: CalendarEventRow): Promise<void> {
   // Our own block pushed to Google (push.ts) comes back in the feed: it is
   // already here under its own origin, live or deleted. Never import it. If it
   // was moved in Google, the new time is the latest word: the etag says so.
+  // The row's calendar_id is the calendar its copy lives on, whichever one the
+  // block was sent to, so this holds for copies outside the primary calendar too.
   const ours = await queryOne<{ id: string; provider_etag: string | null; deleted_at: Date | null }>(
     `select id, provider_etag, deleted_at from calendar_events
       where calendar_id = $1 and provider_event_id = $2 and origin <> 'imported' limit 1`,

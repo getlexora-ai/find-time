@@ -32,9 +32,10 @@ export const SW: Record<Kind, string> = {
 
 /** dataTransfer type a task row sets when it is dragged toward the grid */
 export const TASK_DRAG = 'application/x-findtime-task';
-type TaskDrop = { id: string; title: string; durationMin: number; category: string };
-/** A dropped task becomes one session this long; you can resize it after. */
-const dropLen = (t: Pick<TaskDrop, 'durationMin'>) => Math.min(t.durationMin || 60, 120);
+/** A task on its way to the grid: dragged (desktop) or picked, then a tap on a time (touch, keyboard). */
+export type TaskPick = { id: string; title: string; durationMin: number; category: string };
+/** A placed task becomes one session this long; you can resize it after. */
+const dropLen = (t: Pick<TaskPick, 'durationMin'>) => Math.min(t.durationMin || 60, 120);
 
 /** Why a block can't be dragged here, or null. Same rules as the old grid. */
 function lockOf(ev: CalEvent, cut: boolean): string | null {
@@ -73,6 +74,8 @@ export function Week({
   loading,
   toast,
   looks,
+  pick,
+  onPick,
 }: {
   days: Date[];
   events: CalEvent[];
@@ -81,6 +84,9 @@ export function Week({
   toast: Toast;
   /** calendar id → colour; Google events are drawn in their calendar's colour */
   looks?: CalLooks;
+  /** a task picked in the list: the next tap on an empty time places it */
+  pick?: TaskPick | null;
+  onPick?: (t: TaskPick | null) => void;
 }) {
   const ws = hours.start;
   const we = hours.end;
@@ -95,6 +101,10 @@ export function Week({
   const [drag, setDrag] = useState<Drag | null>(null);
   /** where a task dragged in from the list would land */
   const [over, setOver] = useState<{ di: number; s: number } | null>(null);
+  /** the column a tap began in while a task is picked; it places on lift */
+  const pickDown = useRef<number | null>(null);
+  /** the ghost was moved with the keyboard: keep it in view */
+  const kbd = useRef(false);
   const dragRef = useRef<Drag | null>(null);
   const [rawPop, setRawPop] = useState<Pop | null>(null);
   const wk = isoDays.join();
@@ -153,18 +163,24 @@ export function Week({
   };
 
   const isTask = (e: React.DragEvent) => e.dataTransfer.types.includes(TASK_DRAG);
-  const slotAt = (e: React.DragEvent) => Math.min(we * 60 - SNAP, Math.max(ws * 60, Math.floor((toMinAt(e.clientY) - 7) / SNAP) * SNAP));
+  const slotAt = (clientY: number) => Math.min(we * 60 - SNAP, Math.max(ws * 60, Math.floor((toMinAt(clientY) - 7) / SNAP) * SNAP));
   const dropTask = (e: React.DragEvent, di: number) => {
     if (!isTask(e)) return;
     e.preventDefault();
-    setOver(null);
-    let t: TaskDrop;
+    let t: TaskPick;
     try {
-      t = JSON.parse(e.dataTransfer.getData(TASK_DRAG)) as TaskDrop;
+      t = JSON.parse(e.dataTransfer.getData(TASK_DRAG)) as TaskPick;
     } catch {
+      setOver(null);
       return;
     }
-    const s = slotAt(e);
+    placeTask(t, di, slotAt(e.clientY));
+  };
+
+  /** One way onto the grid for a task, whether it was dropped or picked and tapped. */
+  const placeTask = (t: TaskPick, di: number, s: number) => {
+    setOver(null);
+    onPick?.(null);
     const end = Math.min(we * 60, s + dropLen(t));
     createEventAsync({
       date: isoDays[di],
@@ -181,6 +197,59 @@ export function Week({
       })
       .catch(() => toast(`Couldn't put ${t.title} on the calendar. Try again.`));
   };
+
+  // A picked task shows its ghost at once (touch has no hover): today at the next
+  // quarter hour inside your hours, else the first working hour of the first day.
+  const pickId = pick?.id;
+  useEffect(() => {
+    if (!pickId) {
+      setOver(null);
+      return;
+    }
+    const ti = isoDays.indexOf(todayIso);
+    const di = ti >= 0 ? ti : 0;
+    const w = workFor(hours, wdIndex(days[di]));
+    const from = Math.max(ws * 60, (w?.start ?? ws) * 60, ti >= 0 ? Math.ceil(now / SNAP) * SNAP : 0);
+    kbd.current = true;
+    setOver({ di, s: Math.min(we * 60 - SNAP, from) });
+    // only when a task is picked or the days on screen change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickId, wkKey]);
+
+  // Keyboard: arrows move the ghost (15 min, a day), Enter places it. Esc is PrismApp's.
+  useEffect(() => {
+    if (!pick) return;
+    const key = (e: KeyboardEvent) => {
+      const el = e.target;
+      if (el instanceof Element && el.closest('input, textarea, [contenteditable], [role="listbox"], [role="dialog"]')) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const o = over ?? { di: 0, s: ws * 60 };
+      let next = o;
+      if (e.key === 'ArrowUp') next = { ...o, s: Math.max(ws * 60, o.s - SNAP) };
+      else if (e.key === 'ArrowDown') next = { ...o, s: Math.min(we * 60 - SNAP, o.s + SNAP) };
+      else if (e.key === 'ArrowLeft') next = { ...o, di: Math.max(0, o.di - 1) };
+      else if (e.key === 'ArrowRight') next = { ...o, di: Math.min(n - 1, o.di + 1) };
+      else if (e.key === 'Enter') {
+        // Enter on another control (Cancel, Today…) is that control's, not a placement
+        if (el instanceof Element && el.closest('button, a') && !el.closest('.tk')) return;
+        // also stops Enter from pressing the focused task row again (which would cancel the pick)
+        e.preventDefault();
+        placeTask(pick, o.di, o.s);
+        return;
+      } else return;
+      e.preventDefault();
+      kbd.current = true;
+      setOver(next);
+    };
+    document.addEventListener('keydown', key);
+    return () => document.removeEventListener('keydown', key);
+  });
+
+  useEffect(() => {
+    if (!kbd.current || !over) return;
+    kbd.current = false;
+    scroller.current?.querySelector('.ev.drop')?.scrollIntoView({ block: 'nearest' });
+  }, [over]);
 
   const begin = (e: React.PointerEvent, d: Drag) => {
     if (e.button !== 0) return;
@@ -344,28 +413,51 @@ export function Week({
   const cols = isoDays.map((d, di) => {
     const plan = plans[di];
     const wd = wdIndex(days[di]);
-    const work = workFor(hours, wd);
+    // a public holiday is a day off, like a day outside your working week
+    const work = holidays[di] ? null : workFor(hours, wd);
     const creating = drag?.mode === 'create' && drag.day === di;
     const draft = pop?.type === 'draft' && pop.date === d ? pop : null;
     return (
       <div
         key={d}
-        className={`col${wd > 4 ? ' we' : ''}${holidays[di] ? ' hol' : ''}`}
+        className={`col${!work ? ' we' : ''}${holidays[di] ? ' hol' : ''}`}
         style={holidays[di] ? { ['--cc' as string]: holidays[di]!.color } : undefined}
         onPointerDown={(e) => {
           // not on a tile, and never in the middle of another drag
           if (e.target !== e.currentTarget || dragRef.current) return;
           setPop(null);
-          const s = Math.min(we * 60 - SNAP, Math.max(ws * 60, Math.floor((toMinAt(e.clientY) - 7) / SNAP) * SNAP));
+          const s = slotAt(e.clientY);
+          if (pick) {
+            // a task is picked: this tap places it (on lift), it doesn't start a new block
+            if (e.button !== 0) return;
+            pickDown.current = di;
+            setOver({ di, s });
+            return;
+          }
           begin(e, { mode: 'create', x0: e.clientX, y0: e.clientY, day0: di, s0: s, t0: s + 30, day: di, s, t: s + 30, moved: false });
         }}
-        onPointerMove={onMove}
-        onPointerUp={onUp}
+        onPointerMove={(e) => {
+          if (pick && !dragRef.current) {
+            const s = slotAt(e.clientY);
+            if (over?.di !== di || over.s !== s) setOver({ di, s });
+          }
+          onMove(e);
+        }}
+        onPointerUp={(e) => {
+          if (pick && pickDown.current !== null) {
+            const from = pickDown.current;
+            pickDown.current = null;
+            if (from === di) placeTask(pick, di, slotAt(e.clientY));
+            return;
+          }
+          onUp(e);
+        }}
+        onPointerCancel={() => (pickDown.current = null)}
         onDragOver={(e) => {
           if (!isTask(e)) return;
           e.preventDefault();
           e.dataTransfer.dropEffect = 'copy';
-          const s = slotAt(e);
+          const s = slotAt(e.clientY);
           if (over?.di !== di || over.s !== s) setOver({ di, s });
         }}
         onDragLeave={(e) => {
@@ -382,7 +474,7 @@ export function Week({
           <button
             key={`of${i}`}
             type="button"
-            className="ev event short"
+            className="ev of short"
             style={{ top: y(o.s) + 1, height: 18, left: `calc(${(o.col / o.cols) * 100}% + 3px)`, width: `calc(${100 / o.cols}% - 6px)` }}
             onPointerDown={(e) => e.stopPropagation()}
             aria-label={`${o.items.length} more at ${fromMin(o.s)}`}
@@ -391,9 +483,11 @@ export function Week({
           </button>
         ))}
         {over?.di === di && (
-          <div className="ev task drop" style={{ top: y(over.s) + 1, height: HH - 3, left: 3, right: 3, pointerEvents: 'none' }}>
-            <b>Drop to put it here</b>
-            <span>{fromMin(over.s)}</span>
+          <div
+            className="ev task drop"
+            style={{ top: y(over.s) + 1, height: ((pick ? Math.min(we * 60 - over.s, dropLen(pick)) : 60) / 60) * HH - 3, left: 3, right: 3, pointerEvents: 'none' }}>
+            <b>{pick ? pick.title : 'Drop to put it here'}</b>
+            <span>{pick ? `${fromMin(over.s)}–${fromMin(Math.min(we * 60, over.s + dropLen(pick)))}` : fromMin(over.s)}</span>
           </div>
         )}
         {(creating || draft) && (

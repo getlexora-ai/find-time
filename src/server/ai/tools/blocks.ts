@@ -5,7 +5,9 @@ import { createEvent, deleteEvent } from '@/server/events-repo';
 import { pushEvent } from '@/server/google/push';
 import { dayWindowFor, durationOptions, missingInfo, questionFor, whenOptions } from '../clarify';
 import { rankFreeSlots, selectSlots } from '../find-time';
+import { holidayOn, holidaysBetween, namedDayNote, onlyHolidays, plannedAroundNote } from '../holidays';
 import { ambiguousTime, brokenRule, checkPlaceAt, clashNote, freeNear, overlapList, overlapping, type Span } from '../place-at';
+import { hoursOn } from '../plan-week';
 import { adjustDuration, effectiveBuffer } from '../preferences';
 import { saveProposals } from '../repo';
 import { ZERO_FEATURES } from '../scoring';
@@ -34,6 +36,7 @@ export const propose: ToolHandler = async (args, ctx) => {
             durationMin: clampInt(args.durationMin, 15, 480, 60),
             nowMs: now.getTime(),
             horizonMs: Date.parse(horizonISO),
+            holidays: ctx.holidays,
           });
     const question = { text: questionFor(missing, asString(args.title, ''), options.length > 0), options };
     step({ tool: STEP.ask, label: missing === 'duration' ? 'Needs a length first' : 'Needs a day first', detail: 'I never guess a time' });
@@ -60,6 +63,9 @@ export const propose: ToolHandler = async (args, ctx) => {
   const excluded = new Set(
     Array.isArray(args.excludeDates) ? args.excludeDates.filter((d): d is string => typeof d === 'string') : [],
   );
+  // Public holidays are days off for work — unless the holiday is the day asked for.
+  const holidays = category === 'personal' ? [] : holidaysBetween(ctx.holidays, earliestISO, latestISO);
+  const askedHoliday = holidays.length > 0 && onlyHolidays(holidays, earliestISO, latestISO);
   const ranked = rankFreeSlots(
     busy,
     {
@@ -71,6 +77,7 @@ export const propose: ToolHandler = async (args, ctx) => {
       dayEndHour: clampInt(args.dayEndHour, 1, 24, win.end),
       bufferMin: effectiveBuffer(profile),
       skipWeekends,
+      offDates: askedHoliday ? [] : holidays.map((h) => h.date),
       category,
     },
     profile,
@@ -90,11 +97,17 @@ export const propose: ToolHandler = async (args, ctx) => {
     ms: Date.now() - rankT0,
   });
 
+  // Kept off a holiday: said, so an empty answer or a later day makes sense.
+  // One on a day off changed nothing, so it isn't mentioned.
+  const onWorkday = holidays.filter((h) => hoursOn(profile, category, Date.parse(`${h.date}T00:00:00Z`)) !== null);
+  const holidayNote = askedHoliday ? namedDayNote(holidays[0], 'day') : plannedAroundNote(onWorkday, 'search');
+  const withNote = (s: string) => (holidayNote ? `${s} ${holidayNote}` : s);
+
   if (chosen.length === 0) {
     return {
-      reply:
+      reply: withNote(
         said ||
-        `I couldn't find a free ${durationMin}-minute slot that fits before ${latestISO.slice(0, 10)}. Want me to try a shorter block or a wider window?`,
+        `I couldn't find a free ${durationMin}-minute slot that fits before ${latestISO.slice(0, 10)}. Want me to try a shorter block or a wider window?`),
       facts: [`No free ${durationMin}-minute slot for ${title} between ${earliestISO.slice(0, 10)} and ${latestISO.slice(0, 10)}.`],
     };
   }
@@ -124,11 +137,11 @@ export const propose: ToolHandler = async (args, ctx) => {
   return {
     kind: 'plan',
     proposals: stored.map((p) => toChatProposal(p, true)),
-    reply:
+    reply: withNote(
       said ||
       (durationMin !== askedMin
         ? `I've found room — I stretched these to ${durationMin} minutes because ${category.replace('-', ' ')} usually runs over for you.`
-        : `Here's what I found.`),
+        : `Here's what I found.`)),
   };
 };
 
@@ -178,7 +191,10 @@ export const placeAt: ToolHandler = async (args, ctx) => {
     const stored = await saveProposals(ctx.userId, ctx.sessionId, checked.span, [
       { title, category, ...checked.span, score: 0, features: ZERO_FEATURES, reason: clash ?? "it's the time you asked for", alternatives: [] },
     ]);
-    return { kind: 'plan', proposals: stored.map((p) => toChatProposal(p)), reply: asString(args.reply) || 'Here it is.' };
+    // The person's own time is kept on a holiday too; the reply says what day it is.
+    const holiday = holidayOn(ctx.holidays, checked.span.startISO);
+    const reply = asString(args.reply) || 'Here it is.';
+    return { kind: 'plan', proposals: stored.map((p) => toChatProposal(p)), reply: holiday ? `${reply} ${namedDayNote(holiday)}` : reply };
   } catch (err) {
     console.error('ai/chat placeAt', err);
     return { fail: 'Could not save that plan. Try again.' };

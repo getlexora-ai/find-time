@@ -6,10 +6,11 @@ import { type ApiTask, listOpenTasks } from '@/server/tasks-repo';
 import { DEFAULT_ZONE, wallClockNow } from '@/server/wall-clock';
 import { isImported } from '@/lib/synced-fields';
 import { blocksTime } from './find-time';
+import { type CalendarInfo, type CalEvent, holidaysIn, onCalendars } from './holidays';
 import { expandRepeat } from './place-at';
 import { preferenceCard } from './learn';
 import type { AgentProfile } from './preferences';
-import { addFact, appendMessage, createSession, deleteFact, listMessages, loadMemory, loadProfile, type Memory, sessionExists, updateFact, userTimeZone } from './repo';
+import { addFact, appendMessage, createSession, deleteFact, listCalendars, listMessages, loadMemory, loadProfile, type Memory, sessionExists, updateFact, userTimeZone } from './repo';
 import { doneLabel, iso, plural, runningLabel, type TurnCtx } from './tools/context';
 import { toolFor } from './tools';
 import { asString, TOOL_ANSWER } from './tools/names';
@@ -37,13 +38,17 @@ import { type Draft, guardTitle, type Understood, understand } from './understan
 
 const HORIZON_DAYS = 21;
 
-/** The window's events with Find Time's own repeats expanded to every day they fall on. */
-async function calendarFor(userId: string, fromISO: string, toISO: string) {
-  const [events, repeats] = await Promise.all([listEvents(userId, fromISO, toISO), listOwnRepeats(userId, toISO)]);
+/**
+ * The window's events with Find Time's own repeats expanded to every day they
+ * fall on, each with its calendar's name and public holidays marked (holidays.ts).
+ */
+async function calendarFor(userId: string, fromISO: string, toISO: string, calendars: Promise<CalendarInfo[]>): Promise<CalEvent[]> {
+  const [events, repeats, cals] = await Promise.all([listEvents(userId, fromISO, toISO), listOwnRepeats(userId, toISO), calendars]);
   const series = new Set(repeats.map((r) => r.id));
-  return [...events.filter((e) => !series.has(e.id)), ...repeats.flatMap((r) => expandRepeat(r, fromISO, toISO))].sort((a, b) =>
+  const all = [...events.filter((e) => !series.has(e.id)), ...repeats.flatMap((r) => expandRepeat(r, fromISO, toISO))].sort((a, b) =>
     a.start.localeCompare(b.start),
   );
+  return onCalendars(all, cals);
 }
 
 const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -113,16 +118,23 @@ export async function runTurn(
 
   let profile: AgentProfile;
   let history: Awaited<ReturnType<typeof listMessages>>;
-  let events: Awaited<ReturnType<typeof listEvents>>;
+  let events: CalEvent[];
   let openTasks: ApiTask[];
   let habits: ApiHabit[];
   let memory: Memory;
   begin(STEP.read);
+  // Which calendar each event is on, and which are public holidays. Optional:
+  // without it the turn plans as before, holidays unmarked.
+  const calendarsP = listCalendars(userId).catch((err) => {
+    console.error('ai/chat listCalendars', err);
+    return [] as CalendarInfo[];
+  });
+  let calendars: CalendarInfo[];
   try {
-    [profile, history, events, openTasks, habits, memory] = await Promise.all([
+    [profile, history, events, openTasks, habits, memory, calendars] = await Promise.all([
       loadProfile(userId),
       listMessages(sessionId, MAX_TURNS),
-      calendarFor(userId, nowISO, horizonISO),
+      calendarFor(userId, nowISO, horizonISO, calendarsP),
       // The backlog is optional context: a failure here must not cost the turn.
       listOpenTasks(userId).catch((err) => {
         console.error('ai/chat listOpenTasks', err);
@@ -137,6 +149,7 @@ export async function runTurn(
         console.error('ai/chat loadMemory', err);
         return { instructions: '', facts: [] } as Memory;
       }),
+      calendarsP,
     ]);
   } catch (err) {
     console.error('ai/chat load', err);
@@ -218,7 +231,7 @@ export async function runTurn(
         if (factId) return (await updateFact(userId, factId, clean)) ? { id: factId } : null;
         return addFact(userId, clean, 'ai');
       },
-      eventsIn: (fromISO, toISO) => calendarFor(userId, fromISO, toISO),
+      eventsIn: (fromISO, toISO) => calendarFor(userId, fromISO, toISO, calendarsP),
       seen,
       readCtx,
       step,
@@ -234,7 +247,25 @@ export async function runTurn(
   const quoted = text.length > 42 ? `${text.slice(0, 40).trimEnd()}…` : text;
   step({ tool: choice.name, label: `Read “${quoted}”`, detail: choice.summary, ms: Date.now() - readT0 });
 
-  const ctx: TurnCtx = { userId, sessionId, text: read, summary: choice.summary, now, nowISO, horizonISO, profile, events, busy, shown, openTasks, habits, begin, step };
+  const ctx: TurnCtx = {
+    userId,
+    sessionId,
+    text: read,
+    summary: choice.summary,
+    now,
+    nowISO,
+    horizonISO,
+    profile,
+    events,
+    busy,
+    shown,
+    holidays: holidaysIn(events),
+    calendars,
+    openTasks,
+    habits,
+    begin,
+    step,
+  };
   const handler = toolFor(choice.name);
   const result = handler ? await handler(choice.args, ctx) : {};
   if ('fail' in result) return Response.json({ sessionId, error: result.fail }, { status: 500 });
@@ -265,7 +296,7 @@ export async function runTurn(
   };
 
   // The model reads Google titles and may quote them; the person sees the reply, the database doesn't.
-  const googleTitles = [...events, ...seen].filter((e) => isImported(e.origin)).map((e) => e.title);
+  const googleTitles = [...events, ...seen].filter((e) => isImported(e.origin)).map((e) => e.title).concat(result.titlesRead ?? []);
   const typed = [...history.filter((m) => m.role === 'user').map((m) => m.content), text].join(' ');
   const stored = scrubTitles({ content: reply, parsed: { ...extras, ...(draft ? { draft } : {}) } }, googleTitles, typed);
   const messageId = await appendMessage(sessionId, { role: 'assistant', content: stored.content, kind, parsed: stored.parsed });

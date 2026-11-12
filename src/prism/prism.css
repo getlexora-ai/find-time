@@ -205,6 +205,15 @@
 .px .tk[draggable='true'] { cursor: grab; }
 .px .tk[draggable='true']:active { cursor: grabbing; }
 .px .tasks .hint { color: var(--faint); font-size: 11.5px; padding: 0 2px; }
+/* tap-to-place: the row title is a button (keyboard), a picked row is ringed, a slim bar says what happens next */
+.px .tk .ti { border: 0; background: transparent; padding: 0; text-align: left; cursor: inherit; color: inherit; }
+.px .tk { cursor: pointer; }
+.px .tk.picked { background: color-mix(in srgb, var(--focus-sw) 9%, var(--surface)); border-color: var(--focus-sw); }
+.px .pick { display: flex; align-items: center; gap: 10px; padding: 6px 16px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--focus-sw) 7%, var(--surface)); font-size: 12.5px; color: var(--ink2); flex: none; }
+.px .pick > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.px .pick b { font-weight: 600; color: var(--ink); }
+/* "+n more" in a crowded slot: a neutral chip, not a fake event */
+.px .ev.of { background: var(--sunken); border-color: var(--line-strong); color: var(--ink2); }
 .px .board-add { max-width: 420px; margin-bottom: 14px; }
 /* A Google event: its calendar's colour (--cc) as a tint and a left bar. Find Time's own blocks never get the bar. */
 .px .ev.gcal { background: color-mix(in srgb, var(--cc) 15%, var(--surface)); border: 0; border-left: 3px solid var(--cc); border-radius: 4px 8px 8px 4px; color: color-mix(in srgb, var(--cc) 55%, var(--ink)); }
@@ -269,7 +278,7 @@
 }
 @media (max-width: 760px) {
   .px .band { grid-template-columns: minmax(0, 1fr) auto; }
-  .px .horizon, .px .legend { display: none; }
+  .px .horizon, .px .legend, .px .pick .keys { display: none; }
   .px .stats { display: none; }
   .px .ins, .px .board { grid-template-columns: minmax(0, 1fr); }
 }

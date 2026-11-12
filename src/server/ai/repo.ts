@@ -27,6 +27,7 @@ import {
 } from './preferences.ts';
 import type { SlotFeatures } from './scoring.ts';
 import type { Outcome, ReasonCode } from './learn.ts';
+import { type CalendarInfo, isHolidayCalendar } from './holidays.ts';
 
 const id = (p: string) => `${p}_${randomUUID()}`;
 
@@ -374,6 +375,21 @@ export async function updateFact(userId: string, factId: string, text: string): 
 export async function deleteFact(userId: string, factId: string): Promise<boolean> {
   const rows = await query(`delete from user_memory where user_id = $1 and id = $2 and kind = 'fact' returning id`, [userId, factId]);
   return rows.length > 0;
+}
+
+// ── calendars ───────────────────────────────────────────────────────────────
+
+/**
+ * The user's read-enabled calendars: name, and whether it is a Google
+ * public-holiday one (holidays.ts). An unticked calendar is left out — its
+ * events are already gone (accounts-repo setCalendarReadEnabled).
+ */
+export async function listCalendars(userId: string): Promise<CalendarInfo[]> {
+  const rows = await query<{ id: string; name: string; provider_calendar_id: string }>(
+    `select id, name, provider_calendar_id from calendars where user_id = $1 and read_enabled`,
+    [userId],
+  );
+  return rows.map((r) => ({ id: r.id, name: r.name, holiday: isHolidayCalendar(r.provider_calendar_id) }));
 }
 
 // ── conversation ────────────────────────────────────────────────────────────

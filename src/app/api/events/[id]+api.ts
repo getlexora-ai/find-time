@@ -3,7 +3,7 @@ import { requireUserId, unauthorized } from '@/server/auth/user';
 import { isConfigured } from '@/server/db';
 import { deleteEvent, getEventMeta, updateEvent, type EventInput } from '@/server/events-repo';
 import { deleteRemote, moveRemote } from '@/server/google/edit';
-import { pushEvent } from '@/server/google/push';
+import { pushEvent, setCopyCalendar } from '@/server/google/push';
 
 /*
  * Imported events are Google's. Sync overwrites their title, times and notes
@@ -39,9 +39,18 @@ export async function PATCH(request: Request, { id }: Record<string, string>): P
       const remote = await moveRemote(userId, id, patch.start, patch.end);
       if (!remote.ok) return Response.json({ error: remote.error }, { status: remote.status });
     }
+    // Which Google calendar this block is copied to: the old copy comes down
+    // here, pushEvent below makes the new one.
+    if ('copyTo' in patch) {
+      if (patch.copyTo != null && typeof patch.copyTo !== 'string') {
+        return Response.json({ error: 'copyTo is a calendar id or null.' }, { status: 400 });
+      }
+      const moved = await setCopyCalendar(userId, id, patch.copyTo ?? null);
+      if (!moved.ok) return Response.json({ error: moved.error }, { status: moved.status });
+    }
     const event = await updateEvent(userId, id, patch);
     if (!event) return Response.json({ error: 'Not found.' }, { status: 404 });
-    const pushed = await pushEvent(userId, id); // no-op unless write-back is on; never throws
+    const pushed = await pushEvent(userId, id); // no-op for Find Time only; never throws
     return Response.json({ event: { ...event, pushFailed: pushed ? undefined : true } });
   } catch (err) {
     console.error('PATCH /api/events/[id]', err);

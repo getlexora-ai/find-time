@@ -4,6 +4,7 @@ import type { ApiEvent, EventInput } from '@/lib/api-types';
 
 import { query, queryOne } from './db';
 import { BUSY, liveDetails } from './google/live-details';
+import { defaultCopyCalendar } from './google/push';
 
 export type { ApiEvent, EventInput };
 
@@ -85,7 +86,10 @@ function toApi(r: Row): ApiEvent {
     rrule: r.rrule,
     projectLabel: r.project_label,
     notes: r.description,
-    calendarId: r.calendar_id,
+    // One column, two meanings by origin: an imported event's own calendar, or
+    // the calendar a Find Time block is copied to (google/push.ts).
+    calendarId: r.origin === 'imported' ? r.calendar_id : null,
+    copyTo: r.origin === 'imported' ? null : r.calendar_id,
     allDay: r.all_day,
     location: r.location,
     free: r.transparency === 'transparent',
@@ -142,16 +146,22 @@ export async function listOwnRepeats(userId: string, to: string): Promise<ApiEve
   return (await withDetails(userId, rows)).map(toApi);
 }
 
+/**
+ * `input.copyTo` is checked by the caller (push.ts canCopyTo) when someone chose
+ * it; left out, the block follows "Copy to Google" (defaultCopyCalendar).
+ */
 export async function createEvent(userId: string, input: EventInput): Promise<ApiEvent> {
+  const copyTo = input.copyTo === undefined ? await defaultCopyCalendar(userId) : input.copyTo;
   const row = await queryOne<Row>(
     `insert into calendar_events
        (id, user_id, title, start_at, end_at, time_zone, category, item_type,
         flexibility, origin, is_draft, rrule, project_label, description,
-        all_day, recurrence_parent_id, exdates, location, conference_url, task_id)
+        all_day, recurrence_parent_id, exdates, location, conference_url, task_id, calendar_id)
      values ($1,$2,$3,$4,$5,
              coalesce((select timezone from scheduler_profiles where user_id = $2), 'Europe/Berlin'),
              $6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::timestamptz[],$17,$18,
-             (select id from tasks where id = $19 and user_id = $2))
+             (select id from tasks where id = $19 and user_id = $2),
+             (select id from calendars where id = $20 and user_id = $2))
      returning ${COLS}`,
     [
       `evt_${randomUUID()}`,
@@ -173,6 +183,7 @@ export async function createEvent(userId: string, input: EventInput): Promise<Ap
       input.location ?? null,
       safeLink(input.videoUrl),
       input.taskId ?? null,
+      copyTo,
     ],
   );
   // A session of a task: the task is on the calendar now.

@@ -2,6 +2,7 @@ import type { ApiEvent } from '@/lib/api-types';
 import { isImported } from '@/lib/synced-fields';
 import { dayWindowFor } from '../clarify';
 import { blocksTime } from '../find-time';
+import { type CalEvent, holidaysIn } from '../holidays';
 import type { AgentProfile } from '../preferences';
 
 /**
@@ -29,6 +30,8 @@ export type FreeDay = {
   /** the hours counted: your working hours that day, or the personal window on a day off */
   window: string;
   working_day: boolean;
+  /** a public holiday: not a working day, whatever the weekday. Its name when Google gave one */
+  public_holiday?: string | true;
   free_min: number;
   /** the biggest single gap: what decides whether something fits */
   longest_gap_min: number;
@@ -38,14 +41,17 @@ export type FreeDay = {
 
 /**
  * Free time on `days` days from `date`: the day's window (working hours, or the
- * personal window on a day off), minus what blocks time, from now on for today.
+ * personal window on a day off — a public holiday is one), minus what blocks
+ * time, from now on for today.
  */
-export function freeTime(events: ApiEvent[], profile: AgentProfile, nowISO: string, date: string, days = 1): FreeDay[] {
+export function freeTime(events: CalEvent[], profile: AgentProfile, nowISO: string, date: string, days = 1): FreeDay[] {
   const out: FreeDay[] = [];
+  const holidays = holidaysIn(events);
   for (let i = 0; i < Math.min(7, Math.max(1, days)); i++) {
     const day = new Date(Date.parse(`${date}T00:00:00Z`) + i * DAY_MS).toISOString().slice(0, 10);
     if (day < nowISO.slice(0, 10)) continue;
-    const hours = profile.workHours[WD_KEYS[new Date(`${day}T00:00:00Z`).getUTCDay()]];
+    const holiday = holidays.find((h) => h.date === day);
+    const hours = holiday ? null : profile.workHours[WD_KEYS[new Date(`${day}T00:00:00Z`).getUTCDay()]];
     const win = hours ?? dayWindowFor(profile, 'personal');
     let lo = win.start * 60;
     const hi = win.end * 60;
@@ -72,7 +78,7 @@ export function freeTime(events: ApiEvent[], profile: AgentProfile, nowISO: stri
       free += hi - cur;
       longest = Math.max(longest, hi - cur);
     }
-    out.push({ date: day, window: `${hhmm(win.start * 60)}–${hhmm(hi)}`, working_day: Boolean(hours), free_min: Math.max(0, free), longest_gap_min: longest, gaps, busy_blocks: busy.length });
+    out.push({ date: day, window: `${hhmm(win.start * 60)}–${hhmm(hi)}`, working_day: Boolean(hours), ...(holiday ? { public_holiday: holiday.name ?? true } : {}), free_min: Math.max(0, free), longest_gap_min: longest, gaps, busy_blocks: busy.length });
   }
   return out;
 }
@@ -90,6 +96,10 @@ export type FoundEvent = {
   end_date: string;
   end: string;
   all_day: boolean;
+  /** the calendar it is on, by name */
+  calendar?: string;
+  /** on a public-holiday calendar: a day off for planning */
+  public_holiday?: true;
   /** may Find Time move or delete it? and if not, why */
   editable: boolean;
   why_locked?: string;
@@ -108,7 +118,7 @@ export function lockReason(e: ApiEvent): string | null {
  * `from` for `days` days, counting one already running on `from` (a course
  * that started last week). All-day ones count: a program or a trip often is one.
  */
-export function findEvents(events: ApiEvent[], match: string, from: string, days = 7): FoundEvent[] {
+export function findEvents(events: CalEvent[], match: string, from: string, days = 7): FoundEvent[] {
   const words = match.toLowerCase().split(/\s+/).filter((w) => w.length > 1);
   const to = new Date(Date.parse(`${from}T00:00:00Z`) + Math.min(MAX_LOOKUP_DAYS, Math.max(1, days)) * DAY_MS).toISOString().slice(0, 10);
   const seen = new Set<string>();
@@ -132,6 +142,8 @@ export function findEvents(events: ApiEvent[], match: string, from: string, days
         end_date: lastDay(e),
         end: e.end.slice(11, 16),
         all_day: Boolean(e.allDay),
+        ...(e.calendarName ? { calendar: e.calendarName } : {}),
+        ...(e.holiday ? { public_holiday: true as const } : {}),
         editable: !lock,
         ...(lock ? { why_locked: lock } : {}),
       };

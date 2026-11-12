@@ -1,5 +1,6 @@
 /**
- * Google Calendar API v3 — the read endpoints we need for pull sync. No SDK.
+ * Google Calendar API v3 — the read endpoints we need for pull sync and for
+ * checking where write-back may go. No SDK.
  * Server-only.
  */
 
@@ -71,6 +72,11 @@ export async function listCalendars(accessToken: string): Promise<GCalListEntry[
     pageToken = page.nextPageToken;
   } while (pageToken);
   return out;
+}
+
+/** One calendar as you see it (its accessRole says whether you may write to it). */
+export async function getCalendarEntry(accessToken: string, calendarId: string): Promise<GCalListEntry> {
+  return gget<GCalListEntry>(accessToken, `/users/me/calendarList/${encodeURIComponent(calendarId)}`, {});
 }
 
 /**

@@ -50,8 +50,14 @@ export type CalEvent = {
   googleEditable?: boolean;
   /** One of ours, and Google didn't take the last change. */
   pushFailed?: boolean;
-  /** Source calendar (calendars.id). Absent = Find Time's own block. */
+  /** Source calendar (calendars.id) of an imported event. Absent = Find Time's own block. */
   calendarId?: string;
+  /**
+   * Find Time's own block: the Google calendar (calendars.id) it is copied to.
+   * Absent or null = Find Time only. In a new block, absent means "the default"
+   * (primary while Copy to Google is on), null an explicit Find Time only.
+   */
+  copyTo?: string | null;
   /** the task this block is a session of */
   taskId?: string;
   /** Google all-day event — drawn in the all-day lane, never on the hours. */

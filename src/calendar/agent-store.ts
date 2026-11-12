@@ -260,6 +260,7 @@ export async function acceptProposal(p: ChatProposal): Promise<AcceptResult> {
       startISO: p.startISO,
       endISO: p.endISO,
       rrule: p.repeat?.rrule,
+      taskId: p.taskId,
     });
   } catch {
     return { ok: false, notes: [] };
@@ -321,6 +322,7 @@ export async function acceptAlternative(
       category: p.category,
       startISO: alt.startISO,
       endISO: alt.endISO,
+      taskId: p.taskId,
     });
   } catch {
     return { ok: false, notes: [] };

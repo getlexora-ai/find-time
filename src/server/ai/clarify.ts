@@ -18,6 +18,7 @@
  */
 
 import { type Busy, rankFreeSlots } from './find-time.ts';
+import type { Holiday } from './holidays.ts';
 import { type AgentProfile, PERSONAL_DAY_WINDOW } from './preferences.ts';
 
 const DAY = 86_400_000;
@@ -63,8 +64,11 @@ export function whenOptions(opts: {
   durationMin: number;
   nowMs: number;
   horizonMs: number;
+  /** public holidays: no work offered on them */
+  holidays?: Holiday[];
 }): string[] {
   const { busy, profile, category, durationMin, nowMs, horizonMs } = opts;
+  const offDates = personalOr(category, opts.holidays);
   const win = dayWindowFor(profile, category);
   const personal = category === 'personal';
 
@@ -94,6 +98,7 @@ export function whenOptions(opts: {
         dayEndHour: win.end,
         bufferMin: 0,
         skipWeekends: !personal,
+        offDates,
         category,
       },
       profile,
@@ -102,6 +107,8 @@ export function whenOptions(opts: {
   }
   return out;
 }
+
+const personalOr = (category: string, holidays?: Holiday[]) => (category === 'personal' ? [] : (holidays ?? []).map((h) => h.date));
 
 /** Tappable lengths, shaped to what the thing usually takes. */
 export function durationOptions(category: string): string[] {

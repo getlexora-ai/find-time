@@ -106,6 +106,7 @@ export function toCalEvent(e: ApiEvent): CalEvent {
   if (cal.imported && e.googleEditable) cal.googleEditable = true;
   if (e.pushFailed) cal.pushFailed = true;
   if (e.calendarId) cal.calendarId = e.calendarId;
+  if (!cal.imported && e.copyTo) cal.copyTo = e.copyTo;
   if (e.taskId) cal.taskId = e.taskId;
   if (e.allDay) cal.allDay = true;
   if (e.location) cal.location = e.location;
@@ -126,6 +127,8 @@ export function toEventInput(c: Partial<CalEvent>): Partial<EventInput> {
   if (c.project !== undefined) out.projectLabel = c.project || null;
   if (c.location !== undefined) out.location = c.location || null;
   if (c.videoUrl !== undefined) out.videoUrl = c.videoUrl || null;
+  // left out: the server's default calendar; null: Find Time only
+  if (c.copyTo !== undefined) out.copyTo = c.copyTo || null;
 
   if (c.kind !== undefined) {
     out.itemType = KIND_TO_ITEM_TYPE[c.kind];
@@ -141,9 +144,10 @@ export function toEventInput(c: Partial<CalEvent>): Partial<EventInput> {
     out.flexibility = c.flexible ? 'flexible' : 'fixed';
   }
   // A task session you placed yourself: the planner keeps it where you put it.
+  // One Plan with AI placed (kind 'ai') stays flexible: the planner may move it.
   if (c.taskId !== undefined) {
     out.taskId = c.taskId;
-    out.flexibility = 'fixed';
+    if (c.kind !== 'ai') out.flexibility = 'fixed';
   }
   return out;
 }
@@ -178,6 +182,8 @@ export function toEventPatch(current: CalEvent, patch: Partial<CalEvent>): Parti
   if (patch.project !== undefined) out.projectLabel = patch.project || null;
   if (patch.location !== undefined) out.location = patch.location || null;
   if (patch.videoUrl !== undefined) out.videoUrl = patch.videoUrl || null;
+  // Google's events stay on their own calendar.
+  if (patch.copyTo !== undefined && !current.imported) out.copyTo = patch.copyTo || null;
 
   if (patch.kind !== undefined) {
     const k = toEventInput({ kind: patch.kind, flexible: merged.flexible, rrule: merged.rrule });

@@ -103,4 +103,19 @@ assert.equal(toEventInput(offsite).end, '2026-10-02T00:00:00.000Z');
 // untouched fields are not sent
 assert.deepEqual(Object.keys(toEventPatch(cal, { title: 'x' })), ['title']);
 
+// the calendar a block is copied to: carried both ways; Google's events keep their own
+assert.equal(toCalEvent({ ...api, copyTo: 'cal_work' }).copyTo, 'cal_work');
+assert.equal(toCalEvent({ ...api, origin: 'imported', copyTo: 'cal_work' }).copyTo, undefined);
+assert.equal('copyTo' in toEventInput({ title: 'x' }), false, 'unchosen: the server default');
+assert.equal(toEventInput({ copyTo: null }).copyTo, null, 'Find Time only');
+assert.equal(toEventPatch(cal, { copyTo: 'cal_b' }).copyTo, 'cal_b');
+assert.equal(toEventPatch(cal, { copyTo: '' }).copyTo, null);
+assert.equal('copyTo' in toEventPatch({ ...cal, imported: true }, { copyTo: 'cal_b' }), false);
+
+// a task session: placed by hand it is pinned; placed by Plan with AI it stays movable
+assert.equal(toEventInput({ kind: 'task', taskId: 't1' }).flexibility, 'fixed');
+const aiSession = toEventInput({ kind: 'ai', taskId: 't1' });
+assert.equal(aiSession.taskId, 't1');
+assert.equal(aiSession.flexibility, 'flexible');
+
 console.log('api-adapter.check: ok');

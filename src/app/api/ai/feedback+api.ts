@@ -91,10 +91,15 @@ export async function POST(request: Request): Promise<Response> {
   // the outcome is already recorded and the block already exists.
   if (suggestion.task_id && (outcome === 'accepted' || outcome === 'edited')) {
     try {
-      await linkBlockToTask(userId, suggestion.task_id, {
+      // The client now sends taskId when it creates the block, so this finds
+      // nothing to link (it only takes rows with no task yet); it stays for
+      // older clients. A block linked here is pushed again: its Google copy
+      // went out as an ordinary busy event before it was known to be a session.
+      const linked = await linkBlockToTask(userId, suggestion.task_id, {
         title: suggestion.title,
         startISO: (outcome === 'edited' && finalStart) || suggestion.proposed_start.toISOString(),
       });
+      if (linked) await pushEvent(userId, linked);
       if (suggestion.event_id && (await retireReplacedBlock(userId, suggestion.event_id, suggestion.task_id))) await pushEvent(userId, suggestion.event_id);
     } catch (err) {
       console.error('ai/feedback task link', err);
@@ -102,10 +107,14 @@ export async function POST(request: Request): Promise<Response> {
   }
   if (suggestion.habit_id && (outcome === 'accepted' || outcome === 'edited')) {
     try {
-      await linkBlockToHabit(userId, suggestion.habit_id, {
+      // Habit sessions are linked only here (the block is created without
+      // habitId), so push again: now a session, its Google copy shows free
+      // while it is more than a day away (google/push.ts copyTransparency).
+      const linked = await linkBlockToHabit(userId, suggestion.habit_id, {
         title: suggestion.title,
         startISO: (outcome === 'edited' && finalStart) || suggestion.proposed_start.toISOString(),
       });
+      if (linked) await pushEvent(userId, linked);
       if (suggestion.event_id && (await retireReplacedHabitBlock(userId, suggestion.event_id, suggestion.habit_id))) await pushEvent(userId, suggestion.event_id);
     } catch (err) {
       console.error('ai/feedback habit link', err);

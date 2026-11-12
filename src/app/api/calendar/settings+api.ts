@@ -39,7 +39,7 @@ export async function PATCH(request: Request): Promise<Response> {
       }
     }
     await patchSettings(userId, patch);
-    if (patch.pushFocus !== undefined) await pushUpcoming(userId);
+    if (patch.pushFocus !== undefined) await pushUpcoming(userId, patch.pushFocus);
     return Response.json({ settings: await getSettings(userId) });
   } catch (err) {
     console.error('PATCH /api/calendar/settings', err);

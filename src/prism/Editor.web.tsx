@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
+import { useAccounts } from '@/calendar/account-store';
 import { fromMin, MO, toMin, WD, wdIndex } from '@/calendar/cal-date';
 import { acceptEvent, createEventAsync, createMeetLink, deleteEvent, updateEvent } from '@/calendar/cal-store';
 import type { CatKey } from '@/calendar/tokens';
@@ -95,6 +96,12 @@ const I = {
       <path d="M4 6h12M4 10h12M4 14h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   ),
+  cal: (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden>
+      <rect x="3" y="4.5" width="14" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M3 8.5h14M7 3v3M13 3v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  ),
   copy: (
     <svg viewBox="0 0 16 16" fill="none" aria-hidden>
       <rect x="5" y="5" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.4" />
@@ -130,6 +137,11 @@ type Draft = {
   cat: CatKey;
   project: string;
   notes: string;
+  /**
+   * The Google calendar a copy goes to ('' = Find Time only). Undefined only on
+   * a new block nobody has chosen for: the server's default (google/push.ts).
+   */
+  copyTo?: string;
 };
 
 type EditKind = 'event' | 'focus' | 'task' | 'routine';
@@ -170,6 +182,7 @@ const fromEvent = (ev: CalEvent): Draft => ({
   cat: ev.cat,
   project: ev.project ?? '',
   notes: ev.notes ?? '',
+  copyTo: ev.copyTo ?? '',
 });
 
 /* ───────────────────────── the popover ───────────────────────── */
@@ -298,6 +311,25 @@ function Editor({
   const [wantMeet, setWantMeet] = useState(false);
   const [pasting, setPasting] = useState(false);
 
+  // Where a copy may go (Morgen's pattern): Find Time only, or a Google calendar
+  // you can write to. Holiday and read-only calendars are never offered.
+  const { accounts } = useAccounts();
+  const writable = accounts.flatMap((a) =>
+    a.calendars.filter((c) => c.writable).map((c) => ({ ...c, hint: accounts.length > 1 ? a.email : c.isPrimary ? 'primary' : undefined })),
+  );
+  const primary = writable.find((c) => c.isPrimary) ?? null;
+  // A new block follows "Copy to Google": your primary calendar while it is on.
+  const [copyOn, setCopyOn] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!isNew) return;
+    apiFetch('/api/calendar/settings')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b: { settings?: { pushFocus?: boolean } } | null) => setCopyOn(!!b?.settings?.pushFocus))
+      .catch(() => setCopyOn(false));
+  }, [isNew]);
+  /** what the Calendar row shows; undefined while a new block's default is loading */
+  const copyTo = d.copyTo ?? (copyOn == null ? undefined : copyOn && primary ? primary.id : '');
+
   /** Change fields; on an existing block, save them right away. */
   const change = (patch: Partial<Draft>, save = true) => {
     // Only a routine repeats (that is what makes it one): becoming a routine
@@ -319,6 +351,7 @@ function Editor({
     if ('videoUrl' in patch) p.videoUrl = next.videoUrl.trim();
     if ('project' in patch) p.project = next.project.trim();
     if ('notes' in patch) p.notes = next.notes;
+    if ('copyTo' in patch) p.copyTo = next.copyTo || null;
     void updateEvent(ev.id, p).then((ok) => !ok && toast("Couldn't save that change. Check your connection and try again."));
   };
   /** Text fields: keep typing local, save when you leave the field. */
@@ -337,27 +370,15 @@ function Editor({
     return out.ok;
   };
 
-  const turnOnWriteBack = async () => {
+  /** A Meet link needs a Google copy: send this one block to your primary calendar, then ask again. */
+  const copyToPrimary = async () => {
+    if (!ev || !primary) return;
     setBusy('meet');
-    try {
-      const res = await apiFetch('/api/calendar/settings', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ pushFocus: true }),
-      });
-      if (!res.ok) {
-        const b = (await res.json().catch(() => ({}))) as { error?: string };
-        setBusy(null);
-        setMeetErr({ msg: b.error ?? "Couldn't turn it on. Try again." });
-        return;
-      }
-    } catch {
-      setBusy(null);
-      setMeetErr({ msg: "Couldn't reach Find Time. Try again." });
-      return;
-    }
+    setD((x) => ({ ...x, copyTo: primary.id }));
+    const ok = await updateEvent(ev.id, { copyTo: primary.id });
     setBusy(null);
-    if (ev) void meet(ev.id);
+    if (!ok) return setMeetErr({ msg: `Couldn't copy it to ${primary.name}. Try again.` });
+    void meet(ev.id);
   };
 
   const save = async () => {
@@ -377,6 +398,12 @@ function Editor({
         videoUrl: (d.kind === 'event' && d.videoUrl.trim()) || undefined,
         project: d.project.trim(),
         notes: d.notes,
+        // Unchosen: the server's default. A Meet link needs a Google copy, so
+        // asking for one on a Find Time only block sends it to your primary.
+        copyTo:
+          d.kind === 'event' && wantMeet && d.where === 'online' && !d.videoUrl && !copyTo && primary
+            ? primary.id
+            : d.copyTo === undefined ? undefined : d.copyTo || null,
       });
       toast(`${d.title.trim() || 'New block'} added ${dayLabel(d.date)} ${fromMin(d.s)}`);
       if (d.kind === 'event' && wantMeet && d.where === 'online' && !d.videoUrl) {
@@ -404,6 +431,7 @@ function Editor({
             void createEventAsync({
               date: ev.date, start: ev.start, end: ev.end, title: ev.title, cat: ev.cat, kind: ev.kind,
               notes: ev.notes, project: ev.project, location: ev.location, videoUrl: ev.videoUrl,
+              copyTo: ev.copyTo ?? null,
             })
         : undefined,
     );
@@ -590,9 +618,9 @@ function Editor({
             {meetErr && (
               <p className="err">
                 {meetErr.msg}{' '}
-                {meetErr.code === 'needs-write-back' && (
-                  <button type="button" className="btn line sm" disabled={busy === 'meet'} onClick={() => void turnOnWriteBack()}>
-                    Turn it on
+                {meetErr.code === 'needs-write-back' && primary && (
+                  <button type="button" className="btn line sm" disabled={busy === 'meet'} onClick={() => void copyToPrimary()}>
+                    Copy to {primary.name}
                   </button>
                 )}
               </p>
@@ -621,7 +649,41 @@ function Editor({
         </>
       )}
 
-      {/* 5 · more details */}
+      {/* 5 · calendar: where a copy goes. Google's events stay on their own. */}
+      {ev?.imported ? (
+        <div className="row">
+          <span className="ri">{I.cal}</span>
+          <div className="rc">
+            {accounts.flatMap((a) => a.calendars).find((c) => c.id === ev.calendarId)?.name ?? 'Google Calendar'}
+          </div>
+        </div>
+      ) : contentEditable && !ev?.allDay ? (
+        <div className="row">
+          <span className="ri">{I.cal}</span>
+          <div className="rc">
+            {d.rrule ? (
+              // push.ts: Google would hand each repeat back as its own event.
+              <span className="muted">Find Time only · repeating blocks aren’t copied to Google</span>
+            ) : (
+              <Dropdown
+                label="Calendar"
+                className="wide"
+                value={copyTo ?? ''}
+                disabled={copyTo === undefined}
+                options={[
+                  { value: '', label: 'Find Time only' },
+                  // a calendar no longer offered (access changed): still shown, so the row says the truth
+                  ...(copyTo && !writable.some((c) => c.id === copyTo) ? [{ value: copyTo, label: 'Google Calendar' }] : []),
+                  ...writable.map((c) => ({ value: c.id, label: c.name, hint: c.hint })),
+                ]}
+                onChange={(v) => change({ copyTo: v })}
+              />
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {/* 6 · more details */}
       {contentEditable && (
         <div className="row">
           <span className="ri">{I.lines}</span>

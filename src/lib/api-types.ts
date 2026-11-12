@@ -18,9 +18,12 @@ export type ApiEvent = {
   rrule: string | null;
   projectLabel: string | null;
   notes: string | null;
-  /** The source calendar (calendars.id). null = Find Time's own block. Optional
-   *  so older cached payloads still parse. */
+  /** The source calendar (calendars.id) of an imported event. null = Find Time's
+   *  own block. Optional so older cached payloads still parse. */
   calendarId?: string | null;
+  /** Find Time's own block: the Google calendar (calendars.id) it is copied to;
+   *  null = Find Time only (google/push.ts). Always null on imported events. */
+  copyTo?: string | null;
   /** Google all-day event: start/end are midnights, end exclusive. */
   allDay?: boolean;
   location?: string | null;
@@ -69,6 +72,11 @@ export type EventInput = {
   videoUrl?: string | null;
   /** a session of this task (dropped on the grid from the task list); create only */
   taskId?: string | null;
+  /**
+   * The Google calendar (calendars.id) to copy this block to; null = Find Time
+   * only. Left out on create: your primary calendar while "Copy to Google" is on.
+   */
+  copyTo?: string | null;
 };
 
 /** POST /api/events/:id/meet */
@@ -82,6 +90,9 @@ export type ApiCalendar = {
   color: string;
   isPrimary: boolean;
   readEnabled: boolean;
+  /** Find Time may copy your blocks here: you own or can edit it, the account
+   *  granted write access, not a holiday calendar. Read live from Google. */
+  writable?: boolean;
 };
 
 export type ApiAccount = {

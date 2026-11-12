@@ -4,7 +4,8 @@
  */
 import assert from 'node:assert/strict';
 
-const { blocksTime, findFreeSlots } = await import('./find-time.ts');
+const { blocksTime, findFreeSlots, rankFreeSlots } = await import('./find-time.ts');
+const { defaultProfile } = await import('./preferences.ts');
 
 const base = {
   earliestISO: '2026-09-09T00:00:00.000Z',
@@ -151,5 +152,21 @@ const day = [
 ].filter(blocksTime);
 s = findFreeSlots(day, { ...base, durationMin: 60, count: 2 });
 assert.deepEqual(s.map((x) => x.startISO), ['2026-09-09T09:00:00.000Z', '2026-09-09T10:00:00.000Z']);
+
+// ── public holidays (holidays.ts) ───────────────────────────────────────────
+// A holiday is a day off, never busy time — even one Google calls busy.
+assert.equal(blocksTime({ allDay: true, origin: 'imported', holiday: true }), false);
+assert.equal(blocksTime({ allDay: true, origin: 'imported', free: true, holiday: true }), false);
+{
+  // offDates: no slot on the day off, the next day is used instead.
+  const span = { ...base, latestISO: '2026-09-11T00:00:00.000Z', durationMin: 60, count: 1 };
+  assert.equal(findFreeSlots([], span)[0].startISO, '2026-09-09T09:00:00.000Z');
+  assert.equal(findFreeSlots([], { ...span, offDates: ['2026-09-09'] })[0].startISO, '2026-09-10T09:00:00.000Z');
+  const ranked = rankFreeSlots([], { ...span, offDates: ['2026-09-09'] }, defaultProfile());
+  assert.ok(ranked.length > 0);
+  assert.ok(ranked.every((r) => r.startISO.slice(0, 10) === '2026-09-10'));
+  // Only the holiday: nothing.
+  assert.deepEqual(rankFreeSlots([], { ...base, durationMin: 60, count: 1, offDates: ['2026-09-09'] }, defaultProfile()), []);
+}
 
 console.log('find-time.check: ok');
