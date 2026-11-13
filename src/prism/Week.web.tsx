@@ -36,6 +36,26 @@ export const TASK_DRAG = 'application/x-findtime-task';
 export type TaskPick = { id: string; title: string; durationMin: number; category: string };
 /** A placed task becomes one session this long; you can resize it after. */
 const dropLen = (t: Pick<TaskPick, 'durationMin'>) => Math.min(t.durationMin || 60, 120);
+
+/** The task being dragged in from the list. `dragover` can't read the drag's data, so the ghost reads this. */
+let dragged: TaskPick | null = null;
+/**
+ * An empty drag image: the browser's own see-through copy of the row sat under the pointer and hid the slot
+ * you were aiming at. The grid's ghost shows the task instead, at its real length.
+ */
+const BLANK =
+  typeof Image === 'undefined' ? null : Object.assign(new Image(), { src: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' });
+
+/** Start dragging a task from the list toward the grid. */
+export function startTaskDrag(e: React.DragEvent, t: TaskPick) {
+  dragged = t;
+  e.dataTransfer.effectAllowed = 'copy';
+  e.dataTransfer.setData(TASK_DRAG, JSON.stringify(t));
+  if (BLANK) e.dataTransfer.setDragImage(BLANK, 0, 0);
+}
+export function endTaskDrag() {
+  dragged = null;
+}
 const lenOf = (min: number) => (min < 60 ? `${min}m` : `${Math.floor(min / 60)}h${min % 60 ? pad(min % 60) : ''}`);
 
 /** Why a block can't be dragged here, or null. Same rules as the old grid. */
@@ -501,14 +521,20 @@ export function Week({
             <b>+{o.items.length}</b>
           </button>
         ))}
-        {over?.di === di && (
-          <div
-            className="ev task drop"
-            style={{ top: y(over.s) + 1, height: ((pick ? Math.min(we * 60 - over.s, dropLen(pick)) : 60) / 60) * HH - 3, left: 3, right: 3, pointerEvents: 'none' }}>
-            <b>{pick ? pick.title : 'Drop to put it here'}</b>
-            <span>{pick ? `${fromMin(over.s)}–${fromMin(Math.min(we * 60, over.s + dropLen(pick)))}` : fromMin(over.s)}</span>
-          </div>
-        )}
+        {over?.di === di &&
+          (() => {
+            // the picked task, or the one being dragged in: the ghost is that task at its real length
+            const g = pick ?? dragged;
+            const end = Math.min(we * 60, over.s + (g ? dropLen(g) : 60));
+            return (
+              <div className="ev task drop" style={{ top: y(over.s) + 1, height: ((end - over.s) / 60) * HH - 3, left: 3, right: 3, pointerEvents: 'none' }}>
+                <b>{g ? g.title : 'Drop to put it here'}</b>
+                <span>
+                  {fromMin(over.s)}–{fromMin(end)}
+                </span>
+              </div>
+            );
+          })()}
         {(creating || draft) && (
           <div
             className="ev draft"

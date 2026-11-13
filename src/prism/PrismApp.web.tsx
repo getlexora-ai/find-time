@@ -14,7 +14,7 @@ import type { ApiTask } from '@/lib/api-types';
 import './prism.css';
 import { paintScene } from './scene';
 import { calLooks, lookOf } from './cal-look';
-import { cls, LBL, TASK_DRAG, Week, type TaskPick, type Toast } from './Week.web';
+import { cls, endTaskDrag, LBL, startTaskDrag, Week, type TaskPick, type Toast } from './Week.web';
 
 type Page = 'planner' | 'tasks' | 'insights' | 'habits';
 const DRAWER_KEY = 'ft.px.drawer';
@@ -610,9 +610,9 @@ function TaskColumn({
         onDragStart={(e) => {
           // dragging one task drops the pick of another, so the grid's ghost is this one
           onDragStart();
-          e.dataTransfer.effectAllowed = 'copy';
-          e.dataTransfer.setData(TASK_DRAG, JSON.stringify(pickOf(t)));
+          startTaskDrag(e, pickOf(t));
         }}
+        onDragEnd={endTaskDrag}
         onClick={(e) => {
           // the checkbox finishes the task; anywhere else on the row picks it to place
           if (!(e.target as Element).closest('.cb')) onPick(t);
