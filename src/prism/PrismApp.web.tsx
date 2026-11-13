@@ -12,12 +12,15 @@ import { apiFetch } from '@/lib/api';
 import type { ApiTask } from '@/lib/api-types';
 
 import './prism.css';
+// after prism.css: the chat's narrow-screen layout overrides the work row's
+import { AiPanel, dayOf } from './Ai.web';
 import { paintScene } from './scene';
 import { calLooks, lookOf } from './cal-look';
 import { cls, endTaskDrag, LBL, startTaskDrag, Week, type TaskPick, type Toast } from './Week.web';
 
 type Page = 'planner' | 'tasks' | 'insights' | 'habits';
 const DRAWER_KEY = 'ft.px.drawer';
+const AI_KEY = 'ft.px.ai';
 
 /* ───────────────────────── helpers ───────────────────────── */
 
@@ -120,6 +123,15 @@ export function PrismApp() {
     }
   });
   const [cursor, setCursor] = useState(() => new Date());
+  // Plan with AI: open or closed is remembered; `aiFocus` bumps to put the cursor in its composer.
+  const [aiOpen, setAiOpen] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(AI_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [aiFocus, setAiFocus] = useState(0);
   const [narrow, setNarrow] = useState(() => window.innerWidth < 760);
   const [toastMsg, setToastMsg] = useState<{ msg: string; undo?: () => void } | null>(() => {
     const p = new URLSearchParams(window.location.search).get('connect');
@@ -140,6 +152,13 @@ export function PrismApp() {
       // private window: the drawer just opens next time
     }
   }, [drawer]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(AI_KEY, aiOpen ? '1' : '0');
+    } catch {
+      // private window: it just starts closed next time
+    }
+  }, [aiOpen]);
 
   useEffect(() => {
     if (signedIn) void syncNow();
@@ -181,6 +200,12 @@ export function PrismApp() {
     if (p !== 'planner') setPicked(null);
     setPage(p);
   };
+  // The chat lives beside the week: opening it from another page comes back to the planner.
+  const openAI = useCallback(() => {
+    setPage('planner');
+    setAiOpen(true);
+    setAiFocus((n) => n + 1);
+  }, []);
 
   // [ ] drawer · ← → week · T today. Never while typing. Esc drops a picked task
   // (unless it is closing an editor first); while one is picked the arrows move it on the grid (Week).
@@ -194,7 +219,10 @@ export function PrismApp() {
       const t = e.target;
       const typing = t instanceof Element && !!t.closest('input, textarea, [contenteditable], [role="listbox"], [role="dialog"]');
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key === '[') setDrawer(false);
+      if (e.key === '/') {
+        e.preventDefault();
+        openAI();
+      } else if (e.key === '[') setDrawer(false);
       else if (e.key === ']') setDrawer(true);
       else if (page === 'planner' && e.key === 'ArrowLeft') go(-1);
       else if (page === 'planner' && e.key === 'ArrowRight') go(1);
@@ -203,7 +231,7 @@ export function PrismApp() {
     // capture: runs before an editor's own Esc closes it, so "is a dialog open" is still true
     document.addEventListener('keydown', key, true);
     return () => document.removeEventListener('keydown', key, true);
-  }, [go, page, picked]);
+  }, [go, openAI, page, picked]);
 
   const open = tasks.filter(isOpen);
   const rangeTitle = (() => {
@@ -374,9 +402,9 @@ export function PrismApp() {
         </nav>
 
         <div className="main">
-          <Band events={shown} hours={hours} off={holidayDays} />
+          <Band events={shown} hours={hours} off={holidayDays} aiOpen={aiOpen && page === 'planner'} onAI={() => (aiOpen && page === 'planner' ? setAiOpen(false) : openAI())} />
           {page === 'planner' ? (
-            <div className="work">
+            <div className={`work${aiOpen ? ' with-ai' : ''}`}>
               <TaskColumn
                 tasks={open}
                 events={shown}
@@ -451,6 +479,19 @@ export function PrismApp() {
                   />
                 )}
               </section>
+              {aiOpen && (
+                <AiPanel
+                  tasks={open}
+                  toast={toast}
+                  focusKey={aiFocus}
+                  onClose={() => setAiOpen(false)}
+                  // a block landed: show its day, and the Find Time calendar if it was hidden
+                  onApplied={(startISO) => {
+                    setCursor(dayOf(startISO));
+                    if (!ftShown) showFindTime(true);
+                  }}
+                />
+              )}
             </div>
           ) : page === 'tasks' ? (
             <TasksBoard
@@ -490,7 +531,19 @@ export function PrismApp() {
 
 /* ───────────────────────── header band ───────────────────────── */
 
-function Band({ events, hours, off }: { events: CalEvent[]; hours: Hours; off: ReadonlySet<string> }) {
+function Band({
+  events,
+  hours,
+  off,
+  aiOpen,
+  onAI,
+}: {
+  events: CalEvent[];
+  hours: Hours;
+  off: ReadonlySet<string>;
+  aiOpen: boolean;
+  onAI: () => void;
+}) {
   const cv = useRef<HTMLCanvasElement>(null);
   const [now, setNow] = useState(nowMin());
   useEffect(() => {
@@ -553,6 +606,12 @@ function Band({ events, hours, off }: { events: CalEvent[]; hours: Hours; off: R
             <span>proposals waiting</span>
           </div>
         </div>
+        <button type="button" className="btn grad" aria-pressed={aiOpen} onClick={onAI} title={aiOpen ? 'Close Plan with AI' : 'Plan with AI  /'}>
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden>
+            <path d="M8 1.8c.4 2.9 1.4 4 4.2 4.4-2.8.5-3.8 1.5-4.2 4.4-.4-2.9-1.4-3.9-4.2-4.4C6.6 5.8 7.6 4.7 8 1.8ZM12.6 10.4c.2 1.3.7 1.8 1.9 2-1.2.2-1.7.7-1.9 2-.2-1.3-.7-1.8-1.9-2 1.2-.2 1.7-.7 1.9-2Z" fill="currentColor" />
+          </svg>
+          Plan with AI
+        </button>
       </div>
     </header>
   );
