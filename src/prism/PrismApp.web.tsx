@@ -9,14 +9,14 @@ import { useHours, workFor, type Hours } from '@/calendar/hours';
 import { addPreviewTask, finishTask, isPreviewTasks, refreshTasks, stopHabit, useTasks } from '@/calendar/tasks-store';
 import type { CalEvent } from '@/calendar/types';
 import { apiFetch } from '@/lib/api';
-import type { ApiTask } from '@/lib/api-types';
+import type { ApiTask, ChatProposal } from '@/lib/api-types';
 
 import './prism.css';
 // after prism.css: the chat's narrow-screen layout overrides the work row's
 import { AiPanel, dayOf } from './Ai.web';
 import { paintScene } from './scene';
 import { calLooks, lookOf } from './cal-look';
-import { cls, endTaskDrag, LBL, startTaskDrag, Week, type TaskPick, type Toast } from './Week.web';
+import { cls, endTaskDrag, LBL, startTaskDrag, Week, type ChatDraft, type TaskPick, type Toast } from './Week.web';
 
 type Page = 'planner' | 'tasks' | 'insights' | 'habits';
 const DRAWER_KEY = 'ft.px.drawer';
@@ -132,6 +132,24 @@ export function PrismApp() {
     }
   });
   const [aiFocus, setAiFocus] = useState(0);
+  // Proposals waiting in the chat, drawn on the week; `hot` links a card and its tile.
+  const [chatProps, setChatProps] = useState<ChatProposal[]>([]);
+  const [hot, setHot] = useState<string | null>(null);
+  const drafts = useMemo<ChatDraft[]>(
+    () =>
+      chatProps.map((p) => {
+        const m = (x: string) => Number(x.slice(11, 13)) * 60 + Number(x.slice(14, 16));
+        return { id: p.id, title: p.title, date: p.startISO.slice(0, 10), s: m(p.startISO), t: m(p.endISO) || 24 * 60 };
+      }),
+    [chatProps],
+  );
+  // A new proposal brings its week into view, so you see where it would land.
+  const seen = useRef(new Set<string>());
+  useEffect(() => {
+    const fresh = chatProps.filter((p) => !seen.current.has(p.id));
+    chatProps.forEach((p) => seen.current.add(p.id));
+    if (fresh.length) setCursor(dayOf(fresh[0].startISO));
+  }, [chatProps]);
   const [narrow, setNarrow] = useState(() => window.innerWidth < 760);
   const [toastMsg, setToastMsg] = useState<{ msg: string; undo?: () => void } | null>(() => {
     const p = new URLSearchParams(window.location.search).get('connect');
@@ -476,6 +494,13 @@ export function PrismApp() {
                     onPick={setPicked}
                     // a new block on a hidden Find Time calendar would vanish at once
                     onCreated={() => !ftShown && showFindTime(true)}
+                    proposals={aiOpen ? drafts : undefined}
+                    hot={hot}
+                    onHot={setHot}
+                    onProposal={(id) => {
+                      setHot(id);
+                      document.querySelector(`.px aside.ai [data-pid="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                    }}
                   />
                 )}
               </section>
@@ -484,6 +509,9 @@ export function PrismApp() {
                   tasks={open}
                   toast={toast}
                   focusKey={aiFocus}
+                  onDrafts={setChatProps}
+                  hot={hot}
+                  onHot={setHot}
                   onClose={() => setAiOpen(false)}
                   // a block landed: show its day, and the Find Time calendar if it was hidden
                   onApplied={(startISO) => {

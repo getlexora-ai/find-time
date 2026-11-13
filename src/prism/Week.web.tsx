@@ -88,6 +88,9 @@ const dayLabel = (d: string) => {
   return `${WD[wdIndex(date)]} ${dd} ${MO[m - 1].slice(0, 3)}`;
 };
 
+/** A chat proposal on the grid: wall-clock day and minutes. */
+export type ChatDraft = { id: string; title: string; date: string; s: number; t: number };
+
 export function Week({
   days,
   events,
@@ -98,7 +101,18 @@ export function Week({
   pick,
   onPick,
   onCreated,
+  proposals,
+  hot,
+  onHot,
+  onProposal,
 }: {
+  /** Plan with AI's proposals still waiting in the chat: drawn dashed, not yet on the calendar */
+  proposals?: ChatDraft[];
+  /** the proposal hovered here or in the chat */
+  hot?: string | null;
+  onHot?: (id: string | null) => void;
+  /** a proposal tile was clicked: show its card in the chat */
+  onProposal?: (id: string) => void;
   days: Date[];
   events: CalEvent[];
   hours: Hours;
@@ -509,6 +523,30 @@ export function Week({
         {d === todayIso && now >= ws * 60 && now < we * 60 && <div className="now" style={{ top: y(now) }} />}
         {plan.blocks.map((b) => tile(b, di))}
         {ghostIn(di)}
+        {proposals
+          ?.filter((p) => p.date === d && p.t > ws * 60 && p.s < we * 60)
+          .map((p) => {
+            const s0 = Math.max(ws * 60, p.s);
+            const t0 = Math.min(we * 60, p.t);
+            return (
+              <button
+                key={`chat-${p.id}`}
+                type="button"
+                className={`ev ai chat${t0 - s0 <= 45 ? ' short' : ''}${hot === p.id ? ' hot' : ''}`}
+                style={{ top: y(s0) + 1, height: ((t0 - s0) / 60) * HH - 3, left: 3, right: 3 }}
+                title="Waiting in Plan with AI: not on your calendar yet"
+                aria-label={`Proposal waiting in Plan with AI: ${p.title}, ${fromMin(p.s)} to ${fromMin(p.t)}`}
+                onPointerDown={(e) => e.stopPropagation()}
+                onMouseEnter={() => onHot?.(p.id)}
+                onMouseLeave={() => onHot?.(null)}
+                onClick={() => onProposal?.(p.id)}>
+                <b>{p.title}</b>
+                <span>
+                  {fromMin(p.s)}–{fromMin(p.t)}
+                </span>
+              </button>
+            );
+          })}
         {plan.overflow.map((o, i) => (
           <button
             key={`of${i}`}

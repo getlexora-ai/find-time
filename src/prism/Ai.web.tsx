@@ -117,7 +117,7 @@ const Svg = {
   ),
   chats: (
     <svg viewBox="0 0 16 16" fill="none" aria-hidden>
-      <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M2.6 8a5.4 5.4 0 1 0 1.6-3.8M2.5 2.6v2.3h2.3M8 5.2V8l2 1.3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
   back: (
@@ -160,9 +160,17 @@ export function AiPanel({
   onApplied,
   toast,
   focusKey,
+  onDrafts,
+  hot,
+  onHot,
 }: {
   /** open tasks, for first-visit suggestions built from your real backlog */
   tasks: ApiTask[];
+  /** the proposals still waiting for a decision, for the week to draw */
+  onDrafts: (list: ChatProposal[]) => void;
+  /** the proposal hovered here or on the grid */
+  hot: string | null;
+  onHot: (id: string | null) => void;
   onClose: () => void;
   /** a block landed: show its day on the grid */
   onApplied: (firstISO: string) => void;
@@ -354,6 +362,14 @@ export function AiPanel({
   const lastIdx = messages.length - 1;
   const openQ = !sending && lastIdx >= 0 && messages[lastIdx].role === 'assistant' ? messages[lastIdx].question : undefined;
 
+  // Waiting proposals go on the week, so a time is seen where it would land.
+  const pending = useMemo(
+    () => (view === 'chat' ? messages.flatMap((m) => m.proposals ?? []).filter((p) => !decisionOf(p, decisions)) : []),
+    [messages, decisions, view],
+  );
+  useEffect(() => onDrafts(pending), [pending, onDrafts]);
+  useEffect(() => () => onDrafts([]), [onDrafts]);
+
   const tools = useAgentTools();
   const shortcuts = tools.filter((t) => t.shortcut);
   const [more, setMore] = useState(false);
@@ -434,6 +450,8 @@ export function AiPanel({
               onApply={apply}
               onDecline={(set) => decide(set.id, { kind: 'declined', label: 'Nothing changed' })}
               onReport={report}
+              hot={hot}
+              onHot={onHot}
               onRetry={(t) => {
                 setMessages((ms) => ms.filter((x) => x.id !== m.id));
                 void send(t);
@@ -475,19 +493,17 @@ export function AiPanel({
               key={t.key}
               type="button"
               className="chip"
-              style={{ ['--tc' as string]: TOOL_C[t.color] ?? 'var(--blue)' }}
               onClick={() => {
                 setText(t.shortcut!.seed);
                 input.current?.focus();
               }}
               title={`Start with “${t.shortcut!.seed.trim()}”`}>
-              <i aria-hidden />
               {t.shortcut!.label}
             </button>
           ))}
           {shortcuts.length > 3 && (
             <button type="button" className="chip more" onClick={() => setMore((v) => !v)} aria-expanded={more}>
-              {more ? 'Less' : `+${shortcuts.length - 3}`}
+              {more ? 'Less' : 'More'}
             </button>
           )}
           <button type="submit" className="send" aria-label="Send" disabled={sending || !text.trim()}>
@@ -788,7 +804,11 @@ function Reply({
   onDecline,
   onReport,
   onRetry,
+  hot,
+  onHot,
 }: {
+  hot: string | null;
+  onHot: (id: string | null) => void;
   m: ChatMessage;
   /** someone already replied after it: its question no longer takes answers */
   answered: boolean;
@@ -867,7 +887,7 @@ function Reply({
           </div>
         ) : null}
 
-        {!!m.proposals?.length && <Tray list={m.proposals} decisions={decisions} onAdd={onAdd} onAlt={onAlt} onDiscard={onDiscard} />}
+        {!!m.proposals?.length && <Tray list={m.proposals} decisions={decisions} onAdd={onAdd} onAlt={onAlt} onDiscard={onDiscard} hot={hot} onHot={onHot} />}
 
         {m.changes && <Changes set={m.changes} decision={decisions[m.changes.id]} onApply={onApply} onDecline={onDecline} />}
 
@@ -919,7 +939,11 @@ function Tray({
   onAdd,
   onAlt,
   onDiscard,
+  hot,
+  onHot,
 }: {
+  hot: string | null;
+  onHot: (id: string | null) => void;
   list: ChatProposal[];
   decisions: Record<string, Decision>;
   onAdd: (l: ChatProposal[]) => Promise<void>;
@@ -932,6 +956,8 @@ function Tray({
   const [why, setWhy] = useState(false);
   const [working, setWorking] = useState(false);
   const picked = waiting.filter((p) => !off[p.id]);
+  // ticking is only a choice when there is more than one
+  const many = waiting.length > 1;
 
   return (
     <div className="tray">
@@ -939,12 +965,17 @@ function Tray({
         const d = decisionOf(p, decisions);
         const w = wall(p.startISO);
         return (
-          <div key={p.id} className={`row${d ? ` ${d.kind}` : ''}`}>
+          <div
+            key={p.id}
+            data-pid={p.id}
+            className={`row${d ? ` ${d.kind}` : ''}${many || d ? '' : ' solo'}${hot === p.id && !d ? ' hot' : ''}`}
+            onMouseEnter={() => !d && onHot(p.id)}
+            onMouseLeave={() => onHot(null)}>
             {d ? (
               <span className={`tick ${d.kind}`} aria-hidden>
                 {d.kind === 'added' ? Svg.check : Svg.close}
               </span>
-            ) : (
+            ) : !many ? null : (
               <input
                 type="checkbox"
                 checked={!off[p.id]}
@@ -957,8 +988,9 @@ function Tray({
               <b>{w.getUTCDate()}</b>
             </span>
             <span className="w">
-              <div>
-                <span className="t">{p.title}</span> · {len(p.startISO, p.endISO)} <span className="tm">{hhmm(p.startISO)}–{hhmm(p.endISO)}</span>
+              <div className="t">{p.title}</div>
+              <div className="tm">
+                {dayLabel(p.startISO)} · {hhmm(p.startISO)}–{hhmm(p.endISO)} · {len(p.startISO, p.endISO)}
               </div>
               {d ? (
                 <span className="st">{d.kind === 'added' ? `Added · ${d.label}` : `Skipped · ${d.label}`}</span>
@@ -1047,12 +1079,20 @@ function DayStrip({ startISO, endISO }: { startISO: string; endISO: string }) {
     () => events.filter((x) => x.date === day && !x.allDay && x.kind !== 'ai' && toMin(x.end) > lo && toMin(x.start) < hi),
     [events, day, lo, hi],
   );
+  const hh = (h: number) => `${String(h % 24).padStart(2, '0')}:00`;
   return (
-    <span className="strip-d" title={`${dayLabel(startISO)}: ${plural(others.length, 'other block')}`}>
-      {others.map((x) => (
-        <i key={x.id} style={{ left: `${at(toMin(x.start))}%`, width: `${at(toMin(x.end)) - at(toMin(x.start))}%` }} />
-      ))}
-      <i className="ai" style={{ left: `${at(s)}%`, width: `${Math.max(1.5, at(e) - at(s))}%` }} />
+    <span className="strip-w" title={`${dayLabel(startISO)}: ${plural(others.length, 'other block')}`}>
+      <span className="strip-d" aria-hidden>
+        {others.map((x) => (
+          <i key={x.id} style={{ left: `${at(toMin(x.start))}%`, width: `${at(toMin(x.end)) - at(toMin(x.start))}%` }} />
+        ))}
+        <i className="ai" style={{ left: `${at(s)}%`, width: `${Math.max(1.5, at(e) - at(s))}%` }} />
+      </span>
+      <span className="strip-s" aria-hidden>
+        <span>{hh(hours.start)}</span>
+        <span>{plural(others.length, 'other block')} that day</span>
+        <span>{hh(hours.end)}</span>
+      </span>
     </span>
   );
 }

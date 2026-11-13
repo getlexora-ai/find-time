@@ -176,6 +176,28 @@
 .px .hist-confirm { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 10px; background: #fdecec; font-size: 12.5px; color: #8f1d14; }
 .px .hist-confirm .acts { display: flex; gap: 6px; }
 
+/* ---- design pass (critique 2026-11-13) ---- */
+/* one proposal: no tickbox; title, then day · time · length */
+.px .row.solo { grid-template-columns: 42px minmax(0, 1fr); }
+.px .row .w > .t { font-size: 13.5px; font-weight: 600; color: var(--ink); line-height: 1.3; }
+.px .row .w > .tm { font-size: 12.5px; color: var(--ink2); font-variant-numeric: tabular-nums; margin: -3px 0 0; }
+.px .row input, .px .row .tick { margin-top: 12px; }
+/* a card and its tile on the week light up together */
+.px .row { transition: background .15s; }
+.px .row.hot { background: var(--ai-bg); }
+.px .ev.ai.chat { z-index: 4; border-width: 1.5px; background: rgba(255, 244, 236, .94); box-shadow: 0 6px 16px -10px rgba(255, 106, 0, .55); cursor: pointer; text-align: left; font: inherit; font-size: 11.5px; }
+.px .ev.ai.chat.hot { background: #ffe6d4; box-shadow: 0 0 0 3px rgba(255, 106, 0, .18), 0 10px 22px -10px rgba(255, 106, 0, .6); }
+/* the day strip gets a scale, so the dashed slot can be read */
+.px .strip-w { display: flex; flex-direction: column; gap: 3px; }
+.px .strip-s { display: flex; justify-content: space-between; gap: 8px; font: 400 10.5px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.px .strip-s span:nth-child(2) { font-family: var(--body); font-size: 11px; }
+.px .strip-d { height: 10px; }
+/* contrast: secondary text on white must pass 4.5:1 (faint was ~2.6:1) */
+.px .meta button, .px .meta span, .px .steps-ai > span small, .px .hopen time { color: var(--muted); }
+/* steps header: plain words, not a mono label */
+.px .steps-h { font: 500 12px var(--body); letter-spacing: 0; text-transform: none; }
+.px .compose .r .chip.more { font-family: var(--body); font-size: 11.5px; }
+
 /* the band's Plan with AI button */
 .px .band-r .btn { flex: none; text-shadow: none; }
 .px .band-r .btn svg { width: 15px; height: 15px; }
