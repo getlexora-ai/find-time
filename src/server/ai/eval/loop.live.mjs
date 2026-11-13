@@ -56,20 +56,21 @@ const habits = [{ id: 'h1', title: 'Gym', perWeek: 3, minPerWeek: null, duration
 
 const WRITES = ['add_task', 'update_task', 'task_done', 'postpone_task', 'add_habit', 'update_habit', 'block_time_off', 'plan_week', 'delete_blocks', 'set_travel', 'plan_settings', 'place_at', 'propose_blocks', 'change_plan', 'record_rule', 'record_preference'];
 
-async function turn(text, before = []) {
+async function turn(text, before = [], pendingForm = null) {
   const history = [...before.map(([role, content]) => ({ role, content })), { role: 'user', content: text }];
   const last = before.at(-1);
   const t0 = Date.now();
   const u = await runAgent({
     text, history, nowISO, horizonISO, profile, events, tasks, habits, seen: [],
     pendingQuestion: last?.[0] === 'assistant' ? last[1] : null,
+    pendingForm: last?.[0] === 'assistant' ? pendingForm : null,
     eventsIn: async () => [...events, ...later],
     readCtx: { nowISO, previous: null, lastProposals: [], taskTitles: tasks.map((t) => t.title), habitTitles: habits.map((h) => h.title) },
     step: () => {},
     charge: async () => {},
   });
   const said = String(u?.args?.reply ?? u?.args?.question ?? '');
-  return { name: u?.name ?? '(model failed)', args: u?.args ?? {}, kind: (u?.summary ?? '').split(' · ')[0], summary: u?.summary ?? '', said, ms: Date.now() - t0 };
+  return { name: u?.name ?? '(model failed)', args: u?.args ?? {}, kind: (u?.summary ?? '').split(' · ')[0], summary: u?.summary ?? '', said, pending: u?.pending ?? null, ms: Date.now() - t0 };
 }
 
 /* ── route: [what it is, the sentence, what came before] ── */
@@ -170,6 +171,13 @@ const TALK = [
   ['gym wednesday at 6', ['pm', 'an hour'], ['place_at'], (a) => a.startISO === '2026-11-04T18:00:00.000Z'],
   ['after threshold i wanted to do some german before going to work part time', ['an hour, three times a week'], ['add_habit', 'ask_clarification', 'propose_blocks'], null],
   ['book a haircut', ['what are my rules'], ['answer'], (a) => /10/.test(a.reply)],
+  // The half-filled request is kept between turns: a short answer must not lose what was said first.
+  ['massage on friday at 5pm', ['an hour'], ['place_at'], (a) => a.startISO === '2026-11-06T17:00:00.000Z' && a.endISO === '2026-11-06T18:00:00.000Z'],
+  ['dinner with anna thursday at 8pm', ['not sure', '2 hours'], ['place_at'], (a) => a.startISO === '2026-11-05T20:00:00.000Z' && a.endISO === '2026-11-05T22:00:00.000Z'],
+  ['physio on wednesday at 11', ['45 min', 'am'], ['place_at'], (a) => a.startISO === '2026-11-04T11:00:00.000Z' && a.endISO === '2026-11-04T11:45:00.000Z'],
+  ['lunch with sam tuesday at 1pm', ['an hour, and make it 12:30 instead'], ['place_at'], (a) => a.startISO === '2026-11-03T12:30:00.000Z' && a.endISO === '2026-11-03T13:30:00.000Z'],
+  ['find time for a call with the accountant', ['thursday', 'half an hour'], ['propose_blocks'], (a) => a.durationMin === 30 && a.earliestISO === '2026-11-05T00:00:00.000Z'],
+  ['i want to do yoga', ['twice a week', '40 minutes'], ['add_habit'], (a) => a.perWeek === 2 && a.durationMin === 40],
 ];
 
 const list = process.argv[2];
@@ -219,7 +227,7 @@ if (!list || list === 'talk') {
     for (const reply of replies) {
       if (r.name !== 'ask_clarification') break;
       before.push(['user', log[log.length - 2].slice(5)], ['assistant', r.said]);
-      r = await turn(reply, before);
+      r = await turn(reply, before, r.pending);
       log.push(`you: ${reply}`, `app: ${r.name} ${r.said.slice(0, 150)} ${JSON.stringify(r.args).slice(0, 120)}`);
     }
     times.push(r.ms);

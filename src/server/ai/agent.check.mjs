@@ -21,7 +21,7 @@ export async function resolve(spec, ctx, next) {
 }`),
 );
 
-const { AGENT_TOOLS, agentSystem, askAboutFacts, runAgent } = await import('./agent.ts');
+const { AGENT_TOOLS, agentSystem, runAgent, shownToModel, usualMinutes } = await import('./agent.ts');
 const { freeTime, findEvents } = await import('./tools/look.ts');
 const { changePlan } = await import('./tools/changes.ts');
 const { DEFAULT_WORK_HOURS, defaultProfile } = await import('./preferences.ts');
@@ -510,9 +510,86 @@ for (const t of AGENT_TOOLS) {
   assert.equal((await runAgent(ctxFor('hmm', s))).name, 'answer');
   assert.deepEqual([...s.offered[4]].sort(), ['answer', 'ask']);
   assert.equal(await runAgent(ctxFor('hmm', { call: async () => { throw new Error('OpenAI 503'); } })), null);
-  const facts = await askAboutFacts({ text: 'plan my week', nowISO, charge: async () => {}, call: script(['ask', { question: 'Thesis is 2h short. Move gym?', options: ['Move gym', 'Extend the deadline'] }]).call }, ["Thesis doesn't fit"]);
-  assert.deepEqual(facts, { text: 'Thesis is 2h short. Move gym?', options: ['Move gym', 'Extend the deadline'] });
-  assert.equal(await askAboutFacts({ text: 'x', nowISO, charge: async () => {}, call: async () => { throw new Error('down'); } }, ['y']), null);
+}
+
+// ── an unfinished request is kept: the answer fills the gap, code keeps the rest ──
+{
+  const form = { title: 'Massage', date: '2026-10-07', start: '17:00', end: null, duration_min: null, repeat: null, category: 'personal', overlap_ok: false };
+  const s = script(['place_at', form], ['ask', { question: 'How long is the massage?', options: [] }]);
+  const asked = await runAgent(ctxFor('massage friday at 5pm', s));
+  assert.equal(asked.name, 'ask_clarification');
+  assert.equal(asked.pending.tool, 'place_at');
+  assert.equal(asked.pending.args.date, '2026-10-02', 'the kept form holds the day the date reader read, not the model\'s');
+  assert.equal(asked.pending.args.start, '17:00');
+  assert.match(asked.pending.needs.join(), /long|length/i);
+
+  // The reply: the model fills only the length and drops the rest. Nothing said before is lost.
+  const blank = { title: '', date: null, start: null, end: null, duration_min: 60, repeat: null, category: null, overlap_ok: false };
+  const r = script(['place_at', blank]);
+  const history = [{ role: 'user', content: 'massage friday at 5pm' }, { role: 'assistant', content: 'How long is the massage?' }, { role: 'user', content: 'an hour' }];
+  const reply = { history, pendingQuestion: 'How long is the massage?', pendingForm: asked.pending, route: async () => ({ kind: 'reply', understood: 'an hour' }) };
+  const placed = await runAgent(ctxFor('an hour', r, reply));
+  assert.equal(placed.name, 'place_at');
+  assert.deepEqual([placed.args.title, placed.args.startISO, placed.args.endISO], ['Massage', '2026-10-02T17:00:00.000Z', '2026-10-02T18:00:00.000Z']);
+  assert.equal(placed.pending, undefined, 'a finished request leaves nothing pending');
+
+  // They change their mind in the answer: what they say now wins over what was kept.
+  const moved = await runAgent(ctxFor('an hour, and make it 6pm', script(['place_at', { ...blank, start: '18:00' }]), reply));
+  assert.equal(moved.args.startISO, '2026-10-02T18:00:00.000Z');
+  // Still unclear: the same form stays pending for the next answer.
+  const again = await runAgent(ctxFor('not sure', script(['ask', { question: 'About how long?', options: ['30 min', '1 hour'] }]), reply));
+  assert.equal(again.pending.args.start, '17:00');
+  // A new request is not an answer: the kept form is not mixed into it.
+  const fresh = await runAgent(ctxFor('dentist friday 9:30am for half an hour', script(['place_at', { ...blank, title: 'Dentist', start: '09:30', duration_min: 30 }]), { pendingForm: asked.pending }));
+  assert.equal(fresh.args.title, 'Dentist');
+  assert.equal(fresh.args.startISO, '2026-10-02T09:30:00.000Z');
+}
+
+// ── the planner runs inside the loop: what does not fit goes back to the model, which asks ──
+{
+  const slot = { title: 'Report', category: 'deep-work', duration_min: 120, from: null, to: null, count: null, earliest_hour: null, latest_hour: null, after_event_id: null, before_event_id: null };
+  const ran = [];
+  const run = async (choice) => { ran.push(choice.name); return { reply: 'No slot.', facts: ['No free 120-minute slot for Report on 2026-10-02.'] }; };
+  const s = script(['find_slot', slot], ['ask', { question: 'Friday has no free 2 hours. Shorter, or another day?', options: ['90 minutes', 'Monday'] }]);
+  const r = await runAgent(ctxFor('find 2 hours for the report on friday', s, { run }));
+  assert.deepEqual(ran, ['propose_blocks'], 'the planner ran once, inside the loop');
+  assert.equal(r.name, 'propose_blocks');
+  assert.deepEqual(r.worded, { text: 'Friday has no free 2 hours. Shorter, or another day?', options: ['90 minutes', 'Monday'], question: true });
+  assert.match(lastOutput(s).does_not_fit[0], /No free 120-minute slot/, 'the model is told what the planner found');
+  assert.deepEqual([...s.offered[1]].sort(), ['answer', 'ask'], 'after the planner ran, the model can only talk to the person');
+  assert.deepEqual([r.pending.tool, r.pending.args.duration_min, r.pending.args.from], ['find_slot', 120, '2026-10-02'], 'and the request is kept for their answer');
+
+  // It fits: nothing to ask, the result is the turn's outcome and the handler is not run twice.
+  const fits = await runAgent(ctxFor('find 2 hours for the report on friday', script(['find_slot', slot]), { run: async () => ({ kind: 'plan', proposals: [] }) }));
+  assert.deepEqual([fits.ran.kind, fits.worded], ['plan', undefined]);
+  // The model dies after the planner ran: the planner's own words stay, the turn is not lost.
+  let n = 0;
+  const dies = async (o) => { if (n++) throw new Error('OpenAI 503'); return script(['find_slot', slot]).call(o); };
+  const kept = await runAgent(ctxFor('find 2 hours for the report on friday', { call: dies }, { run }));
+  assert.deepEqual([kept.name, kept.ran.reply, kept.worded], ['propose_blocks', 'No slot.', undefined]);
+  // Something else (a task) is not the planner's to run in the loop.
+  const other = await runAgent(ctxFor('gym today at 7pm for an hour', script(['place_at', { title: 'Gym', date: null, start: '19:00', end: null, duration_min: 60, repeat: null, category: 'personal', overlap_ok: true }]), { run, pendingQuestion: 'x' }));
+  assert.equal(other.ran, undefined);
+}
+
+// ── the model sees what it proposed and offered, and what the person did with it ──
+{
+  const parsed = { proposals: [{ id: 's1', title: 'Report', startISO: '2026-10-02T09:00:00.000Z', endISO: '2026-10-02T11:00:00.000Z' }, { id: 's2', title: 'Gym', startISO: '2026-10-03T17:00:00.000Z', endISO: '2026-10-03T18:00:00.000Z' }] };
+  const shown = shownToModel('Here it is.', parsed, { s2: 'accepted' });
+  assert.match(shown, /Report Fri 2026-10-02 09:00–11:00 \(not added yet\)/);
+  assert.match(shown, /Gym Sat 2026-10-03 17:00–18:00 \(added to the calendar\)/);
+  assert.match(shownToModel('How long?', { question: { options: ['30 min', '1 hour'] } }), /Options offered: 30 min · 1 hour/);
+  assert.equal(shownToModel('Sure.', null), 'Sure.');
+}
+
+// ── a missing length comes with the person's own usual one ──
+{
+  assert.equal(usualMinutes('gym', { events }), 60);
+  assert.equal(usualMinutes('Running', { events, habits: [{ title: 'Running', durationMin: 45 }] }), 45);
+  assert.equal(usualMinutes('massage', { events }), null, 'nothing of theirs to go by: no default');
+  const s = script(['find_slot', { title: 'Gym', category: 'personal', duration_min: null, from: null, to: null, count: null, earliest_hour: null, latest_hour: null, after_event_id: null, before_event_id: null }], ['ask', { question: 'An hour, like your other gym blocks?', options: ['1 hour'] }]);
+  await runAgent(ctxFor('find time for gym tomorrow', s));
+  assert.equal(lastOutput(s).your_usual_min, 60);
 }
 
 console.log('agent.check: ok (offline)');

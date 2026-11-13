@@ -28,7 +28,7 @@ export async function GET(request: Request): Promise<Response> {
   const stored = await listMessages(sessionId, MAX_TURNS * 2);
   const messages: ChatMessage[] = stored.map((m) => {
     // The draft is the planner's working state, not part of the reply.
-    const { draft: _draft, ...parsed } = (m.parsed ?? {}) as Partial<ChatMessage> & { draft?: unknown };
+    const { draft: _draft, pending: _pending, ...parsed } = (m.parsed ?? {}) as Partial<ChatMessage> & { draft?: unknown; pending?: unknown };
     return {
       id: m.id,
       role: m.role,
