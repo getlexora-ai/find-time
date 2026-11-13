@@ -137,6 +137,10 @@ export type ChatProposal = {
   taskId?: string;
   /** "plan my week": the habit this block is a session of */
   habitId?: string;
+  /** set on a reopened chat: what the user already did with it (no buttons then) */
+  decided?: 'accepted' | 'edited' | 'rejected';
+  /** set on a reopened chat: undecided, and its time has passed */
+  expired?: boolean;
   /** a weekly repeat: startISO/endISO are the first one; adding it saves one repeating event */
   repeat?: {
     /** RFC 5545 body, e.g. FREQ=WEEKLY;BYDAY=MO,TU,WE,TH;UNTIL=20261029T235959 */
@@ -306,6 +310,17 @@ export type ChatResponse = {
   sessionId: string;
   message: ChatMessage;
 };
+
+/** One past chat in the history list (GET /api/ai/sessions). */
+export type SessionSummary = {
+  id: string;
+  title: string;
+  lastMessageAt: string;
+  /** the last reply, plain text, ≤140 chars */
+  lastLine: string;
+};
+
+export type SessionsResponse = { sessions: SessionSummary[] };
 
 /** GET /api/ai/chat?sessionId=… — rehydrate an open conversation. */
 export type ChatHistoryResponse = {

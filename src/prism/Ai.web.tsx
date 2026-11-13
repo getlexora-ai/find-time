@@ -18,10 +18,15 @@ import {
   acceptAlternative,
   acceptProposal,
   applyChanges,
+  currentSessionId,
+  deleteSession,
+  listSessions,
   loadHistory,
+  openSession,
   loadTools,
   rejectProposal,
   REJECT_REASONS,
+  renameSession,
   REPORT_REASONS,
   reportReply,
   resetSession,
@@ -32,7 +37,7 @@ import { toMin } from '@/calendar/cal-date';
 import { localIdFor, useCalEvents } from '@/calendar/cal-store';
 import { useHours } from '@/calendar/hours';
 import { STEP } from '@/lib/agent-tools';
-import type { ApiTask, ChangeItem, ChangeSet, ChatMessage, ChatProposal, RejectReason, ReportReason, TraceStep } from '@/lib/api-types';
+import type { ApiTask, ChangeItem, ChangeSet, ChatMessage, ChatProposal, RejectReason, ReportReason, SessionSummary, TraceStep } from '@/lib/api-types';
 
 import './ai.css';
 import type { Toast } from './Week.web';
@@ -110,6 +115,23 @@ const Svg = {
       <path d="m4.5 6.5 3.5 3.5 3.5-3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
+  chats: (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden>
+      <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  ),
+  back: (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden>
+      <path d="M10 3 5 8l5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  dots: (
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+      <circle cx="3.5" cy="8" r="1.3" />
+      <circle cx="8" cy="8" r="1.3" />
+      <circle cx="12.5" cy="8" r="1.3" />
+    </svg>
+  ),
   arrow: (
     <svg viewBox="0 0 16 16" fill="none" aria-hidden>
       <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
@@ -119,6 +141,15 @@ const Svg = {
 
 /** Local-only state layered over a server message. */
 type Decision = { kind: 'added' | 'declined'; label: string };
+
+/** What was done with a proposal: this visit's click, else what the server says for a reopened chat. */
+function decisionOf(p: ChatProposal, local: Record<string, Decision>): Decision | undefined {
+  if (local[p.id]) return local[p.id];
+  if (p.decided === 'rejected') return { kind: 'declined', label: 'turned down' };
+  if (p.decided) return { kind: 'added', label: p.decided === 'edited' ? 'at another time' : slot(p.startISO, p.endISO) };
+  if (p.expired) return { kind: 'declined', label: 'its time passed' };
+  return undefined;
+}
 type Live = { done: TraceStep[]; current: { tool: string; label: string } | null };
 
 /* ───────────────────────── the panel ───────────────────────── */
@@ -149,6 +180,7 @@ export function AiPanel({
   const [failed, setFailed] = useState<Record<string, string>>({});
   const [reported, setReported] = useState<Record<string, true>>({});
   const busy = useRef(new Set<string>());
+  const [view, setView] = useState<'chat' | 'history'>('chat');
 
   const scroller = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -294,13 +326,28 @@ export function AiPanel({
     [toast],
   );
 
-  const newChat = () => {
-    resetSession();
-    setMessages([]);
+  const clearLocal = () => {
     setDecisions({});
     setFailed({});
     setReported({});
-    input.current?.focus();
+  };
+  const newChat = () => {
+    resetSession();
+    setMessages([]);
+    clearLocal();
+    setView('chat');
+    requestAnimationFrame(() => input.current?.focus());
+  };
+  const openChat = async (id: string) => {
+    if (sending) return;
+    setView('chat');
+    setBooting(true);
+    setMessages([]);
+    clearLocal();
+    const h = await openSession(id);
+    setMessages(h);
+    setBooting(false);
+    toBottom(true);
   };
 
   // The last unanswered question can be answered with 1–3 while the composer is empty.
@@ -316,15 +363,34 @@ export function AiPanel({
   return (
     <aside className="ai" aria-label="Plan with AI">
       <div className="ai-top">
-        <h3>
-          Plan with <em>AI</em>
-        </h3>
-        {messages.length === 0 && <small title="Nothing is booked until you add it">Proposals only</small>}
-        {messages.length > 0 && (
-          <button type="button" className="ai-new" onClick={newChat} title="Start a new chat. This one is kept.">
-            {Svg.plus}
-            New chat
-          </button>
+        {view === 'history' ? (
+          <>
+            <button type="button" className="ai-x" onClick={() => setView('chat')} aria-label="Back to the chat" title="Back">
+              {Svg.back}
+            </button>
+            <h3>Chats</h3>
+            <button type="button" className="ai-new" onClick={newChat}>
+              {Svg.plus}
+              New chat
+            </button>
+          </>
+        ) : (
+          <>
+            <h3>
+              Plan with <em>AI</em>
+            </h3>
+            {messages.length > 0 ? (
+              <button type="button" className="ai-new" onClick={newChat} title="Start a new chat. This one stays in Chats.">
+                {Svg.plus}
+                New chat
+              </button>
+            ) : (
+              <small title="Nothing is booked until you add it">Proposals only</small>
+            )}
+            <button type="button" className="ai-x" onClick={() => setView('history')} aria-label="Your chats" title="Your chats">
+              {Svg.chats}
+            </button>
+          </>
         )}
         <button type="button" className="ai-x" onClick={onClose} aria-label="Close Plan with AI" title="Close">
           {Svg.close}
@@ -332,7 +398,18 @@ export function AiPanel({
         {sending && <i className="ai-bar" aria-hidden />}
       </div>
 
-      <div className="msgs" ref={scroller} aria-live="polite">
+      {view === 'history' && (
+        <History
+          openId={messages.length ? currentSessionId() : null}
+          onOpen={(id) => void openChat(id)}
+          onDeletedOpen={() => {
+            setMessages([]);
+            clearLocal();
+          }}
+          toast={toast}
+        />
+      )}
+      <div className="msgs" ref={scroller} aria-live="polite" hidden={view === 'history'}>
         {booting && <div className="ai-boot">Opening your last chat…</div>}
         {empty && <Start tasks={tasks} onSend={(t) => void send(t)} />}
 
@@ -369,6 +446,7 @@ export function AiPanel({
       </div>
 
       <form
+        hidden={view === 'history'}
         className="compose"
         onSubmit={(e) => {
           e.preventDefault();
@@ -418,6 +496,174 @@ export function AiPanel({
         </div>
       </form>
     </aside>
+  );
+}
+
+/* ───────────────────────── chat history ───────────────────────── */
+
+const DAY = 86_400_000;
+const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+
+/** Today / Yesterday / This week / Earlier, newest first within each. */
+export function groupSessions(list: SessionSummary[], now = new Date()): { label: string; items: SessionSummary[] }[] {
+  const today = startOfDay(now);
+  const label = (iso: string) => {
+    const t = startOfDay(new Date(iso));
+    return t >= today ? 'Today' : t >= today - DAY ? 'Yesterday' : t >= today - 6 * DAY ? 'This week' : 'Earlier';
+  };
+  const out: { label: string; items: SessionSummary[] }[] = [];
+  for (const s of [...list].sort((a, b) => b.lastMessageAt.localeCompare(a.lastMessageAt))) {
+    const l = label(s.lastMessageAt);
+    if (out.at(-1)?.label !== l) out.push({ label: l, items: [] });
+    out.at(-1)!.items.push(s);
+  }
+  return out;
+}
+
+/** "14:05" today and yesterday, "Tue" this week, "12 Oct" before. */
+function whenLabel(iso: string, group: string) {
+  const d = new Date(iso);
+  if (group === 'Today' || group === 'Yesterday') return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  if (group === 'This week') return DOW[d.getDay()];
+  return `${d.getDate()} ${MON[d.getMonth()]}`;
+}
+
+function History({
+  openId,
+  onOpen,
+  onDeletedOpen,
+  toast,
+}: {
+  /** the chat on screen, marked in the list */
+  openId: string | null;
+  onOpen: (id: string) => void;
+  /** the chat on screen was deleted */
+  onDeletedOpen: () => void;
+  toast: Toast;
+}) {
+  const [list, setList] = useState<SessionSummary[] | null | 'error'>(null);
+  const [q, setQ] = useState('');
+  const [menu, setMenu] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    void listSessions().then((l) => setList(l ?? 'error'));
+  }, []);
+  useEffect(load, [load]);
+
+  if (list === null) return <div className="hist"><div className="ai-boot">Loading your chats…</div></div>;
+  if (list === 'error')
+    return (
+      <div className="hist">
+        <div className="card warn" role="alert">
+          <b>Couldn&apos;t load your chats.</b>
+          <div className="acts">
+            <button type="button" className="btn ink sm" onClick={() => { setList(null); load(); }}>
+              Try again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+
+  const needle = q.trim().toLowerCase();
+  const shown = needle ? list.filter((s) => `${s.title} ${s.lastLine}`.toLowerCase().includes(needle)) : list;
+
+  const rename = async (s: SessionSummary, title: string) => {
+    setRenaming(null);
+    const t = title.replace(/\s+/g, ' ').trim();
+    if (!t || t === s.title) return;
+    setList((l) => (Array.isArray(l) ? l.map((x) => (x.id === s.id ? { ...x, title: t } : x)) : l));
+    if (!(await renameSession(s.id, t))) {
+      toast("Couldn't rename that chat. Try again.");
+      load();
+    }
+  };
+  const remove = async (s: SessionSummary) => {
+    setConfirming(null);
+    const wasOpen = s.id === openId;
+    if (!(await deleteSession(s.id))) return toast("Couldn't delete that chat. Try again.");
+    setList((l) => (Array.isArray(l) ? l.filter((x) => x.id !== s.id) : l));
+    if (wasOpen) onDeletedOpen();
+    toast('Chat deleted. Blocks it added stay on your calendar.');
+  };
+
+  return (
+    <div className="hist">
+      {list.length > 0 && (
+        <input className="hist-q" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search your chats" aria-label="Search your chats" />
+      )}
+      {list.length === 0 ? (
+        <p className="hist-empty">No chats yet. Your conversations will show up here.</p>
+      ) : shown.length === 0 ? (
+        <p className="hist-empty">No chats match “{q.trim()}”.</p>
+      ) : (
+        groupSessions(shown).map((g) => (
+          <section key={g.label}>
+            <h5>{g.label}</h5>
+            <ul>
+              {g.items.map((s) => (
+                <li key={s.id} className={`hrow${s.id === openId ? ' on' : ''}`}>
+                  {renaming === s.id ? (
+                    <input
+                      className="hist-rename"
+                      defaultValue={s.title}
+                      maxLength={120}
+                      autoFocus
+                      aria-label="Chat name"
+                      onBlur={(e) => void rename(s, e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') void rename(s, e.currentTarget.value);
+                        if (e.key === 'Escape') setRenaming(null);
+                      }}
+                    />
+                  ) : confirming === s.id ? (
+                    <div className="hist-confirm" role="alertdialog" aria-label="Delete this chat?">
+                      <span>Delete this chat? Blocks it added stay on your calendar.</span>
+                      <div className="acts">
+                        <button type="button" className="btn danger sm" onClick={() => void remove(s)}>
+                          Delete
+                        </button>
+                        <button type="button" className="btn line sm" onClick={() => setConfirming(null)}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <button type="button" className="hopen" onClick={() => onOpen(s.id)}>
+                        <span className="ht">{s.title || 'Untitled chat'}</span>
+                        <time dateTime={s.lastMessageAt}>{whenLabel(s.lastMessageAt, g.label)}</time>
+                        {s.lastLine && <span className="hl">{s.lastLine}</span>}
+                      </button>
+                      <button
+                        type="button"
+                        className="hmenu"
+                        aria-label={`More for ${s.title || 'this chat'}`}
+                        aria-expanded={menu === s.id}
+                        onClick={() => setMenu(menu === s.id ? null : s.id)}>
+                        {Svg.dots}
+                      </button>
+                      {menu === s.id && (
+                        <div className="hpop" role="menu" onMouseLeave={() => setMenu(null)}>
+                          <button type="button" role="menuitem" onClick={() => { setMenu(null); setRenaming(s.id); }}>
+                            Rename
+                          </button>
+                          <button type="button" role="menuitem" className="del" onClick={() => { setMenu(null); setConfirming(s.id); }}>
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))
+      )}
+    </div>
   );
 }
 
@@ -680,7 +926,7 @@ function Tray({
   onAlt: (p: ChatProposal, a: { startISO: string; endISO: string }) => Promise<void>;
   onDiscard: (l: ChatProposal[], r: RejectReason, label: string) => Promise<void>;
 }) {
-  const waiting = list.filter((p) => !decisions[p.id]);
+  const waiting = list.filter((p) => !decisionOf(p, decisions));
   const [off, setOff] = useState<Record<string, true>>({});
   const [alts, setAlts] = useState<string | null>(null);
   const [why, setWhy] = useState(false);
@@ -690,7 +936,7 @@ function Tray({
   return (
     <div className="tray">
       {list.map((p) => {
-        const d = decisions[p.id];
+        const d = decisionOf(p, decisions);
         const w = wall(p.startISO);
         return (
           <div key={p.id} className={`row${d ? ` ${d.kind}` : ''}`}>

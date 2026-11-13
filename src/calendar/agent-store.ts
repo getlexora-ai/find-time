@@ -24,6 +24,8 @@ import type {
   PreferencesResponse,
   RejectReason,
   ReportReason,
+  SessionSummary,
+  SessionsResponse,
 } from '@/lib/api-types';
 import { apiFetch, currentUserId, onTokenGetter } from '@/lib/api';
 
@@ -96,7 +98,13 @@ async function previewTurn(reply: ChatMessage, onEvent?: (e: TurnEvent) => void)
  * `/preview` only: a canned conversation, so the panel can be designed and
  * screenshotted with no account and no network. Never set in the real app.
  */
-let preview: { history: ChatMessage[]; reply: (text: string) => ChatMessage; tools: ToolUi[] } | null = null;
+let preview: {
+  history: ChatMessage[];
+  reply: (text: string) => ChatMessage;
+  tools: ToolUi[];
+  /** past chats for the history list; opening one shows its messages */
+  chats?: { summary: SessionSummary; messages: ChatMessage[] }[];
+} | null = null;
 export function startPreviewChat(p: typeof preview): void {
   preview = p;
   if (p) setTools(p.tools);
@@ -211,7 +219,7 @@ export async function sendMessage(text: string, onEvent?: (e: TurnEvent) => void
 
 /** Rehydrate the open thread, so reopening the panel doesn't lose the context. */
 export async function loadHistory(): Promise<ChatMessage[]> {
-  if (preview) return preview.history;
+  if (preview) return preview.chats?.find((c) => c.summary.id === sessionId)?.messages ?? (sessionId ? [] : preview.history);
   const id = restoreSession();
   if (!id) return [];
   try {
@@ -226,6 +234,62 @@ export async function loadHistory(): Promise<ChatMessage[]> {
   } catch {
     return [];
   }
+}
+
+// ── chat history ────────────────────────────────────────────────────────────
+
+/** Your past chats, newest first. Null when they couldn't be loaded (say so; don't show "no chats"). */
+export async function listSessions(): Promise<SessionSummary[] | null> {
+  if (preview) return (preview.chats ?? []).map((c) => c.summary);
+  try {
+    const res = await apiFetch('/api/ai/sessions');
+    if (!res.ok) return null;
+    return ((await res.json()) as SessionsResponse).sessions ?? [];
+  } catch {
+    return null;
+  }
+}
+
+/** Make a past chat the open one and load its messages; the next message continues it. */
+export async function openSession(id: string): Promise<ChatMessage[]> {
+  rememberSession(id);
+  return loadHistory();
+}
+
+export async function renameSession(id: string, title: string): Promise<boolean> {
+  if (preview) {
+    const c = preview.chats?.find((x) => x.summary.id === id);
+    if (c) c.summary = { ...c.summary, title };
+    return Boolean(c);
+  }
+  try {
+    const res = await apiFetch('/api/ai/sessions', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id, title }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Delete a chat and its messages. Blocks it added stay on the calendar. Deleting the open chat starts a new one. */
+export async function deleteSession(id: string): Promise<boolean> {
+  let ok = false;
+  if (preview) {
+    const before = preview.chats?.length ?? 0;
+    preview.chats = preview.chats?.filter((x) => x.summary.id !== id);
+    ok = (preview.chats?.length ?? 0) < before;
+  } else {
+    try {
+      ok = (await apiFetch(`/api/ai/sessions?id=${encodeURIComponent(id)}`, { method: 'DELETE' })).ok;
+    } catch {
+      ok = false;
+    }
+  }
+  if (ok && restoreSession() === id) resetSession();
+  return ok;
 }
 
 async function reportFeedback(body: Record<string, unknown>): Promise<string[]> {

@@ -1,8 +1,9 @@
 import type { ChatHistoryResponse, ChatMessage, ChatResponse } from '@/lib/api-types';
 import { requireUserId, unauthorized } from '@/server/auth/user';
-import { listMessages, sessionExists } from '@/server/ai/repo';
+import { listMessages, proposalOutcomes, sessionExists, userTimeZone } from '@/server/ai/repo';
 import { MAX_TURNS, runTurn, type Emit } from '@/server/ai/turn';
 import { isConfigured } from '@/server/db';
+import { wallClockNow } from '@/server/wall-clock';
 import { enforceRateLimit } from '@/server/rate-limit';
 
 /**
@@ -37,6 +38,20 @@ export async function GET(request: Request): Promise<Response> {
       ...parsed,
     };
   });
+  // A reopened chat must not offer "Add" on a proposal already decided, or one
+  // whose time has passed. Proposal times are wall-clock in the user's zone.
+  const ids = messages.flatMap((m) => m.proposals?.map((p) => p.id) ?? []);
+  if (ids.length) {
+    const [outcomes, tz] = await Promise.all([proposalOutcomes(userId, ids), userTimeZone(userId)]);
+    const now = wallClockNow(tz);
+    for (const m of messages) {
+      m.proposals = m.proposals?.map((p) => {
+        const decided = outcomes.get(p.id) as 'accepted' | 'edited' | 'rejected' | undefined;
+        if (decided) return { ...p, decided };
+        return Date.parse(p.startISO) < now ? { ...p, expired: true } : p;
+      });
+    }
+  }
   return Response.json({ sessionId, messages } satisfies ChatHistoryResponse);
 }
 

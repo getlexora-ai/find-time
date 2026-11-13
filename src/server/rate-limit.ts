@@ -20,6 +20,7 @@ export type RateRoute =
   | 'waitlist'
   | 'ai-chat'
   | 'ai-report'
+  | 'ai-sessions'
   | 'google-connect'
   | 'onboarding'
   | 'onboarding-event'
@@ -38,6 +39,8 @@ const LIMITS: Record<RateRoute, Pair> = {
   // authed, no tokens burned — capped only so a stuck client can't flood the
   // review queue; one report per reply is enforced separately
   'ai-report': { hour: 30, day: 100 },
+  // authed, renaming or deleting a past chat — a flood guard only
+  'ai-sessions': { hour: 120, day: 400 },
   // authed, kicks off a Google OAuth round trip
   'google-connect': { hour: 10, day: 30 },
   // authed, writes settings + the user's name — a few saves (and the GET's

@@ -1,5 +1,5 @@
 import { AGENT_TOOLS } from '@/lib/agent-tools';
-import type { ApiAccount, ApiHabit, ApiTask, ChatMessage, ToolUi } from '@/lib/api-types';
+import type { ApiAccount, ApiHabit, ApiTask, ChatMessage, SessionSummary, ToolUi } from '@/lib/api-types';
 
 import { addDays, iso, startOfWeek, today } from '../cal-date';
 import type { CalEvent } from '../types';
@@ -102,7 +102,12 @@ export function previewAccounts(): ApiAccount[] {
 /* ───────────────────────── Plan with AI ───────────────────────── */
 
 /** A short conversation for the AI panel in `/preview`, on the fixture week. */
-export function previewChat(): { history: ChatMessage[]; reply: (text: string) => ChatMessage; tools: ToolUi[] } {
+export function previewChat(): {
+  history: ChatMessage[];
+  reply: (text: string) => ChatMessage;
+  tools: ToolUi[];
+  chats: { summary: SessionSummary; messages: ChatMessage[] }[];
+} {
   const at = (date: string, hm: string) => `${date}T${hm}:00.000Z`;
   const t = new Date();
   const d = (n: number) => {
@@ -155,6 +160,24 @@ export function previewChat(): { history: ChatMessage[]; reply: (text: string) =
         ],
       },
     ],
+    // Past chats for the history list: today, yesterday, this week, earlier.
+    chats: [
+      ['pv1', 0, 2, 'Gym three times a week', 'Habit saved: Gym, 3 times a week, mornings. I will plan the sessions each week.', 'Gym 3x a week, mornings'],
+      ['pv2', 0, 5, 'Block Friday afternoon for errands', 'Friday 14:00–18:00 is blocked as time off.', 'Block Friday afternoon for errands'],
+      ['pv3', 1, 3, 'Plan my week', 'I placed 4 of your 5 tasks. The tax return does not fit before Thursday; it needs 3 h and you have 1 h 30 free.', 'Plan my week'],
+      ['pv4', 3, 1, 'Move the design review', 'The design review moves to Thursday 14:00. Nothing else changes.', 'Move the design review to Thursday'],
+      ['pv5', 9, 4, 'How much free time next week?', 'You have 14 h free next week in working hours, most of it on Wednesday and Friday.', 'How much free time do I have next week?'],
+      ['pv6', 20, 2, 'No meetings before 10', 'Rule saved: no bookings before 10:00.', 'Never book me before 10'],
+    ].map(([id, daysAgo, hoursAgo, title, line, asked]) => {
+      const at = new Date(t.getTime() - (daysAgo as number) * 86_400_000 - (hoursAgo as number) * 3_600_000).toISOString();
+      return {
+        summary: { id: id as string, title: title as string, lastMessageAt: at, lastLine: line as string },
+        messages: [
+          { id: `${id}u`, role: 'user', text: asked as string, createdAt: at },
+          { id: `${id}a`, role: 'assistant', text: line as string, createdAt: at },
+        ],
+      };
+    }),
     reply: () => ({
       id: `a_${Date.now()}`,
       role: 'assistant',

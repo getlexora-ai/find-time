@@ -490,6 +490,68 @@ export async function listMessages(sessionId: string, limit = 40): Promise<Store
     }));
 }
 
+// ── chat history ────────────────────────────────────────────────────────────
+
+export type SessionRow = { id: string; title: string; lastMessageAt: string; lastLine: string };
+
+/**
+ * This user's chats, newest first, with the last reply as a preview line.
+ * Stored replies are already scrubbed of Google event titles (scrub.ts).
+ * Empty chats (a failed first turn) are left out.
+ */
+export async function listSessions(userId: string, limit = 50): Promise<SessionRow[]> {
+  const rows = await query<{ id: string; title: string; last_message_at: Date; last_line: string | null }>(
+    `select s.id, s.title, s.last_message_at, m.content as last_line
+       from ai_sessions s
+       left join lateral (
+         select content from ai_messages
+          where session_id = s.id and role = 'assistant'
+          order by created_at desc limit 1
+       ) m on true
+      where s.user_id = $1
+        and exists (select 1 from ai_messages x where x.session_id = s.id)
+      order by s.last_message_at desc
+      limit $2`,
+    [userId, limit],
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    lastMessageAt: r.last_message_at.toISOString(),
+    lastLine: (r.last_line ?? '').replace(/\*\*/g, '').replace(/\s+/g, ' ').trim().slice(0, 140),
+  }));
+}
+
+/** Rename one of this user's chats. False if it isn't theirs or doesn't exist. */
+export async function renameSession(userId: string, sessionId: string, title: string): Promise<boolean> {
+  const rows = await query(`update ai_sessions set title = $3 where id = $1 and user_id = $2 returning id`, [
+    sessionId,
+    userId,
+    title.slice(0, 120),
+  ]);
+  return rows.length > 0;
+}
+
+/**
+ * Delete one of this user's chats and its messages (cascade). Blocks it added
+ * are calendar events and stay; proposals keep their outcome for learning.
+ */
+export async function deleteSession(userId: string, sessionId: string): Promise<boolean> {
+  const rows = await query(`delete from ai_sessions where id = $1 and user_id = $2 returning id`, [sessionId, userId]);
+  return rows.length > 0;
+}
+
+/** What happened to these proposals, for a reopened chat: only decided ones are returned. */
+export async function proposalOutcomes(userId: string, ids: string[]): Promise<Map<string, string>> {
+  if (!ids.length) return new Map();
+  const rows = await query<{ id: string; status: string }>(
+    `select id, status from ai_suggestions
+      where user_id = $1 and id = any($2) and status in ('accepted', 'edited', 'rejected')`,
+    [userId, ids],
+  );
+  return new Map(rows.map((r) => [r.id, r.status]));
+}
+
 // ── proposals and their outcomes ────────────────────────────────────────────
 
 export type ProposalInput = {
