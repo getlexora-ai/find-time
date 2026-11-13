@@ -14,10 +14,10 @@ import { getValidAccessToken } from './oauth';
  * Where the copy goes is the row's own `calendar_id` (null = Find Time only).
  * It is set when the block is made — your primary calendar while "Copy to
  * Google" (scheduler_profiles.push_focus) is on, else none — and changed per
- * block in the editor (setCopyCalendar). The same column is how pull sync
- * recognises the copy when it comes back (sync.ts upsertEvent matches
- * calendar_id + provider_event_id), so a copy on any calendar is never
- * imported a second time.
+ * block in the editor (setCopyCalendar). Toggling the switch never touches
+ * existing blocks' copies. The same column is how pull sync recognises the copy
+ * when it comes back (sync.ts upsertEvent matches the calendar's Google id +
+ * provider_event_id), so a copy on any calendar is never imported a second time.
  *
  * A proposal is not on this path: it has no row until it is accepted.
  * Repeating blocks are not pushed: Google would hand each occurrence back to
@@ -37,6 +37,7 @@ type EvRow = {
   end_at: Date;
   all_day: boolean;
   origin: string;
+  flexibility?: string | null;
   is_draft: boolean;
   rrule: string | null;
   task_id?: string | null;
@@ -61,20 +62,21 @@ const DAY_MS = 86_400_000;
 
 /**
  * Free or busy, for the Google copy (Reclaim's defence, simplest honest form).
- * A planned session of a task or habit is shown FREE while it is more than a
- * day away, so a colleague can still book that time and the planner moves the
- * session; inside 24 hours it turns BUSY and holds. Focus blocks and events you
- * made are busy from the start. Only the Google copy changes: our own row stays
+ * A session the planner made and may still move (origin 'ai', flexibility
+ * 'flexible') is shown FREE while it is more than a day away, so a colleague
+ * can still book that time and the planner moves the session; inside 24 hours
+ * it turns BUSY and holds. Everything else is busy from the start: focus
+ * blocks, events you made, and any session you placed or moved by hand (the
+ * planner won't move it, so a booking over it would just collide). Only the Google copy changes: our own row stays
  * opaque, so Find Time's planner still sees the block as taken.
  *
  * Both times are wall-clock (see wall-clock.ts).
  */
-export function copyTransparency(
-  ev: { task_id?: string | null; habit_id?: string | null; start_at: Date },
-  wallNow: number,
-): 'opaque' | 'transparent' {
-  const session = ev.task_id != null || ev.habit_id != null;
-  return session && ev.start_at.getTime() - wallNow > DAY_MS ? 'transparent' : 'opaque';
+type FreeAware = { task_id?: string | null; habit_id?: string | null; origin?: string; flexibility?: string | null; start_at: Date };
+
+export function copyTransparency(ev: FreeAware, wallNow: number): 'opaque' | 'transparent' {
+  const movable = (ev.task_id != null || ev.habit_id != null) && ev.origin === 'ai' && ev.flexibility === 'flexible';
+  return movable && ev.start_at.getTime() - wallNow > DAY_MS ? 'transparent' : 'opaque';
 }
 
 /**
@@ -84,7 +86,7 @@ export function copyTransparency(
  * remote_updated_at and were written busy.
  */
 export function needsFlip(
-  ev: { task_id?: string | null; habit_id?: string | null; start_at: Date; remote_updated_at: Date | null },
+  ev: FreeAware & { remote_updated_at: Date | null },
   zone: string,
   now: number = Date.now(),
 ): boolean {
@@ -150,7 +152,7 @@ export function copyMoveSteps(
 export async function pushEvent(userId: string, id: string): Promise<boolean> {
   try {
     const ev = await queryOne<EvRow>(
-      `select title, location, start_at, end_at, all_day, origin, is_draft, rrule, task_id, habit_id,
+      `select title, location, start_at, end_at, all_day, origin, flexibility, is_draft, rrule, task_id, habit_id,
               deleted_at, provider_event_id, calendar_id
          from calendar_events where id = $1 and user_id = $2`,
       [id, userId],
@@ -312,41 +314,6 @@ export async function createMeet(userId: string, id: string): Promise<MeetResult
 }
 
 /**
- * After "Copy to Google" changes. On: upcoming blocks that are in Find Time only
- * go to your primary calendar. Off: upcoming copies on your primary calendar
- * come down. Blocks sent to another calendar by hand keep it either way. The
- * switch is also the default for new blocks (defaultCopyCalendar).
- */
-export async function pushUpcoming(userId: string, on: boolean): Promise<void> {
-  const primary = await primaryCalendar(userId);
-  if (primary && on) {
-    await query(
-      `update calendar_events set calendar_id = $2
-        where user_id = $1 and origin <> 'imported' and deleted_at is null and end_at >= now() and calendar_id is null`,
-      [userId, primary.calendarId],
-    );
-  }
-  if (primary && !on) {
-    const onPrimary = await query<{ id: string }>(
-      `select id from calendar_events
-        where user_id = $1 and origin <> 'imported' and deleted_at is null and end_at >= now() and calendar_id = $2
-        limit 300`,
-      [userId, primary.calendarId],
-    );
-    for (let i = 0; i < onPrimary.length; i += 5) {
-      await Promise.all(onPrimary.slice(i, i + 5).map((r) => setCopyCalendar(userId, r.id, null)));
-    }
-  }
-  const rows = await query<{ id: string }>(
-    `select id from calendar_events
-      where user_id = $1 and origin <> 'imported' and deleted_at is null and end_at >= now()
-      order by start_at limit 300`,
-    [userId],
-  );
-  for (let i = 0; i < rows.length; i += 5) await Promise.all(rows.slice(i, i + 5).map((r) => pushEvent(userId, r.id)));
-}
-
-/**
  * Turn planned sessions busy in Google once they are within a day
  * (copyTransparency). There is no background worker: this runs where the app
  * already talks to Google, on each calendar pull (/api/calendar/sync — whenever
@@ -357,8 +324,16 @@ export async function flipNearSessions(userId: string): Promise<number> {
   const profile = await queryOne<{ timezone: string | null }>(`select timezone from scheduler_profiles where user_id = $1`, [userId]);
   const zone = profile?.timezone || 'Europe/Berlin';
   const now = wallClockNow(zone);
-  const rows = await query<{ id: string; task_id: string | null; habit_id: string | null; start_at: Date; remote_updated_at: Date | null }>(
-    `select id, task_id, habit_id, start_at, remote_updated_at from calendar_events
+  const rows = await query<{
+    id: string;
+    task_id: string | null;
+    habit_id: string | null;
+    origin: string;
+    flexibility: string | null;
+    start_at: Date;
+    remote_updated_at: Date | null;
+  }>(
+    `select id, task_id, habit_id, origin, flexibility, start_at, remote_updated_at from calendar_events
       where user_id = $1 and origin <> 'imported' and deleted_at is null and provider_event_id is not null
         and (task_id is not null or habit_id is not null)
         and start_at <= $2 and end_at >= $3`,
@@ -367,6 +342,34 @@ export async function flipNearSessions(userId: string): Promise<number> {
   const due = rows.filter((r) => needsFlip(r, zone));
   for (const r of due) await pushEvent(userId, r.id);
   return due.length;
+}
+
+/**
+ * Try upcoming copies that Google didn't take again (runs beside
+ * flipNearSessions, on each calendar pull). A row that failed before blocks had
+ * their own calendar has no calendar_id and would read as "Find Time only"
+ * forever: it gets the default calendar (primary, only while "Copy to Google"
+ * is on), else its failure flag is cleared — there is nothing to copy.
+ */
+export async function retryFailedPushes(userId: string): Promise<number> {
+  const fallback = await defaultCopyCalendar(userId);
+  await query(
+    `update calendar_events
+        set calendar_id = $2::text, sync_state = case when $2::text is null then 'local' else sync_state end,
+            sync_error = case when $2::text is null then null else sync_error end
+      where user_id = $1 and sync_state = 'push_failed' and calendar_id is null
+        and origin <> 'imported' and deleted_at is null and end_at >= now()
+        and rrule is null and not is_draft`,
+    [userId, fallback],
+  );
+  const rows = await query<{ id: string }>(
+    `select id from calendar_events
+      where user_id = $1 and sync_state = 'push_failed' and origin <> 'imported' and end_at >= now()
+      order by start_at limit 20`,
+    [userId],
+  );
+  for (const r of rows) await pushEvent(userId, r.id);
+  return rows.length;
 }
 
 /** Delete the Google copy. The block keeps its calendar choice (calendar_id). */
@@ -417,14 +420,20 @@ async function primaryCalendar(userId: string): Promise<{ calendarId: string; pu
        join calendars c on c.connected_account_id = a.id and c.is_primary
        left join scheduler_profiles p on p.user_id = a.user_id
       where a.user_id = $1 and position($2 in coalesce(t.scope, '')) > 0
-      order by a.created_at
+      order by a."order", a.created_at
       limit 1`,
     [userId, WRITE_SCOPE],
   );
   return row ? { calendarId: row.calendar_id, pushFocus: Boolean(row.push_focus) } : null;
 }
 
-/** Where a new block is copied when nobody chose: your primary calendar while "Copy to Google" is on. */
+/**
+ * Where a new block is copied when nobody chose: your primary calendar while
+ * "Copy to Google" is on. Writable by the canCopyTo rule without asking Google:
+ * primaryCalendar requires the write scope, and an account's own primary
+ * calendar is always accessRole 'owner' and never a holiday calendar. Accounts
+ * in the same order as the editor's list (accounts-repo), so both pick one.
+ */
 export async function defaultCopyCalendar(userId: string): Promise<string | null> {
   const p = await primaryCalendar(userId);
   return p?.pushFocus ? p.calendarId : null;

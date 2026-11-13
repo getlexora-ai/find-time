@@ -208,19 +208,20 @@
 /* tap-to-place: the row title is a button (keyboard), a picked row is ringed, a slim bar says what happens next */
 .px .tk .ti { border: 0; background: transparent; padding: 0; text-align: left; cursor: inherit; color: inherit; }
 .px .tk { cursor: pointer; }
-.px .tk.picked { background: color-mix(in srgb, var(--focus-sw) 9%, var(--surface)); border-color: var(--focus-sw); }
-.px .pick { display: flex; align-items: center; gap: 10px; padding: 6px 16px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--focus-sw) 7%, var(--surface)); font-size: 12.5px; color: var(--ink2); flex: none; }
+/* each color-mix() rule repeats a plain value first: older Safari drops the mix and keeps that */
+.px .tk.picked { background: var(--sunken); background: color-mix(in srgb, var(--focus-sw) 9%, var(--surface)); border-color: var(--focus-sw); }
+.px .pick { display: flex; align-items: center; gap: 10px; padding: 6px 16px; border-bottom: 1px solid var(--line); background: var(--sunken); background: color-mix(in srgb, var(--focus-sw) 7%, var(--surface)); font-size: 12.5px; color: var(--ink2); flex: none; }
 .px .pick > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .px .pick b { font-weight: 600; color: var(--ink); }
 /* "+n more" in a crowded slot: a neutral chip, not a fake event */
 .px .ev.of { background: var(--sunken); border-color: var(--line-strong); color: var(--ink2); }
 .px .board-add { max-width: 420px; margin-bottom: 14px; }
 /* A Google event: its calendar's colour (--cc) as a tint and a left bar. Find Time's own blocks never get the bar. */
-.px .ev.gcal { background: color-mix(in srgb, var(--cc) 15%, var(--surface)); border: 0; border-left: 3px solid var(--cc); border-radius: 4px 8px 8px 4px; color: color-mix(in srgb, var(--cc) 55%, var(--ink)); }
-.px .adv.gcal { background: color-mix(in srgb, var(--cc) 16%, var(--surface)); border-color: color-mix(in srgb, var(--cc) 45%, transparent); color: color-mix(in srgb, var(--cc) 55%, var(--ink)); }
+.px .ev.gcal { background: var(--sunken); background: color-mix(in srgb, var(--cc) 15%, var(--surface)); border: 0; border-left: 3px solid var(--cc); border-radius: 4px 8px 8px 4px; color: var(--ink2); color: color-mix(in srgb, var(--cc) 55%, var(--ink)); }
+.px .adv.gcal { background: var(--sunken); background: color-mix(in srgb, var(--cc) 16%, var(--surface)); border-color: var(--cc); border-color: color-mix(in srgb, var(--cc) 45%, transparent); color: var(--ink2); color: color-mix(in srgb, var(--cc) 55%, var(--ink)); }
 /* A public holiday marks its whole day: a word in the header and a faint tint down the column. */
-.px .days .hol { font: 600 10px var(--body); letter-spacing: .04em; color: var(--cc); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.px .col.hol { background-color: color-mix(in srgb, var(--cc) 6%, var(--surface)); }
+.px .days .hol { font: 600 10px var(--body); letter-spacing: .04em; color: var(--ink2); color: color-mix(in srgb, var(--cc) 55%, var(--ink)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.px .col.hol { background-color: var(--sunken); background-color: color-mix(in srgb, var(--cc) 6%, var(--surface)); }
 .px .ev.past { opacity: .92; }
 .px .ev.sel { box-shadow: 0 0 0 2px var(--ink) inset; }
 .px .ev.dragging { opacity: .92; box-shadow: 0 18px 30px -12px rgba(11, 16, 32, .45); z-index: 5; cursor: grabbing; }

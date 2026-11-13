@@ -315,7 +315,7 @@ export type AgentCtx = {
   nowISO: string;
   horizonISO: string;
   profile: AgentProfile;
-  /** with their calendar's name and public holidays marked (holidays.ts) */
+  /** with public holidays marked (holidays.ts) */
   events: CalEvent[];
   tasks?: ApiTask[];
   habits?: ApiHabit[];

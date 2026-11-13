@@ -1,7 +1,7 @@
 import { requireUserId, unauthorized } from '@/server/auth/user';
 import { isConfigured } from '@/server/db';
 import { listAccountsWithCalendars } from '@/server/accounts-repo';
-import { flipNearSessions } from '@/server/google/push';
+import { flipNearSessions, retryFailedPushes } from '@/server/google/push';
 import { syncAccount } from '@/server/google/sync';
 
 /**
@@ -11,7 +11,8 @@ import { syncAccount } from '@/server/google/sync';
  *
  * Also the one regular moment the app talks to Google, so planned sessions
  * copied to Google as free turn busy here once they are within a day
- * (google/push.ts flipNearSessions).
+ * (google/push.ts flipNearSessions), and copies Google didn't take are tried
+ * again (retryFailedPushes).
  */
 const THROTTLE_MS = 60_000;
 
@@ -44,6 +45,7 @@ export async function POST(request: Request): Promise<Response> {
 
   // Best effort: a failed flip is retried on the next pull.
   await flipNearSessions(userId).catch((err) => console.error('sync flipNearSessions', err));
+  await retryFailedPushes(userId).catch((err) => console.error('sync retryFailedPushes', err));
 
   return Response.json({ accounts: accounts.length, synced, imported, deleted, errors });
 }

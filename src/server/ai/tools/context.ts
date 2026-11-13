@@ -27,7 +27,7 @@ export type TurnCtx = {
   nowISO: string;
   horizonISO: string;
   profile: AgentProfile;
-  /** events in [now, horizon], with their calendar's name and holidays marked (holidays.ts) */
+  /** events in [now, horizon], with holidays marked (holidays.ts) */
   events: CalEvent[];
   /** what blocks time (blocksTime) */
   busy: Span[];

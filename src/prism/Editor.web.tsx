@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useAccounts } from '@/calendar/account-store';
 import { fromMin, MO, toMin, WD, wdIndex } from '@/calendar/cal-date';
 import { acceptEvent, createEventAsync, createMeetLink, deleteEvent, updateEvent } from '@/calendar/cal-store';
+import { isPreviewTasks } from '@/calendar/tasks-store';
 import type { CatKey } from '@/calendar/tokens';
 import type { CalEvent } from '@/calendar/types';
 import { apiFetch } from '@/lib/api';
@@ -138,8 +139,8 @@ type Draft = {
   project: string;
   notes: string;
   /**
-   * The Google calendar a copy goes to ('' = Find Time only). Undefined only on
-   * a new block nobody has chosen for: the server's default (google/push.ts).
+   * The Google calendar a copy goes to ('' = Find Time only). Undefined on a new
+   * block nobody has chosen for: it follows "Copy to Google" (see `copyTo` below).
    */
   copyTo?: string;
 };
@@ -192,6 +193,7 @@ export function Popover({
   events,
   onClose,
   onOpen,
+  onCreated,
   toast,
   looks,
 }: {
@@ -199,6 +201,8 @@ export function Popover({
   events: CalEvent[];
   onClose: () => void;
   onOpen: (ev: CalEvent) => void;
+  /** a new block was saved */
+  onCreated?: () => void;
   toast: Toast;
   looks?: CalLooks;
 }) {
@@ -264,6 +268,7 @@ export function Popover({
         ev={live}
         fresh={pop.type === 'draft' ? { date: pop.date, s: pop.s, t: pop.t } : null}
         onClose={onClose}
+        onCreated={onCreated}
         toast={toast}
       />
     </div>
@@ -274,11 +279,13 @@ function Editor({
   ev,
   fresh,
   onClose,
+  onCreated,
   toast,
 }: {
   ev: CalEvent | null;
   fresh: { date: string; s: number; t: number } | null;
   onClose: () => void;
+  onCreated?: () => void;
   toast: Toast;
 }) {
   const isNew = !ev;
@@ -319,9 +326,10 @@ function Editor({
   );
   const primary = writable.find((c) => c.isPrimary) ?? null;
   // A new block follows "Copy to Google": your primary calendar while it is on.
-  const [copyOn, setCopyOn] = useState<boolean | null>(null);
+  // The preview has no server: Find Time only, no fetch.
+  const [copyOn, setCopyOn] = useState<boolean | null>(() => (isPreviewTasks() ? false : null));
   useEffect(() => {
-    if (!isNew) return;
+    if (!isNew || isPreviewTasks()) return;
     apiFetch('/api/calendar/settings')
       .then((r) => (r.ok ? r.json() : null))
       .then((b: { settings?: { pushFocus?: boolean } } | null) => setCopyOn(!!b?.settings?.pushFocus))
@@ -374,10 +382,15 @@ function Editor({
   const copyToPrimary = async () => {
     if (!ev || !primary) return;
     setBusy('meet');
+    const was = d.copyTo;
     setD((x) => ({ ...x, copyTo: primary.id }));
     const ok = await updateEvent(ev.id, { copyTo: primary.id });
     setBusy(null);
-    if (!ok) return setMeetErr({ msg: `Couldn't copy it to ${primary.name}. Try again.` });
+    if (!ok) {
+      // the row goes back to saying where it really is
+      setD((x) => ({ ...x, copyTo: was }));
+      return setMeetErr({ msg: `Couldn't copy it to ${primary.name}. Try again.` });
+    }
     void meet(ev.id);
   };
 
@@ -398,13 +411,17 @@ function Editor({
         videoUrl: (d.kind === 'event' && d.videoUrl.trim()) || undefined,
         project: d.project.trim(),
         notes: d.notes,
-        // Unchosen: the server's default. A Meet link needs a Google copy, so
+        // What the Calendar row shows is what is saved (a routine: Find Time only).
+        // Still loading: the server's default. A Meet link needs a Google copy, so
         // asking for one on a Find Time only block sends it to your primary.
         copyTo:
-          d.kind === 'event' && wantMeet && d.where === 'online' && !d.videoUrl && !copyTo && primary
-            ? primary.id
-            : d.copyTo === undefined ? undefined : d.copyTo || null,
+          d.kind === 'routine'
+            ? null
+            : d.kind === 'event' && wantMeet && d.where === 'online' && !d.videoUrl && !copyTo && primary
+              ? primary.id
+              : copyTo === undefined ? undefined : copyTo || null,
       });
+      onCreated?.();
       toast(`${d.title.trim() || 'New block'} added ${dayLabel(d.date)} ${fromMin(d.s)}`);
       if (d.kind === 'event' && wantMeet && d.where === 'online' && !d.videoUrl) {
         const out = await createMeetLink(created.id);

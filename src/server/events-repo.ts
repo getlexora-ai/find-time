@@ -89,7 +89,8 @@ function toApi(r: Row): ApiEvent {
     // One column, two meanings by origin: an imported event's own calendar, or
     // the calendar a Find Time block is copied to (google/push.ts).
     calendarId: r.origin === 'imported' ? r.calendar_id : null,
-    copyTo: r.origin === 'imported' ? null : r.calendar_id,
+    // Repeats and drafts are never copied (push.ts wantsCopy): no copy to show.
+    copyTo: r.origin === 'imported' || r.rrule != null || r.is_draft ? null : r.calendar_id,
     allDay: r.all_day,
     location: r.location,
     free: r.transparency === 'transparent',
@@ -151,7 +152,9 @@ export async function listOwnRepeats(userId: string, to: string): Promise<ApiEve
  * it; left out, the block follows "Copy to Google" (defaultCopyCalendar).
  */
 export async function createEvent(userId: string, input: EventInput): Promise<ApiEvent> {
-  const copyTo = input.copyTo === undefined ? await defaultCopyCalendar(userId) : input.copyTo;
+  // The default only for a block that will be copied: a repeat or a draft never is.
+  const copyable = !input.rrule && !input.isDraft;
+  const copyTo = input.copyTo === undefined ? (copyable ? await defaultCopyCalendar(userId) : null) : input.copyTo;
   const row = await queryOne<Row>(
     `insert into calendar_events
        (id, user_id, title, start_at, end_at, time_zone, category, item_type,

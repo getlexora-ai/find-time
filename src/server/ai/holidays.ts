@@ -9,8 +9,8 @@
  * there stay where they are. A time the user names on a holiday is kept, and
  * the reply says what day it is.
  *
- * The calendar facts (which calendar, its name, whether it is a holiday one)
- * ride on the loaded events as `holiday` / `calendarName` (`onCalendars`), so
+ * Which events sit on a holiday calendar rides on the loaded events as
+ * `holiday` (`onCalendars`), so
  * every planner reads them from the events it already has. The holiday's name
  * is the live Google title; it is never stored (scrub.ts takes it out of the
  * saved reply).
@@ -21,21 +21,27 @@ import type { ApiEvent } from '../../lib/api-types.ts';
 
 export const isHolidayCalendar = (providerCalendarId: string) => /#holiday@group\.v\.calendar\.google\.com$/i.test(providerCalendarId);
 
-/** A read-enabled calendar, as the AI needs it (repo.ts listCalendars). */
-export type CalendarInfo = { id: string; name: string; holiday: boolean };
+/**
+ * A read-enabled calendar, as the AI needs it (repo.ts listCalendars). No name:
+ * names aren't stored (they can be email addresses), and the AI doesn't need them.
+ */
+export type CalendarInfo = { id: string; holiday: boolean };
 
-/** What the AI knows about an event's calendar. Names are not event content. */
-export type OnCalendar = { holiday?: boolean; calendarName?: string };
+/** Stored `calendars` rows (id, provider_calendar_id only) → what the AI needs. */
+export const calendarInfos = (rows: { id: string; provider_calendar_id: string }[]): CalendarInfo[] =>
+  rows.map((r) => ({ id: r.id, holiday: isHolidayCalendar(r.provider_calendar_id) }));
+
+/** What the AI knows about an event's calendar. */
+export type OnCalendar = { holiday?: boolean };
 export type CalEvent = ApiEvent & OnCalendar;
 
-/** Events with their calendar's name, and holiday days marked. */
+/** Events with holiday days marked. */
 export function onCalendars<E extends Pick<ApiEvent, 'calendarId' | 'allDay'>>(events: E[], calendars: CalendarInfo[]): (E & OnCalendar)[] {
   if (!calendars.length) return events;
   const byId = new Map(calendars.map((c) => [c.id, c]));
   return events.map((e) => {
     const c = e.calendarId ? byId.get(e.calendarId) : undefined;
-    if (!c) return e;
-    return { ...e, calendarName: c.name, ...(c.holiday && e.allDay ? { holiday: true } : {}) };
+    return c?.holiday && e.allDay ? { ...e, holiday: true } : e;
   });
 }
 

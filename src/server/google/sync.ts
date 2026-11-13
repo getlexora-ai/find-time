@@ -4,6 +4,8 @@ import { query, queryOne } from '../db';
 import { collectEvents, listCalendars, SyncTokenExpired } from './calendar';
 import { getValidAccessToken } from './oauth';
 import { toRow, type CalendarEventRow } from './map';
+import { copyTransparency, pushEvent } from './push';
+import { wallClockNow } from '../wall-clock';
 
 /**
  * Pull-only Google Calendar sync. Called after connect and on the calendar
@@ -145,15 +147,26 @@ async function syncCalendar(
   for (const g of page.events) {
     const mapped = toRow(g, { userId, calendarId: cal.id, connectedAccountId: accountId, userZone });
     if (mapped.deleted) {
+      // Only Google's own events are deleted here. A cancelled copy of one of
+      // your blocks (deleted by hand in Google, or push.ts taking it down) never
+      // deletes the block: it just forgets the copy, and the next push makes it
+      // again (sendCopy's "deleted by hand in Google: make it again").
       const res = await queryOne<{ id: string }>(
         `update calendar_events set deleted_at = now(), sync_state = 'synced'
-          where calendar_id = $1 and provider_event_id = $2 and deleted_at is null
+          where calendar_id = $1 and provider_event_id = $2 and origin = 'imported' and deleted_at is null
           returning id`,
         [cal.id, mapped.providerEventId],
       );
       if (res) deleted++;
+      await query(
+        `update calendar_events e set provider_event_id = null, provider_etag = null, remote_updated_at = null
+           from calendars c
+          where c.id = e.calendar_id and c.user_id = $1 and c.provider_calendar_id = $2
+            and e.user_id = $1 and e.provider_event_id = $3 and e.origin <> 'imported'`,
+        [userId, cal.providerCalendarId, mapped.providerEventId],
+      );
     } else {
-      await upsertEvent(mapped.row);
+      await upsertEvent(mapped.row, cal.providerCalendarId, userZone);
       imported++;
     }
   }
@@ -195,7 +208,7 @@ const EVENT_COLS = [
   'provider_editable',
 ] as const;
 
-async function upsertEvent(row: CalendarEventRow): Promise<void> {
+async function upsertEvent(row: CalendarEventRow, providerCalendarId: string, userZone: string): Promise<void> {
   const values = EVENT_COLS.map((c) => row[c as keyof CalendarEventRow]);
 
   const setList = EVENT_COLS.map((c, i) => `${c} = $${i + 3}`).join(', ');
@@ -215,10 +228,23 @@ async function upsertEvent(row: CalendarEventRow): Promise<void> {
   // was moved in Google, the new time is the latest word: the etag says so.
   // The row's calendar_id is the calendar its copy lives on, whichever one the
   // block was sent to, so this holds for copies outside the primary calendar too.
-  const ours = await queryOne<{ id: string; provider_etag: string | null; deleted_at: Date | null }>(
-    `select id, provider_etag, deleted_at from calendar_events
-      where calendar_id = $1 and provider_event_id = $2 and origin <> 'imported' limit 1`,
-    [row.calendar_id, row.provider_event_id],
+  // Matched by Google's calendar id, not our calendars row: the same Google
+  // calendar listed under two connected accounts has two rows, and the copy
+  // must not come back in through the other one.
+  const ours = await queryOne<{
+    id: string;
+    provider_etag: string | null;
+    deleted_at: Date | null;
+    task_id: string | null;
+    habit_id: string | null;
+    origin: string;
+    flexibility: string | null;
+  }>(
+    `select e.id, e.provider_etag, e.deleted_at, e.task_id, e.habit_id, e.origin, e.flexibility
+       from calendar_events e join calendars c on c.id = e.calendar_id
+      where e.user_id = $1 and c.user_id = $1 and c.provider_calendar_id = $2 and e.provider_event_id = $3
+        and e.origin <> 'imported' limit 1`,
+    [row.user_id, providerCalendarId, row.provider_event_id],
   );
   if (ours) {
     if (!ours.deleted_at && ours.provider_etag !== row.provider_etag) {
@@ -228,6 +254,10 @@ async function upsertEvent(row: CalendarEventRow): Promise<void> {
         row.end_at,
         row.provider_etag,
       ]);
+      // Moved in Google: free/busy depends on how far away it is now
+      // (push.ts copyTransparency). Rewrite the copy when Google's no longer matches.
+      const want = copyTransparency({ ...ours, start_at: new Date(row.start_at) }, wallClockNow(userZone));
+      if (want !== row.transparency) await pushEvent(row.user_id, ours.id);
     }
     return;
   }

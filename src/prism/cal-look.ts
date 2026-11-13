@@ -13,12 +13,11 @@ export type CalLooks = ReadonlyMap<string, CalLook>;
 /** Google's public-holiday calendars, e.g. `en.german#holiday@group.v.calendar.google.com`. */
 export const isHolidayCalendar = (providerCalendarId: string) => /#holiday@group\.v\.calendar\.google\.com$/i.test(providerCalendarId);
 
+/** For a calendar Google gave no colour: still a look, so its events and holidays are recognised. */
+const NO_COLOR = '#8a93b0';
+
 export function calLooks(calendars: ApiCalendar[]): CalLooks {
-  return new Map(
-    calendars
-      .filter((c) => c.color)
-      .map((c) => [c.id, { color: c.color, name: c.name, holiday: isHolidayCalendar(c.providerCalendarId) }]),
-  );
+  return new Map(calendars.map((c) => [c.id, { color: c.color || NO_COLOR, name: c.name, holiday: isHolidayCalendar(c.providerCalendarId) }]));
 }
 
 /** The calendar look of an event that came from Google, or null for Find Time's own blocks. */

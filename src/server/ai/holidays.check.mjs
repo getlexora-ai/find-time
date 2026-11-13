@@ -29,10 +29,12 @@ const { defaultProfile } = await import('./preferences.ts');
 const profile = defaultProfile();
 // Thu 24 Dec 2026, 08:00. Fri 25 Dec is Christmas; Sat 26 Dec is a holiday on a weekend.
 const NOW = '2026-12-24T08:00:00.000Z';
-const calendars = [
-  { id: 'cal_main', name: 'Work', holiday: false },
-  { id: 'cal_hol', name: 'Holidays in Germany', holiday: true },
-];
+// As listCalendars reads them: prod `calendars` has no name column, only ids.
+const calendars = H.calendarInfos([
+  { id: 'cal_main', provider_calendar_id: 'me@gmail.com' },
+  { id: 'cal_hol', provider_calendar_id: 'en.german#holiday@group.v.calendar.google.com' },
+]);
+assert.deepEqual(calendars, [{ id: 'cal_main', holiday: false }, { id: 'cal_hol', holiday: true }]);
 const ev = (id, start, end, over = {}) => ({
   id, title: id, start, end, category: 'other', itemType: 'event', flexibility: 'fixed', origin: 'imported',
   isDraft: false, rrule: null, projectLabel: null, notes: null, calendarId: 'cal_main', allDay: false, free: false, ...over,
@@ -55,9 +57,10 @@ const raw = [
 ];
 const events = H.onCalendars(raw, calendars);
 assert.equal(events.find((e) => e.id === 'xmas').holiday, true);
-assert.equal(events.find((e) => e.id === 'xmas').calendarName, 'Holidays in Germany');
 assert.equal(events.find((e) => e.id === 'bday').holiday, undefined);
-assert.equal(events.find((e) => e.id === 'meet').calendarName, 'Work');
+// Calendar names (often email addresses) never ride on the events the model reads.
+assert.ok(events.every((e) => !('calendarName' in e)));
+assert.deepEqual(events.find((e) => e.id === 'meet'), raw.find((e) => e.id === 'meet'));
 assert.deepEqual(H.onCalendars(raw, []), raw, 'no calendars read: events as they were');
 
 assert.deepEqual(H.holidaysIn(events), [
@@ -131,9 +134,8 @@ assert.deepEqual(H.holidaysBetween([xmas], '2026-12-24T08:00:00.000Z', '2026-12-
   assert.equal(thu.working_day, true);
   assert.equal(thu.public_holiday, undefined);
   const found = findEvents(events, '', '2026-12-24', 7);
-  assert.equal(found.find((f) => f.id === 'xmas').calendar, 'Holidays in Germany');
   assert.equal(found.find((f) => f.id === 'xmas').public_holiday, true);
-  assert.equal(found.find((f) => f.id === 'meet').calendar, 'Work');
+  assert.ok(found.every((f) => !('calendar' in f)), 'no calendar names in tool output');
 }
 
 console.log('holidays.check: ok');

@@ -171,19 +171,23 @@ export function PrismApp() {
   const go = useCallback((dir: number) => setCursor((c) => addDays(c, dir * step)), [step]);
 
   // A task picked to place by tap (touch) or keyboard; the grid's next tap on a time places it.
-  const [picked, setPicked] = useState<TaskPick | null>(null);
-  const pickTask = (t: ApiTask) => setPicked((p) => (p?.id === t.id ? null : pickOf(t)));
+  const [rawPick, setPicked] = useState<TaskPick | null>(null);
   // a picked task that was finished elsewhere can't be placed
-  useEffect(() => {
-    if (picked && !tasks.some((t) => t.id === picked.id && isOpen(t))) setPicked(null);
-  }, [picked, tasks]);
+  const picked = rawPick && tasks.some((t) => t.id === rawPick.id && isOpen(t)) ? rawPick : null;
+  const pickTask = (t: ApiTask) => setPicked(picked?.id === t.id ? null : pickOf(t));
+  // A pick lives on the planner: leaving it drops the pick (the Tasks page's
+  // "Place on calendar" picks and then comes here).
+  const goPage = (p: Page) => {
+    if (p !== 'planner') setPicked(null);
+    setPage(p);
+  };
 
-  // [ ] drawer · ← → week · T today. Never while typing. Esc drops a picked task;
-  // while one is picked the arrows move it on the grid instead (Week).
+  // [ ] drawer · ← → week · T today. Never while typing. Esc drops a picked task
+  // (unless it is closing an editor first); while one is picked the arrows move it on the grid (Week).
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && picked) {
-        setPicked(null);
+        if (!document.querySelector('.px [role="dialog"]')) setPicked(null);
         return;
       }
       if (picked && e.key.startsWith('Arrow')) return;
@@ -196,8 +200,9 @@ export function PrismApp() {
       else if (page === 'planner' && e.key === 'ArrowRight') go(1);
       else if (page === 'planner' && (e.key === 't' || e.key === 'T')) setCursor(new Date());
     };
-    document.addEventListener('keydown', key);
-    return () => document.removeEventListener('keydown', key);
+    // capture: runs before an editor's own Esc closes it, so "is a dialog open" is still true
+    document.addEventListener('keydown', key, true);
+    return () => document.removeEventListener('keydown', key, true);
   }, [go, page, picked]);
 
   const open = tasks.filter(isOpen);
@@ -248,8 +253,9 @@ export function PrismApp() {
   }, [shown, looks]);
   const onGrid = useMemo(() => (ftShown ? shown : shown.filter((e) => e.imported)), [ftShown, shown]);
 
-  // Write-back (scheduler_profiles.push_focus): a copy of each kept Find Time block,
-  // private and busy, on your primary Google calendar, so people booking you see it.
+  // Write-back (scheduler_profiles.push_focus): the default for NEW blocks only — a
+  // private copy on your primary Google calendar, so people booking you see it.
+  // Toggling never touches existing blocks; each keeps its own choice (its editor).
   const primary = calendars.find((c) => c.isPrimary);
   const [copyOn, setCopyOn] = useState(false);
   const [copyBusy, setCopyBusy] = useState(false);
@@ -281,8 +287,8 @@ export function PrismApp() {
       setCopyOn(on);
       toast(
         on
-          ? `New Find Time blocks now go to ${primary?.name ?? 'your Google calendar'}. Planned sessions show as free until the day before.`
-          : 'Find Time blocks stay in Find Time only.',
+          ? `New blocks will be copied to ${primary?.name ?? 'your Google calendar'}. Blocks you already have keep their own setting. Planned sessions the planner can still move show as free until the day before; blocks you place yourself are busy.`
+          : 'New blocks stay in Find Time only. Blocks you already have keep their own setting.',
       );
       void refresh();
     } catch {
@@ -293,7 +299,7 @@ export function PrismApp() {
   };
 
   const nav = (p: Page, label: string, icon: React.ReactNode, extra?: React.ReactNode) => (
-    <button type="button" className="d-item" aria-current={page === p ? 'page' : undefined} title={label} onClick={() => setPage(p)}>
+    <button type="button" className="d-item" aria-current={page === p ? 'page' : undefined} title={label} onClick={() => goPage(p)}>
       {icon}
       <span className="lb">{label}</span>
       {extra}
@@ -328,7 +334,9 @@ export function PrismApp() {
               <small>This app</small>
             </label>
             {calendars.length > 0 && (
-              <label className="d-sub" title="New blocks go to your primary Google calendar, private (not repeating ones). Change a single block in its editor.">
+              <label
+                className="d-sub"
+                title={`For new blocks only: copy them to ${primary?.name ?? 'your primary Google calendar'}, private (repeating ones stay here). Switching it never changes blocks you already have; change one block in its editor. Planned sessions the planner can still move show as free until the day before; blocks you place yourself are busy.`}>
                 <input type="checkbox" role="switch" checked={copyOn} disabled={copyBusy} onChange={() => void setCopy(!copyOn)} />
                 <span>Copy to Google{primary ? ` · ${primary.name}` : ''}</span>
               </label>
@@ -369,7 +377,17 @@ export function PrismApp() {
           <Band events={shown} hours={hours} off={holidayDays} />
           {page === 'planner' ? (
             <div className="work">
-              <TaskColumn tasks={open} events={shown} hours={hours} off={holidayDays} days={days} toast={toast} picked={picked?.id ?? null} onPick={pickTask} />
+              <TaskColumn
+                tasks={open}
+                events={shown}
+                hours={hours}
+                off={holidayDays}
+                days={days}
+                toast={toast}
+                picked={picked?.id ?? null}
+                onPick={pickTask}
+                onDragStart={() => setPicked(null)}
+              />
               <section className="cal" aria-label="Week">
                 <div className="cal-top">
                   <span className="m">{rangeTitle}</span>
@@ -419,7 +437,18 @@ export function PrismApp() {
                     </button>
                   </div>
                 ) : (
-                  <Week days={days} events={onGrid} hours={hours} loading={load.status === 'loading'} toast={toast} looks={looks} pick={picked} onPick={setPicked} />
+                  <Week
+                    days={days}
+                    events={onGrid}
+                    hours={hours}
+                    loading={load.status === 'loading'}
+                    toast={toast}
+                    looks={looks}
+                    pick={picked}
+                    onPick={setPicked}
+                    // a new block on a hidden Find Time calendar would vanish at once
+                    onCreated={() => !ftShown && showFindTime(true)}
+                  />
                 )}
               </section>
             </div>
@@ -540,6 +569,7 @@ function TaskColumn({
   toast,
   picked,
   onPick,
+  onDragStart,
 }: {
   tasks: ApiTask[];
   events: CalEvent[];
@@ -551,6 +581,7 @@ function TaskColumn({
   /** id of the task picked to place by tap, if any */
   picked: string | null;
   onPick: (t: ApiTask) => void;
+  onDragStart: () => void;
 }) {
   const today = new Date(new Date().toDateString());
   const weekEnd = addDays(startOfWeek(today), 7);
@@ -577,6 +608,8 @@ function TaskColumn({
         draggable
         title="Drag onto the calendar, or click it and then a time"
         onDragStart={(e) => {
+          // dragging one task drops the pick of another, so the grid's ghost is this one
+          onDragStart();
           e.dataTransfer.effectAllowed = 'copy';
           e.dataTransfer.setData(TASK_DRAG, JSON.stringify(pickOf(t)));
         }}

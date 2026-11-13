@@ -85,17 +85,23 @@ const { canWriteTo, copyBody, copyMoveSteps, copyTransparency, needsFlip, sendCo
   assert.deepEqual(copyMoveSteps({ calendar_id: null, provider_event_id: null }, 'cal_b'), ['set-calendar']);
 }
 
-// ── free while far, busy within a day (sessions only) ──
+// ── free while far, busy within a day (sessions the planner may still move) ──
 {
   const now = Date.parse('2026-11-12T09:00:00.000Z'); // wall-clock
   const at = (h) => new Date(now + h * 3_600_000);
-  const task = { task_id: 't1', habit_id: null };
-  const habit = { task_id: null, habit_id: 'h1' };
-  const focus = { task_id: null, habit_id: null };
+  const planned = { origin: 'ai', flexibility: 'flexible' };
+  const task = { task_id: 't1', habit_id: null, ...planned };
+  const habit = { task_id: null, habit_id: 'h1', ...planned };
+  const focus = { task_id: null, habit_id: null, ...planned };
   assert.equal(copyTransparency({ ...task, start_at: at(48) }, now), 'transparent', 'a task session two days out: free');
   assert.equal(copyTransparency({ ...habit, start_at: at(30) }, now), 'transparent', 'a habit session too');
   assert.equal(copyTransparency({ ...task, start_at: at(20) }, now), 'opaque', 'within a day: busy, it holds');
   assert.equal(copyTransparency({ ...focus, start_at: at(48) }, now), 'opaque', 'focus and your own events: always busy');
+  // Placed by hand: the planner won't move it, so it holds from the start.
+  assert.equal(copyTransparency({ ...task, flexibility: 'fixed', start_at: at(48) }, now), 'opaque', 'a session pinned by dragging: busy');
+  assert.equal(copyTransparency({ ...task, origin: 'manual', start_at: at(48) }, now), 'opaque', 'a session you placed yourself: busy');
+  assert.equal(copyTransparency({ ...habit, origin: 'manual', flexibility: 'fixed', start_at: at(48) }, now), 'opaque');
+  assert.equal(copyTransparency({ task_id: 't1', start_at: at(48) }, now), 'opaque', 'unknown origin/flexibility: busy, the safe side');
   assert.equal(copyBody({ title: 'x', start_at: at(48), end_at: at(49), all_day: false }, 'UTC', 'transparent').transparency, 'transparent');
 
   // the flip: written free two days ago, now inside the day
@@ -110,6 +116,11 @@ const { canWriteTo, copyBody, copyMoveSteps, copyTransparency, needsFlip, sendCo
     'still more than a day away: stays free',
   );
   assert.equal(needsFlip({ ...focus, start_at: due.start_at, remote_updated_at: new Date(real - 2 * 86_400_000) }, 'Europe/Berlin', real), false);
+  assert.equal(
+    needsFlip({ ...due, flexibility: 'fixed', remote_updated_at: new Date(real - 2 * 86_400_000) }, 'Europe/Berlin', real),
+    false,
+    'pinned by hand: was written busy, nothing to flip',
+  );
 }
 
 console.log('push.check: ok');

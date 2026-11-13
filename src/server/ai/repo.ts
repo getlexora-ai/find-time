@@ -27,7 +27,7 @@ import {
 } from './preferences.ts';
 import type { SlotFeatures } from './scoring.ts';
 import type { Outcome, ReasonCode } from './learn.ts';
-import { type CalendarInfo, isHolidayCalendar } from './holidays.ts';
+import { type CalendarInfo, calendarInfos } from './holidays.ts';
 
 const id = (p: string) => `${p}_${randomUUID()}`;
 
@@ -380,16 +380,17 @@ export async function deleteFact(userId: string, factId: string): Promise<boolea
 // ── calendars ───────────────────────────────────────────────────────────────
 
 /**
- * The user's read-enabled calendars: name, and whether it is a Google
+ * The user's read-enabled calendars, and whether each is a Google
  * public-holiday one (holidays.ts). An unticked calendar is left out — its
- * events are already gone (accounts-repo setCalendarReadEnabled).
+ * events are already gone (accounts-repo setCalendarReadEnabled). Names are not
+ * stored (prod has no calendars.name; accounts-repo reads them live).
  */
 export async function listCalendars(userId: string): Promise<CalendarInfo[]> {
-  const rows = await query<{ id: string; name: string; provider_calendar_id: string }>(
-    `select id, name, provider_calendar_id from calendars where user_id = $1 and read_enabled`,
+  const rows = await query<{ id: string; provider_calendar_id: string }>(
+    `select id, provider_calendar_id from calendars where user_id = $1 and read_enabled`,
     [userId],
   );
-  return rows.map((r) => ({ id: r.id, name: r.name, holiday: isHolidayCalendar(r.provider_calendar_id) }));
+  return calendarInfos(rows);
 }
 
 // ── conversation ────────────────────────────────────────────────────────────

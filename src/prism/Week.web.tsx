@@ -36,6 +36,7 @@ export const TASK_DRAG = 'application/x-findtime-task';
 export type TaskPick = { id: string; title: string; durationMin: number; category: string };
 /** A placed task becomes one session this long; you can resize it after. */
 const dropLen = (t: Pick<TaskPick, 'durationMin'>) => Math.min(t.durationMin || 60, 120);
+const lenOf = (min: number) => (min < 60 ? `${min}m` : `${Math.floor(min / 60)}h${min % 60 ? pad(min % 60) : ''}`);
 
 /** Why a block can't be dragged here, or null. Same rules as the old grid. */
 function lockOf(ev: CalEvent, cut: boolean): string | null {
@@ -76,6 +77,7 @@ export function Week({
   looks,
   pick,
   onPick,
+  onCreated,
 }: {
   days: Date[];
   events: CalEvent[];
@@ -87,6 +89,8 @@ export function Week({
   /** a task picked in the list: the next tap on an empty time places it */
   pick?: TaskPick | null;
   onPick?: (t: TaskPick | null) => void;
+  /** a block or task was saved onto the grid (PrismApp shows Find Time again if it was hidden) */
+  onCreated?: () => void;
 }) {
   const ws = hours.start;
   const we = hours.end;
@@ -99,8 +103,11 @@ export function Week({
   const grid = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
-  /** where a task dragged in from the list would land */
-  const [over, setOver] = useState<{ di: number; s: number } | null>(null);
+  /**
+   * Where a dragged-in or picked task would land. It belongs to one pick (null
+   * for a drag) on one week: another pick or week falls back to `firstSlot`.
+   */
+  const [rawOver, setRawOver] = useState<{ di: number; s: number; pid: string | null; wk: string } | null>(null);
   /** the column a tap began in while a task is picked; it places on lift */
   const pickDown = useRef<number | null>(null);
   /** the ghost was moved with the keyboard: keep it in view */
@@ -135,6 +142,25 @@ export function Week({
   const anyAllDay = allDay.some((l) => l.length);
   /** a public holiday from a Google holiday calendar marks the whole day */
   const holidays = useMemo(() => allDay.map((l) => l.map((ev) => lookOf(ev, looks)).find((c) => c?.holiday) ?? null), [allDay, looks]);
+
+  // A picked task shows its ghost at once (touch has no hover): the next free quarter
+  // hour inside your hours on a shown working day (not a holiday), else the first
+  // working hour of the first shown working day, else the top of the first day.
+  const firstSlot = (): { di: number; s: number } => {
+    let first: { di: number; s: number } | null = null;
+    for (let di = 0; di < n; di++) {
+      const w = holidays[di] ? null : workFor(hours, wdIndex(days[di]));
+      if (!w) continue;
+      first ??= { di, s: w.start * 60 };
+      if (isoDays[di] < todayIso) continue;
+      const from = isoDays[di] === todayIso ? Math.max(w.start * 60, Math.ceil(now / SNAP) * SNAP) : w.start * 60;
+      if (from + SNAP <= w.end * 60) return { di, s: from };
+    }
+    return first ?? { di: 0, s: ws * 60 };
+  };
+  const pid = pick?.id ?? null;
+  const over = rawOver && rawOver.pid === pid && rawOver.wk === wkKey ? rawOver : pid ? firstSlot() : null;
+  const setOver = (o: { di: number; s: number } | null) => setRawOver(o && { ...o, pid, wk: wkKey });
 
   const y = (min: number) => ((min - ws * 60) / 60) * HH;
 
@@ -182,6 +208,7 @@ export function Week({
     setOver(null);
     onPick?.(null);
     const end = Math.min(we * 60, s + dropLen(t));
+    const len = end - s;
     createEventAsync({
       date: isoDays[di],
       start: fromMin(s),
@@ -193,37 +220,29 @@ export function Week({
     })
       .then(() => {
         taskPlaced(t.id);
-        toast(`${t.title}: ${dayLabel(isoDays[di])}, ${fromMin(s)}–${fromMin(end)}`);
+        onCreated?.();
+        // one session is at most 2h (dropLen) and stops at the end of the grid: say so
+        const part = t.durationMin > len ? ` ${lenOf(len)} of ${lenOf(t.durationMin)} placed,` : '';
+        toast(`${t.title}:${part} ${dayLabel(isoDays[di])}, ${fromMin(s)}–${fromMin(end)}`);
       })
       .catch(() => toast(`Couldn't put ${t.title} on the calendar. Try again.`));
   };
 
-  // A picked task shows its ghost at once (touch has no hover): today at the next
-  // quarter hour inside your hours, else the first working hour of the first day.
-  const pickId = pick?.id;
+  // A new pick (or a new week while picked) brings its first ghost into view.
   useEffect(() => {
-    if (!pickId) {
-      setOver(null);
-      return;
-    }
-    const ti = isoDays.indexOf(todayIso);
-    const di = ti >= 0 ? ti : 0;
-    const w = workFor(hours, wdIndex(days[di]));
-    const from = Math.max(ws * 60, (w?.start ?? ws) * 60, ti >= 0 ? Math.ceil(now / SNAP) * SNAP : 0);
-    kbd.current = true;
-    setOver({ di, s: Math.min(we * 60 - SNAP, from) });
-    // only when a task is picked or the days on screen change
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pickId, wkKey]);
+    if (pid) scroller.current?.querySelector('.ev.drop')?.scrollIntoView({ block: 'nearest' });
+  }, [pid, wkKey]);
 
   // Keyboard: arrows move the ghost (15 min, a day), Enter places it. Esc is PrismApp's.
   useEffect(() => {
     if (!pick) return;
     const key = (e: KeyboardEvent) => {
+      // already handled, e.g. Enter on a tile opening its editor
+      if (e.defaultPrevented) return;
       const el = e.target;
       if (el instanceof Element && el.closest('input, textarea, [contenteditable], [role="listbox"], [role="dialog"]')) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const o = over ?? { di: 0, s: ws * 60 };
+      const o = over ?? firstSlot();
       let next = o;
       if (e.key === 'ArrowUp') next = { ...o, s: Math.max(ws * 60, o.s - SNAP) };
       else if (e.key === 'ArrowDown') next = { ...o, s: Math.min(we * 60 - SNAP, o.s + SNAP) };
@@ -231,7 +250,7 @@ export function Week({
       else if (e.key === 'ArrowRight') next = { ...o, di: Math.min(n - 1, o.di + 1) };
       else if (e.key === 'Enter') {
         // Enter on another control (Cancel, Today…) is that control's, not a placement
-        if (el instanceof Element && el.closest('button, a') && !el.closest('.tk')) return;
+        if (el instanceof Element && el.closest('button, a, [role="button"]') && !el.closest('.tk')) return;
         // also stops Enter from pressing the focused task row again (which would cancel the pick)
         e.preventDefault();
         placeTask(pick, o.di, o.s);
@@ -566,7 +585,18 @@ export function Week({
           {cols}
         </div>
         {loading && events.length === 0 && <div className="loading">Loading your week…</div>}
-        {pop && <Popover key={pop.type === 'event' ? `e${pop.ev.id}` : `${pop.type}${pop.x},${pop.y}`} pop={pop} events={events} looks={looks} onClose={() => setPop(null)} onOpen={(ev) => setPop({ ...pop, type: 'event', ev } as Pop)} toast={toast} />}
+        {pop && (
+          <Popover
+            key={pop.type === 'event' ? `e${pop.ev.id}` : `${pop.type}${pop.x},${pop.y}`}
+            pop={pop}
+            events={events}
+            looks={looks}
+            onClose={() => setPop(null)}
+            onOpen={(ev) => setPop({ ...pop, type: 'event', ev } as Pop)}
+            onCreated={onCreated}
+            toast={toast}
+          />
+        )}
       </div>
     </div>
   );

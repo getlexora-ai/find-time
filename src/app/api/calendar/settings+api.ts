@@ -1,4 +1,3 @@
-import { pushUpcoming } from '@/server/google/push';
 import type { CalendarSettings } from '@/lib/api-types';
 import { requireUserId, unauthorized } from '@/server/auth/user';
 import { checkPatch, getSettings, patchSettings } from '@/server/calendar/settings-repo';
@@ -38,8 +37,9 @@ export async function PATCH(request: Request): Promise<Response> {
         );
       }
     }
+    // "Copy to Google" (pushFocus) is only the default calendar for NEW blocks
+    // (push.ts defaultCopyCalendar). Existing blocks keep their own choice.
     await patchSettings(userId, patch);
-    if (patch.pushFocus !== undefined) await pushUpcoming(userId, patch.pushFocus);
     return Response.json({ settings: await getSettings(userId) });
   } catch (err) {
     console.error('PATCH /api/calendar/settings', err);

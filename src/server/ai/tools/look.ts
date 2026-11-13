@@ -142,7 +142,6 @@ export function findEvents(events: CalEvent[], match: string, from: string, days
         end_date: lastDay(e),
         end: e.end.slice(11, 16),
         all_day: Boolean(e.allDay),
-        ...(e.calendarName ? { calendar: e.calendarName } : {}),
         ...(e.holiday ? { public_holiday: true as const } : {}),
         editable: !lock,
         ...(lock ? { why_locked: lock } : {}),

@@ -22,7 +22,8 @@ export type ApiEvent = {
    *  own block. Optional so older cached payloads still parse. */
   calendarId?: string | null;
   /** Find Time's own block: the Google calendar (calendars.id) it is copied to;
-   *  null = Find Time only (google/push.ts). Always null on imported events. */
+   *  null = Find Time only (google/push.ts). Always null on imported events, and
+   *  on repeats and drafts, which are never copied. */
   copyTo?: string | null;
   /** Google all-day event: start/end are midnights, end exclusive. */
   allDay?: boolean;
@@ -74,7 +75,8 @@ export type EventInput = {
   taskId?: string | null;
   /**
    * The Google calendar (calendars.id) to copy this block to; null = Find Time
-   * only. Left out on create: your primary calendar while "Copy to Google" is on.
+   * only. Left out on create: your primary calendar while "Copy to Google" is on
+   * (none for a repeat or a draft). Send the value the editor shows.
    */
   copyTo?: string | null;
 };

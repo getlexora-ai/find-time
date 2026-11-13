@@ -112,10 +112,10 @@ function PushFocusRow() {
         style={styles.calRow}
         accessibilityRole="checkbox"
         aria-checked={on}
-        aria-label="Show my Find Time blocks in Google Calendar"
+        aria-label="Copy new Find Time blocks to Google Calendar"
         onPress={() => void toggle()}>
         <View style={[styles.box, on && styles.boxOn]}>{on && <Icon name="check" size={10} color={K.onLime} />}</View>
-        <T style={styles.calName}>Show my Find Time blocks in Google Calendar</T>
+        <T style={styles.calName}>Copy new Find Time blocks to Google Calendar</T>
       </Press>
       <T style={styles.status}>
         As private events on your primary calendar: you see them there, others see the time as taken. When you move or

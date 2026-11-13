@@ -40,7 +40,7 @@ const HORIZON_DAYS = 21;
 
 /**
  * The window's events with Find Time's own repeats expanded to every day they
- * fall on, each with its calendar's name and public holidays marked (holidays.ts).
+ * fall on, with public holidays marked (holidays.ts).
  */
 async function calendarFor(userId: string, fromISO: string, toISO: string, calendars: Promise<CalendarInfo[]>): Promise<CalEvent[]> {
   const [events, repeats, cals] = await Promise.all([listEvents(userId, fromISO, toISO), listOwnRepeats(userId, toISO), calendars]);
@@ -123,10 +123,10 @@ export async function runTurn(
   let habits: ApiHabit[];
   let memory: Memory;
   begin(STEP.read);
-  // Which calendar each event is on, and which are public holidays. Optional:
-  // without it the turn plans as before, holidays unmarked.
+  // Which events are public holidays. Optional: without it the turn plans as
+  // before — but holidays then go unmarked and work lands on them, so say so loudly.
   const calendarsP = listCalendars(userId).catch((err) => {
-    console.error('ai/chat listCalendars', err);
+    console.error('ai/chat listCalendars FAILED: public holidays are NOT marked this turn', err);
     return [] as CalendarInfo[];
   });
   let calendars: CalendarInfo[];
