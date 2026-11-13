@@ -9,11 +9,11 @@ import { blocksTime } from './find-time';
 import { expandRepeat } from './place-at';
 import { preferenceCard } from './learn';
 import type { AgentProfile } from './preferences';
-import { appendMessage, createSession, listMessages, loadProfile, sessionExists, userTimeZone } from './repo';
-import { doneLabel, iso, plural, runningLabel, type TurnCtx } from './tools/context';
+import { addFact, appendMessage, createSession, deleteFact, listMessages, loadMemory, loadProfile, type Memory, proposalStatuses, sessionExists, updateFact, userTimeZone } from './repo';
+import { doneLabel, iso, plural, runningLabel, type ToolFailure, type ToolResult, type TurnCtx } from './tools/context';
 import { toolFor } from './tools';
-import { asString } from './tools/names';
-import { runAgent } from './agent';
+import { asString, TOOL_ANSWER } from './tools/names';
+import { type AgentResult, type Pending, runAgent, shownToModel } from './agent';
 import { chargeTokens, hasCredit } from './credits';
 import { aiConfigured } from './llm';
 import { scrubTitles } from './scrub';
@@ -23,14 +23,18 @@ import { type Draft, guardTitle, type Understood, understand } from './understan
  * One turn of Plan with AI, after the route has authenticated the user and
  * parsed the body (src/app/api/ai/chat+api.ts):
  *
- *   load the calendar, tasks and habits → understand.ts reads the sentence into
- *   one tool + arguments → that tool's handler (tools/index.ts) carries it out →
- *   the reply is stored with the draft the next turn continues from.
+ *   load the calendar, tasks and habits → the model decides whether this is a
+ *   question, a request or a reply, and reads it (agent.ts) → that tool's handler
+ *   (tools/index.ts) carries it out → the reply is stored. The planner's own
+ *   handlers run inside the model's loop, so when something doesn't fit the model
+ *   hears it and asks. A request the planner couldn't finish is stored with the
+ *   question (`parsed.pending`), and the next message continues it.
  *
- * The rules read first; only a sentence they can't read goes to the model,
- * which rewrites it for the rules to read again (rewrite.ts). What has been understood so far rides on each assistant
- * message as `parsed.draft`, so "make it 90 minutes" or the answer to its own
- * question continues the plan.
+ * The rules (understand.ts) read a message only when there is no model to read
+ * it: no key, or no credit left. A model that fails says so, and nothing changes:
+ * a broken reading passed off as an answer is worse than asking again. What has
+ * been understood so far rides on each assistant message as `parsed.draft`, so
+ * "make it 90 minutes" continues the plan.
  */
 
 const HORIZON_DAYS = 21;
@@ -114,9 +118,10 @@ export async function runTurn(
   let events: Awaited<ReturnType<typeof listEvents>>;
   let openTasks: ApiTask[];
   let habits: ApiHabit[];
+  let memory: Memory;
   begin(STEP.read);
   try {
-    [profile, history, events, openTasks, habits] = await Promise.all([
+    [profile, history, events, openTasks, habits, memory] = await Promise.all([
       loadProfile(userId),
       listMessages(sessionId, MAX_TURNS),
       calendarFor(userId, nowISO, horizonISO),
@@ -128,6 +133,11 @@ export async function runTurn(
       listHabits(userId).catch((err) => {
         console.error('ai/chat listHabits', err);
         return [] as ApiHabit[];
+      }),
+      // Also optional: before db/029 is applied, or if it fails, the turn runs without memory.
+      loadMemory(userId).catch((err) => {
+        console.error('ai/chat loadMemory', err);
+        return { instructions: '', facts: [] } as Memory;
       }),
     ]);
   } catch (err) {
@@ -165,7 +175,7 @@ export async function runTurn(
   // The previous assistant turn carries what was understood so far, and the
   // blocks it proposed (for "why that slot?").
   const lastReply = [...history].reverse().find((m) => m.role === 'assistant');
-  const lastParsed = (lastReply?.parsed ?? {}) as { draft?: Draft; proposals?: ChatProposal[] };
+  const lastParsed = (lastReply?.parsed ?? {}) as { draft?: Draft; proposals?: ChatProposal[]; pending?: Pending };
 
   begin(STEP.model);
   const readT0 = Date.now();
@@ -183,42 +193,75 @@ export async function runTurn(
   // it failed. Rules are the backup, not the reader.
   const lastOptions = ((lastReply?.parsed as { question?: { options?: string[] } } | null)?.question?.options ?? []) as string[];
   const tapped = Boolean(lastParsed.draft) && lastOptions.includes(text);
-  let choice: Understood | null = null;
+  // What the app just asked, if that was its last word: this message may be the answer.
+  const lastQuestion = lastReply?.kind === 'question' ? lastReply.content : ((lastReply?.parsed as { question?: { text?: string } } | null)?.question?.text ?? null);
+  let choice: AgentResult | null = null;
   const seen: typeof events = [];
-  if (!tapped && aiConfigured() && (await hasCredit(userId))) {
+  const read = text;
+  // Echo the person's own words: the step is about this sentence, not a tool. Shown once, before the tool's own steps.
+  const quoted = text.length > 42 ? `${text.slice(0, 40).trimEnd()}…` : text;
+  let readShown = false;
+  const carryOut = async (c: Understood): Promise<ToolResult | ToolFailure> => {
+    if (!readShown) step({ tool: c.name, label: `Read “${quoted}”`, detail: c.summary, ms: Date.now() - readT0 });
+    readShown = true;
+    const ctx: TurnCtx = { userId, sessionId, text: read, summary: c.summary, now, nowISO, horizonISO, profile, events, busy, shown, openTasks, habits, begin, step };
+    const handler = toolFor(c.name);
+    return handler ? handler(c.args, ctx) : {};
+  };
+  const modelReads = !tapped && aiConfigured() && (await hasCredit(userId));
+  const charge = (p: number, o: number) => chargeTokens(userId, p, o);
+  if (modelReads) {
+    // What the person did with each proposal, so the model knows what is on the calendar.
+    const proposed = history.flatMap((m) => ((m.parsed as { proposals?: ChatProposal[] } | null)?.proposals ?? []).map((p) => p.id));
+    const status = await proposalStatuses(userId, proposed).catch(() => ({}));
     choice = await runAgent({
       text,
-      history: history.map((m) => ({ role: m.role, content: m.content })),
+      pendingQuestion: lastQuestion,
+      pendingForm: lastQuestion ? (lastParsed.pending ?? null) : null,
+      run: (c) => carryOut({ ...c, summary: `${c.summary} · AI` }),
+      history: history.map((m) => ({ role: m.role, content: m.role === 'assistant' ? shownToModel(m.content, m.parsed, status) : m.content })),
       nowISO,
       horizonISO,
       profile,
       events,
       tasks: openTasks,
       habits,
+      memory,
+      // A fact is the person's words about themselves: a Google title it picked up is scrubbed first.
+      saveFact: async ({ action, text: fact, factId }) => {
+        if (action === 'forget') return factId && (await deleteFact(userId, factId)) ? { id: factId } : null;
+        const googleTitles = [...events, ...seen].filter((e) => isImported(e.origin)).map((e) => e.title);
+        const typed = [...history.filter((m) => m.role === 'user').map((m) => m.content), text].join(' ');
+        const clean = scrubTitles(fact, googleTitles, typed);
+        if (factId) return (await updateFact(userId, factId, clean)) ? { id: factId } : null;
+        return addFact(userId, clean, 'ai');
+      },
       eventsIn: (fromISO, toISO) => calendarFor(userId, fromISO, toISO),
       seen,
       readCtx,
       step,
-      charge: (p, o) => chargeTokens(userId, p, o),
+      charge,
     });
-    if (choice) choice = { ...choice, summary: `${choice.summary} · AI` };
+    choice = choice
+      ? { ...choice, summary: `${choice.summary} · AI` }
+      : { name: TOOL_ANSWER, args: { reply: "I couldn't read that just now, so nothing has changed. Please send it again." }, draft: null, summary: 'the model failed · nothing changed' };
   }
   choice ??= tapped ? understand(text, readCtx) : guardTitle(understand(text, readCtx));
-  const read = text;
-  // Echo the person's own words: the step is about this sentence, not a tool.
-  const quoted = text.length > 42 ? `${text.slice(0, 40).trimEnd()}…` : text;
-  step({ tool: choice.name, label: `Read “${quoted}”`, detail: choice.summary, ms: Date.now() - readT0 });
-
-  const ctx: TurnCtx = { userId, sessionId, text: read, summary: choice.summary, now, nowISO, horizonISO, profile, events, busy, shown, openTasks, habits, begin, step };
-  const handler = toolFor(choice.name);
-  const result = handler ? await handler(choice.args, ctx) : {};
+  // The planner's handlers already ran inside the model's loop (agent.ts); everything else runs here.
+  const result = choice.ran ?? (await carryOut(choice));
   if ('fail' in result) return Response.json({ sessionId, error: result.fail }, { status: 500 });
 
-  const reply = result.reply ?? asString(choice.args.reply);
-  const kind = result.kind ?? 'text';
+  // What the planner found, as the model put it to the person.
+  const worded = choice.worded ?? null;
+  const asked = worded?.question ? { text: worded.text, options: worded.options } : null;
+  if (asked) step({ tool: STEP.ask, label: doneLabel(STEP.ask, 'Ask you'), detail: 'the planner needs a decision' });
+
+  const reply = worded?.text ?? result.reply ?? asString(choice.args.reply);
+  const kind = result.kind ?? (asked ? 'question' : 'text');
   const extras: Partial<ChatMessage> = {};
   if (result.proposals) extras.proposals = result.proposals;
   if (result.question) extras.question = result.question;
+  if (asked) extras.question = asked;
   if (result.savedRule) extras.savedRule = result.savedRule;
   if (result.timeOff) extras.timeOff = result.timeOff;
   if (result.deleted) extras.deleted = result.deleted;
@@ -237,7 +280,9 @@ export async function runTurn(
   // The model reads Google titles and may quote them; the person sees the reply, the database doesn't.
   const googleTitles = [...events, ...seen].filter((e) => isImported(e.origin)).map((e) => e.title);
   const typed = [...history.filter((m) => m.role === 'user').map((m) => m.content), text].join(' ');
-  const stored = scrubTitles({ content: reply, parsed: { ...extras, ...(draft ? { draft } : {}) } }, googleTitles, typed);
+  // An unfinished request rides with its question, like the draft: the next message continues it.
+  const pending = kind === 'question' && choice.pending ? { pending: choice.pending } : {};
+  const stored = scrubTitles({ content: reply, parsed: { ...extras, ...(draft ? { draft } : {}), ...pending } }, googleTitles, typed);
   const messageId = await appendMessage(sessionId, { role: 'assistant', content: stored.content, kind, parsed: stored.parsed });
 
   const message: ChatMessage = {

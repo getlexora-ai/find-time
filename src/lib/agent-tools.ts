@@ -19,6 +19,8 @@ export const STEP = {
   read: 'read_calendar',
   rules: 'apply_rules',
   model: 'model',
+  /** question or request: the first thing decided about every message */
+  decide: 'decide',
   rank: 'rank_slots',
   check: 'check_time',
   saveRule: 'save_rule',
@@ -109,6 +111,7 @@ export const AGENT_TOOLS: ToolUi[] = [
   /* ── pipeline steps ── */
   { key: STEP.read, label: 'Read your calendar', running: 'Reading your calendar', icon: 'calendar', color: 'deep' },
   { key: STEP.rules, label: 'Applied your rules', running: 'Applying your rules', icon: 'shield', color: 'research' },
+  { key: STEP.decide, label: 'Read your message', running: 'Reading your message', icon: 'magic', color: 'sync' },
   { key: STEP.model, label: 'Understood your request', running: 'Working out what you need', icon: 'magic', color: 'sync' },
   { key: STEP.rank, label: 'Scored free slots', running: 'Scoring free slots', icon: 'chart', color: 'design' },
   { key: STEP.check, label: 'Checked that time', running: 'Checking that time', icon: 'clock', color: 'deep' },

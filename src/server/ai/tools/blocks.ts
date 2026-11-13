@@ -95,6 +95,7 @@ export const propose: ToolHandler = async (args, ctx) => {
       reply:
         said ||
         `I couldn't find a free ${durationMin}-minute slot that fits before ${latestISO.slice(0, 10)}. Want me to try a shorter block or a wider window?`,
+      facts: [`No free ${durationMin}-minute slot for ${title} between ${earliestISO.slice(0, 10)} and ${latestISO.slice(0, 10)}.`],
     };
   }
 

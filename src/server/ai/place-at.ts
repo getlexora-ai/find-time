@@ -72,8 +72,8 @@ export function checkPlaceAt(startRaw: unknown, endRaw: unknown, nowISO: string,
  * one reading "seems likely" — the same lesson as find-time-agent.
  * ponytail: hours 10–12 aren't treated as ambiguous (people rarely mean 22:00); widen if reports say so.
  */
-const BARE_TIME = /(?:\bat\s+([1-9])(?::([0-5]\d))?|(?<![\d:.])([1-9]):([0-5]\d)|(?<![\d:.])([1-9])\s*(?:-|–|to)\s*([1-9]|1[0-2])\b)(?![\d:]|\s*(?:am|pm|a\.m|p\.m|h\b|uhr|hours?\b|hrs?\b|min))/i;
-const CLEAR = /\d\s*(?:am|pm|a\.m|p\.m)\b|\b(morning|evening|afternoon|night|tonight|noon|midnight|after work|before work|lunch|breakfast|dinner)\b/i;
+const BARE_TIME = /(?:\bat\s+([1-9])(?::([0-5]\d))?|(?<![\d:.])([1-9]):([0-5]\d)|(?<![\d:.])([1-9])\s*(?:-|–|to)\s*([1-9]|1[0-2])\b)(?![\d:]|\s*(?:am|pm|a\.m|p\.m|h\b|uhr|hours?\b|hrs?\b|min)|\s*(?:-|–|to)\s*\d{1,2}(?::\d\d)?\s*(?:am|pm))/i;
+const CLEAR = /\b(morning|evening|afternoon|night|tonight|noon|midnight|after work|before work|lunch|breakfast|dinner)\b/i;
 
 export type Ambiguous = { said: string; am: string; pm: string };
 
@@ -81,6 +81,8 @@ export function ambiguousTime(text: string): Ambiguous | null {
   if (CLEAR.test(text)) return null;
   const hit = BARE_TIME.exec(text);
   if (!hit) return null;
+  // "9 to 5", "8-4": a range that ends on a smaller hour only reads one way, morning to afternoon.
+  if (hit[5] && Number(hit[6]) < Number(hit[5])) return null;
   const hour = Number(hit[1] ?? hit[3] ?? hit[5]);
   const minute = hit[2] ?? hit[4] ?? '00';
   const pad = (h: number) => String(h).padStart(2, '0');

@@ -11,7 +11,11 @@ assert.deepEqual(ambiguousTime('gym at 6'), { said: 'at 6', am: '06:00', pm: '18
 assert.deepEqual(ambiguousTime('run at 5:30'), { said: 'at 5:30', am: '05:30', pm: '17:30' });
 assert.deepEqual(ambiguousTime('i am going to gym at 6'), { said: 'at 6', am: '06:00', pm: '18:00' });
 assert.equal(ambiguousTime('gym at 6 to 8pm'), null);
+assert.deepEqual(ambiguousTime('gym at 7 and a call at 9am'), { said: 'at 7', am: '07:00', pm: '19:00' }, 'a clear time elsewhere clears nothing');
 assert.deepEqual(ambiguousTime('gym 6-8'), { said: '6-8', am: '06:00', pm: '18:00' });
+assert.equal(ambiguousTime('i work 9 to 5 on weekdays'), null, '9 to 5 only reads one way');
+assert.equal(ambiguousTime('shift 8-4 tomorrow'), null);
+assert.deepEqual(ambiguousTime('study 7 to 9'), { said: '7 to 9', am: '07:00', pm: '19:00' }, '7 to 9 still asks');
 for (const clear of [
   'i am planning to do gym 6-8pm',
   'gym today at 6pm for 2 hours',

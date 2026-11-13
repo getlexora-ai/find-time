@@ -30,6 +30,8 @@ export type FreeDay = {
   window: string;
   working_day: boolean;
   free_min: number;
+  /** the biggest single gap: what decides whether something fits */
+  longest_gap_min: number;
   gaps: string[];
   busy_blocks: number;
 };
@@ -55,19 +57,22 @@ export function freeTime(events: ApiEvent[], profile: AgentProfile, nowISO: stri
       .sort((a, b) => a[0] - b[0]);
     const gaps: string[] = [];
     let free = 0;
+    let longest = 0;
     let cur = lo;
     for (const [s, t] of busy) {
       if (s > cur) {
         gaps.push(`${hhmm(cur)}–${hhmm(Math.min(s, hi))}`);
         free += Math.min(s, hi) - cur;
+        longest = Math.max(longest, Math.min(s, hi) - cur);
       }
       cur = Math.max(cur, t);
     }
     if (hi > cur) {
       gaps.push(`${hhmm(cur)}–${hhmm(hi)}`);
       free += hi - cur;
+      longest = Math.max(longest, hi - cur);
     }
-    out.push({ date: day, window: `${hhmm(win.start * 60)}–${hhmm(hi)}`, working_day: Boolean(hours), free_min: Math.max(0, free), gaps, busy_blocks: busy.length });
+    out.push({ date: day, window: `${hhmm(win.start * 60)}–${hhmm(hi)}`, working_day: Boolean(hours), free_min: Math.max(0, free), longest_gap_min: longest, gaps, busy_blocks: busy.length });
   }
   return out;
 }

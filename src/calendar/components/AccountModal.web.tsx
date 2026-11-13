@@ -6,6 +6,7 @@ import { authClient } from '@/lib/auth-client';
 import { useAuthState } from '@/lib/session';
 
 import { Icon, type IconName } from '../Icon';
+import { AboutYou } from './AboutYou.web';
 import { CalendarSettings } from './CalendarSettings';
 import './account-menu.css';
 
@@ -21,12 +22,13 @@ import './account-menu.css';
  * the caller puts focus back where it belongs.
  */
 
-export type AccountPage = 'profile' | 'security' | 'calendars';
+export type AccountPage = 'profile' | 'security' | 'calendars' | 'about';
 
 const PAGES: { id: AccountPage; label: string; icon: IconName }[] = [
   { id: 'profile', label: 'Profile', icon: 'users' },
   { id: 'security', label: 'Security', icon: 'shield' },
   { id: 'calendars', label: 'Calendars', icon: 'calendar' },
+  { id: 'about', label: 'About you', icon: 'bulb' },
 ];
 
 export function AccountModal({ page, onPage, onClose }: { page: AccountPage; onPage: (p: AccountPage) => void; onClose: () => void }) {
@@ -83,6 +85,7 @@ export function AccountModal({ page, onPage, onClose }: { page: AccountPage; onP
             {page === 'profile' ? <ProfilePage /> : null}
             {page === 'security' ? <SecurityPage /> : null}
             {page === 'calendars' ? <CalendarSettings /> : null}
+            {page === 'about' ? <AboutYou /> : null}
           </div>
           <button type="button" className="am-close" aria-label="Close" onClick={onClose}>
             <Icon name="close" size={16} color="currentColor" />

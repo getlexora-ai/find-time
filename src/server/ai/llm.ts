@@ -179,6 +179,8 @@ export async function agentStep(opts: {
   system: string;
   input: AgentItem[];
   tools: ToolDef[];
+  /** one tool name forces that tool; otherwise any one of them */
+  force?: string;
   maxTokens?: number;
   signal?: AbortSignal;
 }): Promise<AgentStep> {
@@ -193,7 +195,7 @@ export async function agentStep(opts: {
       instructions: opts.system,
       input: opts.input,
       tools: opts.tools.map((t) => ({ type: 'function', name: t.name, description: t.description, parameters: t.input_schema, strict: t.strict ?? false })),
-      tool_choice: 'required',
+      tool_choice: opts.force ? { type: 'function', name: opts.force } : 'required',
       parallel_tool_calls: false,
       reasoning: { effort: 'low' },
       include: ['reasoning.encrypted_content'],

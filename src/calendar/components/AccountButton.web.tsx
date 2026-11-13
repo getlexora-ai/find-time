@@ -74,6 +74,11 @@ export function AccountButton({ showName = false }: { showName?: boolean }) {
             onClick={() => pick(() => setPage('calendars'))}
           />
           <MenuItem
+            label="About you"
+            icon={<Icon name="bulb" size={14} color="currentColor" />}
+            onClick={() => pick(() => setPage('about'))}
+          />
+          <MenuItem
             label="Set up my week"
             icon={<Icon name="target" size={14} color="currentColor" />}
             onClick={() => pick(() => window.location.assign('/welcome?redo=1'))}

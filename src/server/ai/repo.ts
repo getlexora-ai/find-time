@@ -309,6 +309,73 @@ export async function deleteRule(userId: string, ruleId: string): Promise<boolea
   return rows.length > 0;
 }
 
+// ── about you: instructions and facts (db/029) ─────────────────────────────
+
+export const MAX_INSTRUCTIONS = 2000;
+export const MAX_FACT = 300;
+export const MAX_FACTS = 50;
+
+export type MemoryFact = { id: string; text: string; source: 'user' | 'ai'; updatedAt: string };
+export type Memory = { instructions: string; facts: MemoryFact[] };
+
+type MemoryRow = { id: string; kind: string; body: string; source: string; updated_at: string | Date };
+
+export async function loadMemory(userId: string): Promise<Memory> {
+  const rows = await query<MemoryRow>(
+    `select id, kind, body, source, updated_at from user_memory where user_id = $1 order by created_at`,
+    [userId],
+  );
+  return {
+    instructions: rows.find((r) => r.kind === 'instructions')?.body ?? '',
+    facts: rows
+      .filter((r) => r.kind === 'fact')
+      .map((r) => ({ id: r.id, text: r.body, source: r.source === 'ai' ? 'ai' : 'user', updatedAt: new Date(r.updated_at).toISOString() })),
+  };
+}
+
+/** Empty text clears them. */
+export async function saveInstructions(userId: string, text: string): Promise<void> {
+  const body = text.trim().slice(0, MAX_INSTRUCTIONS);
+  if (!body) {
+    await query(`delete from user_memory where user_id = $1 and kind = 'instructions'`, [userId]);
+    return;
+  }
+  await query(
+    `insert into user_memory (id, user_id, kind, body, source) values ($1, $2, 'instructions', $3, 'user')
+     on conflict (user_id) where kind = 'instructions' do update set body = excluded.body, updated_at = now()`,
+    [id('mem'), userId, body],
+  );
+}
+
+/** Null when the list is full: the oldest is never dropped silently. */
+export async function addFact(userId: string, text: string, source: 'user' | 'ai'): Promise<MemoryFact | null> {
+  const body = text.replace(/\s+/g, ' ').trim().slice(0, MAX_FACT);
+  if (!body) return null;
+  const row = await queryOne<MemoryRow>(
+    `insert into user_memory (id, user_id, kind, body, source)
+       select $1, $2, 'fact', $3, $4
+        where (select count(*) from user_memory where user_id = $2 and kind = 'fact') < ${MAX_FACTS}
+     returning id, kind, body, source, updated_at`,
+    [id('mem'), userId, body, source],
+  );
+  return row ? { id: row.id, text: row.body, source, updatedAt: new Date(row.updated_at).toISOString() } : null;
+}
+
+export async function updateFact(userId: string, factId: string, text: string): Promise<boolean> {
+  const body = text.replace(/\s+/g, ' ').trim().slice(0, MAX_FACT);
+  if (!body) return deleteFact(userId, factId);
+  const rows = await query(
+    `update user_memory set body = $3, updated_at = now() where user_id = $1 and id = $2 and kind = 'fact' returning id`,
+    [userId, factId, body],
+  );
+  return rows.length > 0;
+}
+
+export async function deleteFact(userId: string, factId: string): Promise<boolean> {
+  const rows = await query(`delete from user_memory where user_id = $1 and id = $2 and kind = 'fact' returning id`, [userId, factId]);
+  return rows.length > 0;
+}
+
 // ── conversation ────────────────────────────────────────────────────────────
 
 export type StoredMessage = {
@@ -494,6 +561,13 @@ export async function getSuggestion(userId: string, sugId: string): Promise<Sugg
        from ai_suggestions where user_id = $1 and id = $2`,
     [userId, sugId],
   );
+}
+
+/** What the user did with each of these proposals: 'accepted', 'edited', 'rejected', or still open. */
+export async function proposalStatuses(userId: string, ids: string[]): Promise<Record<string, string>> {
+  if (!ids.length) return {};
+  const rows = await query<{ id: string; status: string }>(`select id, status from ai_suggestions where user_id = $1 and id = any($2::text[])`, [userId, ids]);
+  return Object.fromEntries(rows.map((r) => [r.id, r.status]));
 }
 
 /** Record what the user actually did. Idempotent per suggestion. */
