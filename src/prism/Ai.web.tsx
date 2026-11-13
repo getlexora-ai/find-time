@@ -31,6 +31,7 @@ import {
 import { toMin } from '@/calendar/cal-date';
 import { localIdFor, useCalEvents } from '@/calendar/cal-store';
 import { useHours } from '@/calendar/hours';
+import { STEP } from '@/lib/agent-tools';
 import type { ApiTask, ChangeItem, ChangeSet, ChatMessage, ChatProposal, RejectReason, ReportReason, TraceStep } from '@/lib/api-types';
 
 import './ai.css';
@@ -466,6 +467,15 @@ function Start({ tasks, onSend }: { tasks: ApiTask[]; onSend: (t: string) => voi
 
 /* ───────────────────────── steps ───────────────────────── */
 
+/**
+ * Steps the server runs on every turn whatever you asked (loading the
+ * calendar, "applied your rules" whenever any exist). Listing them made every
+ * reply look the same and claimed rules were applied to requests they had
+ * nothing to do with — so only the steps that belong to this request show.
+ */
+const EVERY_TURN = new Set<string>([STEP.read, STEP.rules]);
+const ownSteps = (steps: TraceStep[] = []) => steps.filter((s) => !EVERY_TURN.has(s.tool));
+
 function useLook() {
   const tools = useAgentTools();
   return (key: string) => TOOL_C[tools.find((t) => t.key === key)?.color ?? 'deep'] ?? 'var(--blue)';
@@ -480,13 +490,13 @@ function Working({ live }: { live: Live }) {
         {Svg.spark}
       </span>
       <div className="steps-ai live" role="status">
-        {live.done.map((s, i) => (
+        {ownSteps(live.done).map((s, i) => (
           <span key={i} className="ok" style={{ ['--tc' as string]: look(s.tool) }}>
             {s.label}
             {s.detail ? <small>{s.detail}</small> : null}
           </span>
         ))}
-        <span className="run">{live.current?.label ?? (live.done.length ? 'Putting it together' : 'Reading your message')}…</span>
+        <span className="run">{live.current?.label ?? (ownSteps(live.done).length ? 'Putting it together' : 'Reading your message')}…</span>
       </div>
     </div>
   );
@@ -579,7 +589,7 @@ function Reply({
         {Svg.spark}
       </span>
       <div className="bot-in">
-        {!!m.trace?.length && <Steps steps={m.trace} />}
+        {ownSteps(m.trace).length > 0 && <Steps steps={ownSteps(m.trace)} />}
 
         {m.savedRule && <Done>Rule saved · {m.savedRule.label}</Done>}
         {m.timeOff && (
