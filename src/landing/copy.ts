@@ -12,6 +12,7 @@
  * - Only claim what the product does today (Google Calendar, read first,
  *   opt-in write-back of your Find Time blocks, proposals you accept, undo).
  * - No customers, metrics or quotes we don't have.
+ * - `*starred*` words in a title are set in italic; `|` before a word starts a new line (wide screens).
  */
 
 /** The deployed origin, for canonical and absolute OG URLs. Set EXPO_PUBLIC_SITE_URL on Railway. */
@@ -35,13 +36,18 @@ export const LANDING = {
 
   hero: {
     kicker: 'AI week planner · Private beta',
-    title: ['Plan the week', 'you meant to have.'],
-    body: 'Say what your week needs. It finds the time.',
+    title: 'Plan the week |*you meant* to have.',
+    body: 'Say what your week needs. Find Time reads your calendar and puts it in the hours that are really free.',
     cta: 'Join the private beta',
-    note: 'Works with Google Calendar',
+    secondary: 'See how it works',
+    notes: ['Works with Google Calendar', 'Nothing lands without your yes'],
     boardLabel: 'Example week · Sep 14 – 18',
-    boardAlt:
-      'A 3D example work week, Monday to Friday, with meetings set into the board. Proposed blocks float above it until accepted, then drop into place.',
+    legend: [
+      { key: 'meet', label: 'Meetings' },
+      { key: 'focus', label: 'Focus time' },
+      { key: 'proposal', label: 'Proposed' },
+      { key: 'away', label: 'Away' },
+    ],
   },
 
   /** the hero's "type your week" box — runs the real parser on the example week */
@@ -76,7 +82,8 @@ export const LANDING = {
 
   story: {
     label: 'How it works',
-    title: 'One sentence in. A planned week out.',
+    title: 'One sentence in. *A planned week* out.',
+    step: (n: number, of: number) => `Step ${n} of ${of}`,
     chapters: [
       {
         n: '01',
@@ -109,7 +116,7 @@ export const LANDING = {
 
   keeps: {
     label: 'What it keeps in mind',
-    title: 'It plans the way you would.',
+    title: 'It plans the way *you would.*',
     rows: [
       { n: '01', name: 'Deadlines', spec: 'Thesis · 10 h · due Thu' },
       { n: '02', name: 'Habits', spec: 'Gym · 3× a week · evenings' },
@@ -121,7 +128,7 @@ export const LANDING = {
 
   trust: {
     label: 'Your calendar stays yours',
-    title: 'You stay in charge.',
+    title: 'You stay *in charge.*',
     hint: 'Try them',
     items: [
       { title: 'Nothing lands without a yes.', body: 'Every plan is a proposal first.', ui: 'proposal' },
@@ -144,7 +151,7 @@ export const LANDING = {
 
   insights: {
     label: 'Insights',
-    title: 'See where the week went.',
+    title: 'See where *the week went.*',
     sample: 'Sample week',
     /** values are read from the example week (dom/week-data.ts readWeek) */
     kpis: [
@@ -165,7 +172,7 @@ export const LANDING = {
 
   faq: {
     label: 'Questions',
-    title: 'Questions, answered plainly.',
+    title: 'Questions, *answered plainly.*',
     items: [
       {
         q: 'Which calendars does it work with?',
@@ -191,7 +198,7 @@ export const LANDING = {
   },
 
   final: {
-    title: ['Give your week', 'a plan.'],
+    title: 'Give your week *a plan.*',
     body: 'Private beta. One email when there’s a place for you.',
     placeholder: 'you@work.com',
     emailLabel: 'Email address',

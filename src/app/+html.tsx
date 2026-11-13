@@ -57,6 +57,20 @@ export default function Root({ children }: PropsWithChildren) {
           type="font/woff2"
           crossOrigin="anonymous"
         />
+        <link
+          rel="preload"
+          href="/fonts/instrument-serif-latin-400-normal.woff2"
+          as="font"
+          type="font/woff2"
+          crossOrigin="anonymous"
+        />
+        <link
+          rel="preload"
+          href="/fonts/instrument-serif-latin-400-italic.woff2"
+          as="font"
+          type="font/woff2"
+          crossOrigin="anonymous"
+        />
         <link rel="stylesheet" href="/fonts/fonts.css" />
 
         {/* Disables body scrolling on web so a root <ScrollView> behaves natively. */}

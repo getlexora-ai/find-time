@@ -13,8 +13,9 @@ import { joinWaitlist, validateEmail } from '@/signup/waitlist';
  * `useMounted()`. The `<Head>` here is the canonical copy of the site title +
  * description; `+html.tsx` carries the same as a fallback for the other routes.
  *
- * `LandingPage` (src/landing/dom) is the Nexus light landing: an example week that
- * gets planned as you scroll, GSAP + Lenis motion (dom/motion.ts). Its email form
+ * `LandingPage` (src/landing/dom) is the Prism landing: the app's dusk sky, a
+ * week you can plan in the hero, and the example week planned as you scroll,
+ * with GSAP + Lenis motion (dom/motion.ts). Its email form
  * is the only waitlist entry point: it posts to `/api/waitlist` (source
  * `landing`), and this adapter turns the API result into resolve/throw.
  */

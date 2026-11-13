@@ -1,14 +1,16 @@
 /**
  * The landing's motion system — GSAP + ScrollTrigger, Lenis as the one
  * smooth-scroll engine (skills: cinematic-gsap-lenis-motion-system,
- * cinematic-scroll-storytelling, scroll-scrubbed-word-reveal).
+ * gsap-scrolltrigger-storytelling, scroll-scrubbed-word-reveal,
+ * scroll-progress-timeline; tokens from animation-systems).
  *
  * Rules the page keeps:
  * - Every piece of copy is in the server-rendered markup and readable with JS
  *   off. Hiding-before-reveal only happens under `html.lp-motion`, which this
  *   module adds, so nothing can get stuck invisible.
- * - Motion settles. Nothing loops, nothing auto-advances; the story canvas
- *   moves only when the reader scrolls to the next chapter.
+ * - Motion settles. Nothing auto-advances; the story week changes only when
+ *   the reader scrolls to the next chapter. (The one ambient thing on the page
+ *   is the hero's clouds, in ./sky.)
  * - `prefers-reduced-motion: reduce`: no Lenis, no reveals, no scrub. The story
  *   still follows the chapters (that is state, not decoration), with CSS
  *   transitions off.
@@ -60,8 +62,8 @@ export function initMotion(root: HTMLElement, { onStage }: Opts): Motion {
   cleanups.push(() => window.removeEventListener('scroll', onScroll));
 
   const ctx = gsap.context(() => {
-    /* ── the board follows the reader (always on: state, not decoration) ──
-       hero in view → the visitor's week; a chapter in view → that stage */
+    /* ── the story week follows the reader (always on: state, not decoration) ──
+       a chapter in view → that stage of the week */
     const hero = root.querySelector<HTMLElement>('[data-hero]');
     const chapters = root.querySelectorAll<HTMLElement>('[data-chapter]');
     const activate = (el: Element | null, stage: number) => {
@@ -94,34 +96,83 @@ export function initMotion(root: HTMLElement, { onStage }: Opts): Motion {
 
     gsap.defaults({ ease: 'power4.out', duration: 1 });
 
-    /* ── hero intro: words rise, then the copy, then the board ─── */
+    /* ── hero intro: words rise, then the copy, then the week arrives ─── */
     if (hero) {
+      const stage = hero.querySelector('[data-lift]');
+      const week = hero.querySelector('.wk');
       gsap
-        .timeline({ delay: 0.15 })
+        .timeline({ delay: 0.1 })
         .fromTo(
           hero.querySelectorAll('h1 .wi'),
-          { y: 0, yPercent: 108 },
+          { y: 0, yPercent: 112 },
           { y: 0, yPercent: 0, duration: 1.15, stagger: 0.06 },
         )
         .fromTo(
           hero.querySelectorAll('[data-hero-in]'),
           { y: 22, autoAlpha: 0 },
           { y: 0, autoAlpha: 1, duration: 0.9, stagger: 0.08 },
-          '-=0.75',
+          '-=0.8',
         )
-        .fromTo(
-          root.querySelector('[data-stage-wrap]'),
-          { autoAlpha: 0, y: 40 },
-          { autoAlpha: 1, y: 0, duration: 1.4, ease: 'expo.out' },
-          '-=1.1',
+        .fromTo(stage, { autoAlpha: 0, y: 90 }, { autoAlpha: 1, y: 0, duration: 1.5, ease: 'expo.out' }, '-=1.0')
+        // tiles land one after another (CSS transition, delayed per tile)
+        .add(() => week?.classList.add('is-in'), '-=1.0');
+
+      /* the week lies back under the sky and stands up as you scroll to it */
+      const panel = hero.querySelector('[data-panel]');
+      if (panel && window.matchMedia('(min-width: 720px)').matches) {
+        gsap.fromTo(
+          panel,
+          { rotateX: 16, scale: 0.94 },
+          {
+            rotateX: 0,
+            scale: 1,
+            ease: 'none',
+            scrollTrigger: { trigger: stage, start: 'top 92%', end: 'top 30%', scrub: 0.9 },
+          },
         );
+      }
+      /* the sky falls behind a little slower than the page */
+      root.querySelectorAll('[data-sky]').forEach((cv) => {
+        const sec = cv.closest('section');
+        gsap.fromTo(
+          cv,
+          { yPercent: sec === hero ? 0 : -8 },
+          {
+            yPercent: sec === hero ? 10 : 0,
+            ease: 'none',
+            scrollTrigger: {
+              trigger: sec,
+              start: sec === hero ? 'top top' : 'top bottom',
+              end: sec === hero ? 'bottom top' : 'bottom bottom',
+              scrub: true,
+            },
+          },
+        );
+      });
+      gsap.to(hero.querySelector('.hero-copy'), {
+        yPercent: -8,
+        autoAlpha: 0.2,
+        ease: 'none',
+        scrollTrigger: { trigger: hero, start: 'top top', end: '45% top', scrub: true },
+      });
+    }
+
+    /* ── story: the rail fills as the chapters pass ───────────── */
+    const rail = root.querySelector('[data-rail]');
+    const list = root.querySelector('[data-chapters]');
+    if (rail && list) {
+      gsap.fromTo(
+        rail,
+        { scaleY: 0 },
+        { scaleY: 1, ease: 'none', scrollTrigger: { trigger: list, start: 'top 62%', end: 'bottom 62%', scrub: 0.6 } },
+      );
     }
 
     /* ── headings: masked word rise ───────────────────────────── */
     root.querySelectorAll('[data-split]:not(h1)').forEach((el) => {
       gsap.fromTo(
         el.querySelectorAll('.wi'),
-        { y: 0, yPercent: 108 },
+        { y: 0, yPercent: 112 },
         {
           y: 0,
           yPercent: 0,
@@ -136,8 +187,8 @@ export function initMotion(root: HTMLElement, { onStage }: Opts): Motion {
     const manifesto = root.querySelector('[data-manifesto]');
     if (manifesto) {
       gsap.fromTo(
-        manifesto.querySelectorAll('.mw'),
-        { opacity: 0.14, filter: 'blur(6px)', yPercent: 14 },
+        manifesto.querySelectorAll('.mfw'),
+        { opacity: 0.16, filter: 'blur(6px)', yPercent: 14 },
         {
           opacity: 1,
           filter: 'blur(0px)',
@@ -249,7 +300,7 @@ export function initMotion(root: HTMLElement, { onStage }: Opts): Motion {
 
   return {
     scrollTo: (target) => {
-      if (lenis) lenis.scrollTo(target as HTMLElement, { offset: -72, duration: 1.4 });
+      if (lenis) lenis.scrollTo(target as HTMLElement, { offset: -88, duration: 1.4 });
       else target.scrollIntoView({ block: 'start' });
     },
     destroy: () => {

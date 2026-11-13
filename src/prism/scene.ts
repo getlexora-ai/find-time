@@ -7,8 +7,9 @@
  * Web only (DOM canvas). Static: the band never animates, so it reads at rest.
  */
 
-const FS = `precision highp float;
-uniform vec2 res; uniform float t; uniform vec2 vp; uniform float clearCol;
+/** `ax` is how many sky units the canvas spans across: 1.6 for the full 1600×1000 painting. */
+export const SCENE_FS = `precision highp float;
+uniform vec2 res; uniform float t; uniform vec2 vp; uniform float clearCol; uniform float ax;
 float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);vec2 u=f*f*(3.-2.*f);
   return mix(mix(hash(i),hash(i+vec2(1.,0.)),u.x),mix(hash(i+vec2(0.,1.)),hash(i+vec2(1.,1.)),u.x),u.y);}
@@ -27,10 +28,10 @@ void main(){
   float y=vp.x+(1.-fc.y/res.y)*(vp.y-vp.x);
   float px=(vp.y-vp.x)/res.y;
   vec3 col=skyc(y);
-  vec2 d=vec2((x-.74)*1.6,(y-.79));
+  vec2 d=vec2((x-.74)*ax,(y-.79));
   float glow=exp(-dot(d,d)*7.);
   col+=vec3(1.,.62,.45)*glow*.5+vec3(1.,.93,.8)*exp(-dot(d,d)*90.)*.55;
-  vec2 q=vec2(x*1.6,y);
+  vec2 q=vec2(x*ax,y);
   float band=smoothstep(.02,.1,y)*smoothstep(.56,.34,y);
   float keep=1.-clearCol*.7*exp(-pow((x-.5)/.17,2.))*smoothstep(.46,.22,y);
   vec2 w=vec2(t*.006,0.);
@@ -46,7 +47,7 @@ void main(){
   float c2=smoothstep(.45,.58,m)*band2;
   vec3 lo=mix(vec3(.86,.38,.62),vec3(1.,.86,.78),clamp((m-ml)*5.+.45+glow,0.,1.));
   col=mix(col,lo,c2*.95);
-  float hx=x*1.6;
+  float hx=x*ax;
   float h1=ridge(hx,.786,.05,1.3,1.7), h2=ridge(hx,.83,.07,1.,5.3), h3=ridge(hx,.885,.07,.8,9.1);
   float e=px*1.5;
   vec3 far=mix(vec3(.62,.42,.93),col,.35);
@@ -57,7 +58,7 @@ void main(){
   col+=(hash(fc+fract(t))-.5)/255.*2.5;
   gl_FragColor=vec4(col,1.);
 }`;
-const VS = 'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}';
+export const SCENE_VS = 'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}';
 
 let source: HTMLCanvasElement | null = null;
 let tried = false;
@@ -80,8 +81,8 @@ function sky(): HTMLCanvasElement | null {
       return o;
     };
     const pr = g.createProgram()!;
-    g.attachShader(pr, sh(g.VERTEX_SHADER, VS));
-    g.attachShader(pr, sh(g.FRAGMENT_SHADER, FS));
+    g.attachShader(pr, sh(g.VERTEX_SHADER, SCENE_VS));
+    g.attachShader(pr, sh(g.FRAGMENT_SHADER, SCENE_FS));
     g.linkProgram(pr);
     if (!g.getProgramParameter(pr, g.LINK_STATUS)) throw new Error('link');
     g.useProgram(pr);
@@ -96,6 +97,7 @@ function sky(): HTMLCanvasElement | null {
     g.uniform1f(g.getUniformLocation(pr, 't'), 40);
     g.uniform2f(g.getUniformLocation(pr, 'vp'), 0, 1);
     g.uniform1f(g.getUniformLocation(pr, 'clearCol'), 0);
+    g.uniform1f(g.getUniformLocation(pr, 'ax'), 1.6);
     g.drawArrays(g.TRIANGLE_STRIP, 0, 4);
     source = cv;
   } catch {
@@ -122,7 +124,7 @@ const CLOUDS = (() => {
   return c;
 })();
 
-function paint2D(cv: HTMLCanvasElement, vy0: number, vy1: number) {
+export function paint2D(cv: HTMLCanvasElement, vy0: number, vy1: number) {
   const w = cv.width;
   const h = cv.height;
   const x = cv.getContext('2d');

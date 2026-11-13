@@ -5,15 +5,17 @@
  * renders on the web route (`src/app/index.web.tsx`); native redirects to
  * `/app` and never imports this file.
  *
- * Look: Nexus light monochrome (src/calendar/tokens.ts). The top of the page is
- * one world: a sticky 3D week board (./board) with the hero and the story
- * scrolling past it. The hero lets the visitor type their own week and runs
- * the product's parser and slot ranking on it (./demo); the story plans the
- * example week chapter by chapter.
+ * Look: Prism, the app's own (src/prism). The page is one dusk sky, top to
+ * bottom: the hero is the blue of it, the last section is the sunset and the
+ * hills, the footer is the ground (./sky renders the app's scene shader). In
+ * between, on the app's pale ground, the product shows itself:
  *
- * Server render, no-JS, reduced motion and no-WebGL all get the flat DOM week
- * (./WeekCanvas) instead of the board, with the same data. Motion lives in
- * ./motion (GSAP + ScrollTrigger + Lenis). All copy comes from ../copy.
+ * - hero: a working week. The visitor types what their week needs and the
+ *   product's own parser and slot ranking place it (./demo);
+ * - story: the same example week, planned one chapter at a time (./WeekCanvas).
+ *
+ * Everything is in the server-rendered markup and readable with JS off. Motion
+ * lives in ./motion (GSAP + ScrollTrigger + Lenis). All copy comes from ../copy.
  */
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
@@ -22,10 +24,10 @@ import { CookieSettingsLink } from '@/consent/CookieSettingsLink';
 
 import './landing.css';
 import { LANDING } from '../copy';
-import type { Board, BoardMark, BoardTile } from './board';
 import { type DemoBlock, type DemoResult, planSentence } from './demo';
 import type { Motion } from './motion';
-import { CRUMBS, FREE, TILES, readWeek, tileEnd, tileState } from './week-data';
+import type { Sky } from './sky';
+import { readWeek } from './week-data';
 import { WeekCanvas } from './WeekCanvas';
 
 type Props = {
@@ -35,17 +37,32 @@ type Props = {
 
 const { hero, demo, manifesto, story, keeps, trust, insights, faq, final, footer } = LANDING;
 
+/** `*starred*` runs flagged as emphasis, word by word; `|` starts a new line. */
+function parse(text: string) {
+  let on = false;
+  return text.split(' ').map((raw) => {
+    const br = raw.startsWith('|');
+    if (br) raw = raw.slice(1);
+    if (raw.startsWith('*')) on = true;
+    const word = { text: raw.replace(/\*/g, ''), em: on, br };
+    if (raw.replace(/[.,!?]$/, '').endsWith('*')) on = false;
+    return word;
+  });
+}
+const plain = (text: string) => text.replace(/[*|]/g, '');
+
 /** Masked words for the rise-in. Screen readers get the sentence once. */
 function Words({ text }: { text: string }) {
-  const words = text.split(' ');
+  const words = parse(text);
   return (
     <>
-      <span className="sr">{text}</span>
+      <span className="sr">{plain(text)}</span>
       <span aria-hidden="true">
         {words.map((w, i) => (
           <Fragment key={i}>
+            {w.br && <br className="br" />}
             <span className="w">
-              <span className="wi">{w}</span>
+              <span className={w.em ? 'wi em' : 'wi'}>{w.text}</span>
             </span>
             {i < words.length - 1 ? ' ' : ''}
           </Fragment>
@@ -55,44 +72,14 @@ function Words({ text }: { text: string }) {
   );
 }
 
-/** Manifesto words, with `*…*` runs flagged as emphasis. */
-const MANIFESTO = (() => {
-  let on = false;
-  return manifesto.text.split(' ').map((raw) => {
-    if (raw.startsWith('*')) on = true;
-    const word = { text: raw.replace(/\*/g, ''), em: on };
-    if (raw.endsWith('*')) on = false;
-    return word;
-  });
-})();
-const MANIFESTO_PLAIN = manifesto.text.replace(/\*/g, '');
+const MANIFESTO = parse(manifesto.text);
 
 /** Insights for the example week once it is planned and replanned (story step 5). */
 const WEEK = readWeek(4);
 const KPI_VALUE = { focus: WEEK.focus / 60, meet: WEEK.meet / 60, ready: WEEK.ready / 60, b2b: WEEK.b2b } as const;
 const fmt = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1));
 const BAR_MAX = Math.max(...WEEK.days.map((d) => d.focus + d.meet + d.free));
-
-/** scene: -1 = hero (the visitor's week), 0–4 = story stage */
-function boardTiles(scene: number, pending: DemoBlock[], accepted: DemoBlock[]): BoardTile[] {
-  const stage = Math.max(0, scene);
-  const out: BoardTile[] = [];
-  for (const t of TILES) {
-    const st = tileState(t, stage);
-    if (st === 'hidden') continue;
-    out.push({ id: t.id, day: t.day, s: t.s, e: tileEnd(t, stage), title: t.title, kind: t.kind, state: st });
-  }
-  if (scene < 0) {
-    for (const b of accepted) out.push({ ...b, kind: 'user', state: 'solid' });
-    for (const b of pending) out.push({ ...b, kind: 'user', state: 'proposal' });
-  }
-  return out;
-}
-function boardMarks(scene: number): BoardMark[] {
-  if (scene < 0) return CRUMBS.map((c) => ({ id: `c${c.day}-${c.s}`, ...c, kind: 'crumb' as const }));
-  if (scene === 1) return FREE.map((f) => ({ id: `f${f.day}-${f.s}`, ...f, kind: 'free' as const }));
-  return [];
-}
+const STEPS = story.chapters.length;
 
 type DemoState =
   | { k: 'idle' }
@@ -101,16 +88,22 @@ type DemoState =
   | { k: 'accepted'; count: number }
   | { k: 'other' };
 
+const Arrow = () => (
+  <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+    <path d="M3 8h10M9 4l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 export default function LandingPage({ onJoinWaitlist }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const hostRef = useRef<HTMLDivElement>(null);
-  const boardRef = useRef<Board | null>(null);
+  const heroSkyRef = useRef<HTMLCanvasElement>(null);
+  const duskSkyRef = useRef<HTMLCanvasElement>(null);
   const motionRef = useRef<Motion | null>(null);
   const emailRef = useRef<HTMLInputElement>(null);
   const askRef = useRef<HTMLInputElement>(null);
 
+  /** -1 = hero, 0–4 = story chapter in view */
   const [scene, setScene] = useState(-1);
-  const [gl, setGl] = useState(false);
   const [pending, setPending] = useState<DemoBlock[]>([]);
   const [accepted, setAccepted] = useState<DemoBlock[]>([]);
   const [lastBatch, setLastBatch] = useState<string[]>([]);
@@ -133,46 +126,26 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
     };
   }, []);
 
-  // The 3D board: only with WebGL and motion allowed; the DOM week otherwise.
+  // The sky: the top of it behind the hero (clouds drift), the bottom behind the last section.
   useEffect(() => {
-    const host = hostRef.current;
-    if (!host) return;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const probe = document.createElement('canvas');
-    if (!probe.getContext('webgl2') && !probe.getContext('webgl')) return;
+    const top = heroSkyRef.current;
+    const dusk = duskSkyRef.current;
+    if (!top || !dusk) return;
+    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let alive = true;
-    import('./board')
-      .then(({ mountBoard }) =>
-        mountBoard(host, {
-          offsetX: () => (window.innerWidth >= 900 ? 0.2 : 0),
-          onFail: () => {
-            boardRef.current?.dispose();
-            boardRef.current = null;
-            setGl(false);
-          },
-        }),
-      )
-      .then((b) => {
-        if (!alive) return b.dispose();
-        boardRef.current = b;
-        setGl(true);
-      })
-      .catch(() => setGl(false));
+    let skies: Sky[] = [];
+    import('./sky').then(({ mountSky }) => {
+      if (!alive) return;
+      skies = [
+        mountSky(top, 0, 0.7, { drift: !still, clear: 1, scale: 0.6 }),
+        mountSky(dusk, 0.3, 1),
+      ];
+    });
     return () => {
       alive = false;
-      boardRef.current?.dispose();
-      boardRef.current = null;
+      skies.forEach((s) => s.destroy());
     };
   }, []);
-
-  // React owns what is on the board; the board animates the difference.
-  useEffect(() => {
-    const b = boardRef.current;
-    if (!b) return;
-    b.setTiles(boardTiles(scene, pending, accepted));
-    b.setMarks(boardMarks(scene));
-    b.setView(scene < 0 ? 'hero' : 'story');
-  }, [gl, scene, pending, accepted]);
 
   /* ── hero demo ─────────────────────────────────────────────── */
   const run = useCallback(
@@ -253,12 +226,10 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
   const formMsg = form === 'invalid' ? final.invalid : form === 'failed' ? final.failed : '';
 
   const stage = Math.max(0, scene);
-  const extra = scene < 0
-    ? [
-        ...accepted.map((b) => ({ ...b, state: 'solid' as const })),
-        ...pending.map((b) => ({ ...b, state: 'proposal' as const })),
-      ]
-    : [];
+  const extra = [
+    ...accepted.map((b) => ({ ...b, state: 'solid' as const })),
+    ...pending.map((b) => ({ ...b, state: 'proposal' as const })),
+  ];
 
   return (
     <div className="lp" ref={rootRef}>
@@ -292,44 +263,43 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
       </header>
 
       <main id="main">
-        {/* ── the world: sticky board + hero + story ────────────── */}
-        <div className="world" data-gl={gl || undefined}>
-          <div className="world-track">
-            <div className="world-stage" data-stage-wrap>
-              <div className="board-host" ref={hostRef} role="img" aria-label={hero.boardAlt} />
-              <div className="board-flat">
-                <WeekCanvas
-                  stage={stage}
-                  label={scene < 0 ? hero.boardLabel : `${hero.boardLabel} · step ${scene + 1} of 5`}
-                  extra={extra}
-                  crumbs={scene < 0}
-                />
-              </div>
-              <p className="board-tag mono" aria-hidden="true">
-                {scene < 0 ? hero.boardLabel : `Step ${scene + 1} of 5`}
-              </p>
-            </div>
+        {/* ── hero: the sky, and a week you can plan ────────────── */}
+        <section className="hero" data-hero data-section="top" aria-labelledby="hero-title">
+          <div className="sky" aria-hidden="true">
+            <canvas ref={heroSkyRef} data-sky />
           </div>
 
-          <div className="world-flow frame">
-            <section className="hero" data-hero data-section="top" aria-labelledby="hero-title">
-              <p className="kicker mono" data-hero-in>
-                <span className="dot" aria-hidden="true" />
-                {hero.kicker}
-              </p>
-              <h1 id="hero-title" className="display" data-split>
-                {hero.title.map((line, i) => (
-                  <span key={i} className="line">
-                    <Words text={line} />
-                  </span>
-                ))}
-              </h1>
-              <p className="lede" data-hero-in>
-                {hero.body}
-              </p>
+          <div className="hero-copy frame">
+            <p className="kicker" data-hero-in>
+              <span className="dot" aria-hidden="true" />
+              {hero.kicker}
+            </p>
+            <h1 id="hero-title" className="display" data-split>
+              <Words text={hero.title} />
+            </h1>
+            <p className="lede" data-hero-in>
+              {hero.body}
+            </p>
+            <div className="hero-cta" data-hero-in>
+              <button className="btn btn-white" type="button" onClick={toWaitlist} data-magnetic>
+                {hero.cta}
+                <Arrow />
+              </button>
+              <button className="btn btn-glass" type="button" onClick={() => go('story')}>
+                {hero.secondary}
+              </button>
+            </div>
+            <ul className="hero-notes" data-hero-in>
+              {hero.notes.map((n) => (
+                <li key={n}>{n}</li>
+              ))}
+            </ul>
+          </div>
 
-              <div className="demo" data-hero-in>
-                <p className="demo-label mono">{demo.label}</p>
+          <div className="stage frame" data-lift>
+            <div className="panel" data-panel>
+              <div className="demo">
+                <p className="demo-label">{demo.label}</p>
                 <form className="ask-box" onSubmit={onAsk}>
                   <label htmlFor="lp-ask" className="sr">
                     {demo.inputLabel}
@@ -342,7 +312,7 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
                     placeholder={demo.placeholder}
                     enterKeyHint="go"
                   />
-                  <button className="btn btn-ink" type="submit" data-magnetic>
+                  <button className="btn btn-ai" type="submit">
                     {demo.submit}
                   </button>
                 </form>
@@ -376,7 +346,7 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
                           <button className="btn btn-ink btn-sm" type="button" onClick={acceptPlan}>
                             {demo.accept}
                           </button>
-                          <button className="btn btn-ghost btn-sm" type="button" onClick={clear}>
+                          <button className="btn btn-line btn-sm" type="button" onClick={clear}>
                             {demo.clear}
                           </button>
                         </div>
@@ -405,7 +375,7 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
                         </strong>
                       </div>
                       <div className="out-actions">
-                        <button className="btn btn-ghost btn-sm" type="button" onClick={undo}>
+                        <button className="btn btn-line btn-sm" type="button" onClick={undo}>
                           {demo.undo}
                         </button>
                       </div>
@@ -419,52 +389,33 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
                     </div>
                   )}
                 </div>
+              </div>
+
+              <WeekCanvas stage={0} label={hero.boardLabel} extra={extra} className="wk-hero" />
+
+              <div className="panel-foot">
+                <ul className="legend" aria-label="What the colours mean">
+                  {hero.legend.map((l) => (
+                    <li key={l.key}>
+                      <i className={`lg-${l.key}`} aria-hidden="true" />
+                      {l.label}
+                    </li>
+                  ))}
+                </ul>
                 <p className="demo-note">{demo.privacy}</p>
               </div>
-            </section>
-
-            <section className="story" data-section="story" aria-labelledby="story-title">
-              <div className="sec-head">
-                <p className="label mono">{story.label}</p>
-                <h2 id="story-title" className="h2" data-split>
-                  <Words text={story.title} />
-                </h2>
-              </div>
-              <ol className="chapters">
-                {story.chapters.map((c, i) => (
-                  <li key={c.n} className={`chapter${i === scene ? ' is-active' : ''}`} data-chapter={i}>
-                    <span className="ch-n mono">{c.n}</span>
-                    <h3 className="h3 ch-title">{c.title}</h3>
-                    {'body' in c && <p className="body">{c.body}</p>}
-                    {'quote' in c && <blockquote className="say">{c.quote}</blockquote>}
-                    {'ask' in c && (
-                      <div className="ask" aria-label="Example question from Find Time">
-                        <span>{c.ask.q}</span>
-                        <span className="ask-opts">
-                          {c.ask.options.map((o) => (
-                            <span key={o} className="chip">
-                              {o}
-                            </span>
-                          ))}
-                        </span>
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ol>
-            </section>
+            </div>
           </div>
-        </div>
+        </section>
 
         {/* ── manifesto ──────────────────────────────────────── */}
         <section className="manifesto frame" aria-label={manifesto.label}>
-          <p className="label mono">{manifesto.label}</p>
           <p className="mf" data-manifesto>
-            <span className="sr">{MANIFESTO_PLAIN}</span>
+            <span className="sr">{plain(manifesto.text)}</span>
             <span aria-hidden="true">
               {MANIFESTO.map((w, i) => (
                 <Fragment key={i}>
-                  <span className={w.em ? 'mw em' : 'mw'}>{w.text}</span>
+                  <span className={w.em ? 'mfw em' : 'mfw'}>{w.text}</span>
                   {i < MANIFESTO.length - 1 ? ' ' : ''}
                 </Fragment>
               ))}
@@ -472,10 +423,54 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
           </p>
         </section>
 
+        {/* ── story: the example week, planned as you scroll ───── */}
+        <section className="story frame" data-section="story" aria-labelledby="story-title">
+          <div className="sec-head">
+            <h2 id="story-title" className="h2" data-split>
+              <Words text={story.title} />
+            </h2>
+          </div>
+          <div className="story-grid">
+            <div className="story-stage">
+              <div className="story-card">
+                <WeekCanvas
+                  stage={stage}
+                  label={`${hero.boardLabel} · ${story.step(stage + 1, STEPS)}`}
+                  className="wk-story"
+                />
+              </div>
+            </div>
+            <ol className="chapters" data-chapters>
+              <li className="rail" aria-hidden="true">
+                <i className="rail-fill" data-rail />
+              </li>
+              {story.chapters.map((c, i) => (
+                <li key={c.n} className={`chapter${i === scene ? ' is-active' : ''}`} data-chapter={i}>
+                  <span className="ch-n">{c.n}</span>
+                  <h3 className="ch-title">{c.title}</h3>
+                  {'body' in c && <p className="body">{c.body}</p>}
+                  {'quote' in c && <blockquote className="say">{c.quote}</blockquote>}
+                  {'ask' in c && (
+                    <div className="ask" aria-label="Example question from Find Time">
+                      <span>{c.ask.q}</span>
+                      <span className="ask-opts">
+                        {c.ask.options.map((o) => (
+                          <span key={o} className="chip">
+                            {o}
+                          </span>
+                        ))}
+                      </span>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ol>
+          </div>
+        </section>
+
         {/* ── what it keeps in mind ──────────────────────────── */}
         <section className="keeps frame" aria-labelledby="keeps-title">
           <div className="sec-head">
-            <p className="label mono">{keeps.label}</p>
             <h2 id="keeps-title" className="h2" data-split>
               <Words text={keeps.title} />
             </h2>
@@ -484,9 +479,9 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
             {keeps.rows.map((r) => (
               <li key={r.n} className="row" data-row>
                 <i className="row-rule" aria-hidden="true" />
-                <span className="row-n mono row-in">{r.n}</span>
+                <span className="row-n row-in">{r.n}</span>
                 <h3 className="row-name row-in">{r.name}</h3>
-                <span className="row-spec mono row-in">{r.spec}</span>
+                <span className="row-spec row-in">{r.spec}</span>
               </li>
             ))}
           </ul>
@@ -495,7 +490,6 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
         {/* ── trust (try them) ───────────────────────────────── */}
         <section className="trust frame" data-section="trust" aria-labelledby="trust-title">
           <div className="sec-head">
-            <p className="label mono">{trust.label}</p>
             <h2 id="trust-title" className="h2" data-split>
               <Words text={trust.title} />
             </h2>
@@ -507,7 +501,7 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
                   {t.ui === 'proposal' && <TryProposal />}
                   {t.ui === 'toggle' && <TryToggle />}
                   {t.ui === 'locked' && <TryLocked />}
-                  <span className="try mono" aria-hidden="true">
+                  <span className="try" aria-hidden="true">
                     {trust.hint}
                   </span>
                 </div>
@@ -518,19 +512,18 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
           </div>
         </section>
 
-        {/* ── insights ───────────────────────────────────────── */}
+        {/* ── insights: the night panel ──────────────────────── */}
         <section className="insights frame" aria-labelledby="ins-title" data-insights>
-          <div className="ins-copy">
-            <p className="label mono">{insights.label}</p>
-            <h2 id="ins-title" className="h2" data-split>
-              <Words text={insights.title} />
-            </h2>
-          </div>
-          <figure className="dash">
-            <figcaption className="dash-cap mono">
-              <span>{insights.sample}</span>
-              <span>Sep 14 – 18</span>
-            </figcaption>
+          <div className="night">
+            <div className="ins-copy">
+              <h2 id="ins-title" className="h2" data-split>
+                <Words text={insights.title} />
+              </h2>
+              <p className="ins-cap">
+                <span>{insights.sample}</span>
+                <span>Sep 14 – 18</span>
+              </p>
+            </div>
             <dl className="kpis">
               {insights.kpis.map((k) => (
                 <div key={k.label} className="kpi">
@@ -544,7 +537,7 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
             </dl>
             <div className="chart" role="img" aria-label={insights.chartAlt}>
               <div className="chart-head">
-                <span className="mono">{insights.chartLabel}</span>
+                <span>{insights.chartLabel}</span>
                 <ul className="chart-key" aria-hidden="true">
                   {insights.series.map((s) => (
                     <li key={s.key}>
@@ -559,30 +552,29 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
                   <div key={b.label} className="bar">
                     <div className="bar-track">
                       {b.away ? (
-                        <span className="bar-away mono">Away</span>
+                        <span className="bar-away">Away</span>
                       ) : (
                         <>
                           <i className="bar-seg seg-free" style={{ height: `${(b.free / BAR_MAX) * 100}%` }} />
                           <i className="bar-seg seg-meet" style={{ height: `${(b.meet / BAR_MAX) * 100}%` }} />
                           <i className="bar-seg seg-focus" style={{ height: `${(b.focus / BAR_MAX) * 100}%` }} />
-                          <span className="bar-tip mono">
+                          <span className="bar-tip">
                             {fmt(Math.round((b.focus / 60) * 10) / 10)} h focus · {fmt(Math.round((b.meet / 60) * 10) / 10)} h meetings
                           </span>
                         </>
                       )}
                     </div>
-                    <span className="mono">{b.label}</span>
+                    <span className="bar-day">{b.label}</span>
                   </div>
                 ))}
               </div>
             </div>
-          </figure>
+          </div>
         </section>
 
         {/* ── faq ────────────────────────────────────────────── */}
         <section className="faq frame" data-section="faq" aria-labelledby="faq-title">
           <div className="sec-head">
-            <p className="label mono">{faq.label}</p>
             <h2 id="faq-title" className="h2" data-split>
               <Words text={faq.title} />
             </h2>
@@ -600,58 +592,59 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
           </div>
         </section>
 
-        {/* ── final cta ──────────────────────────────────────── */}
-        <section id="join" className="final frame" data-section="join" aria-labelledby="final-title">
-          <h2 id="final-title" className="display display-sm" data-split>
-            {final.title.map((line, i) => (
-              <span key={i} className="line">
-                <Words text={line} />
-              </span>
-            ))}
-          </h2>
-          <div className="final-foot" data-rv-group>
-            <p className="lede" data-rv>
-              {final.body}
-            </p>
-            {form === 'done' ? (
-              <p className="form-done" role="status" data-rv>
-                <span className="tick" aria-hidden="true" />
-                {final.done}
+        {/* ── final cta: the bottom of the sky ───────────────── */}
+        <section id="join" className="final" data-section="join" aria-labelledby="final-title">
+          <div className="sky sky-dusk" aria-hidden="true">
+            <canvas ref={duskSkyRef} data-sky />
+          </div>
+          <div className="final-in frame">
+            <h2 id="final-title" className="display" data-split>
+              <Words text={final.title} />
+            </h2>
+            <div className="final-foot" data-rv-group>
+              <p className="lede" data-rv>
+                {final.body}
               </p>
-            ) : (
-              <form className="join" onSubmit={submit} noValidate data-rv>
-                <label htmlFor="lp-email" className="sr">
-                  {final.emailLabel}
-                </label>
-                <input
-                  id="lp-email"
-                  ref={emailRef}
-                  type="email"
-                  name="email"
-                  autoComplete="email"
-                  inputMode="email"
-                  placeholder={final.placeholder}
-                  aria-invalid={form === 'invalid' || undefined}
-                  aria-describedby="lp-email-msg"
-                  onInput={() => (form === 'invalid' || form === 'failed') && setForm('idle')}
-                  required
-                />
-                <button className="btn btn-ink" type="submit" disabled={form === 'sending'} data-magnetic>
-                  {form === 'sending' ? final.sending : final.button}
-                </button>
-              </form>
-            )}
-            <p id="lp-email-msg" className="form-msg" role="alert">
-              {formMsg}
-            </p>
+              {form === 'done' ? (
+                <p className="form-done" role="status" data-rv>
+                  <span className="tick" aria-hidden="true" />
+                  {final.done}
+                </p>
+              ) : (
+                <form className="join" onSubmit={submit} noValidate data-rv>
+                  <label htmlFor="lp-email" className="sr">
+                    {final.emailLabel}
+                  </label>
+                  <input
+                    id="lp-email"
+                    ref={emailRef}
+                    type="email"
+                    name="email"
+                    autoComplete="email"
+                    inputMode="email"
+                    placeholder={final.placeholder}
+                    aria-invalid={form === 'invalid' || undefined}
+                    aria-describedby="lp-email-msg"
+                    onInput={() => (form === 'invalid' || form === 'failed') && setForm('idle')}
+                    required
+                  />
+                  <button className="btn btn-ink" type="submit" disabled={form === 'sending'} data-magnetic>
+                    {form === 'sending' ? final.sending : final.button}
+                  </button>
+                </form>
+              )}
+              <p id="lp-email-msg" className="form-msg" role="alert">
+                {formMsg}
+              </p>
+            </div>
           </div>
         </section>
       </main>
 
-      {/* ── footer ─────────────────────────────────────────────── */}
+      {/* ── footer: the ground ─────────────────────────────────── */}
       <footer className="ftr">
         <div className="ftr-row frame">
-          <span className="mono">{footer.copyright}</span>
+          <span>{footer.copyright}</span>
           <nav aria-label="Footer">
             {footer.links.map((l) => (
               <a key={l.href} className="link" href={l.href}>
@@ -701,7 +694,7 @@ function TryToggle() {
       <span>{ui.toggle}</span>
       <span className="sw" data-on={on || undefined}>
         <i />
-        <em className="mono">{on ? ui.on : ui.off}</em>
+        <em>{on ? ui.on : ui.off}</em>
       </span>
     </button>
   );
@@ -720,7 +713,7 @@ function TryLocked() {
         <strong>{ui.lockedTitle}</strong>
         <span>{ui.lockedTime}</span>
       </button>
-      <span className={`mono ui-note${nudge ? ' is-on' : ''}`}>
+      <span className={`ui-note${nudge ? ' is-on' : ''}`}>
         <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
           <rect x="3" y="7" width="10" height="7" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
           <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" strokeWidth="1.4" />

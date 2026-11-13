@@ -1,15 +1,14 @@
 /**
- * The example week as flat DOM — the fallback for the 3D board (no WebGL,
- * reduced motion, lost context) and the version crawlers and no-JS readers get.
+ * The example week — the hero's demo week and the story's planned week.
  *
- * Quiet calendar look (src/calendar): title + time on soft tints, ink text, one
- * orange stroke for proposals and clashes. Stage-driven and pure; CSS
- * transitions carry the changes.
+ * Drawn like the Prism app's grid (src/prism): meetings in their calendar's
+ * tint, focus blocks deep indigo, proposals dashed in the Plan with AI orange,
+ * time away hatched. Stage-driven and pure; CSS transitions carry the changes,
+ * and it is complete in the server-rendered markup.
  */
 import type { CSSProperties } from 'react';
 
 import {
-  CRUMBS,
   DAYS,
   DAY_END,
   DAY_START,
@@ -30,8 +29,6 @@ type Props = {
   label: string;
   /** the visitor's own blocks from the hero demo */
   extra?: ExtraTile[];
-  /** hero: outline the gaps too short to use */
-  crumbs?: boolean;
   className?: string;
 };
 
@@ -42,7 +39,8 @@ const box = (s: number, e: number): CSSProperties => ({
   height: `${pct(e) - pct(s)}%`,
 });
 
-export function WeekCanvas({ stage, label, extra = [], crumbs, className }: Props) {
+export function WeekCanvas({ stage, label, extra = [], className }: Props) {
+  let n = 0;
   return (
     <figure className={`wk ${className ?? ''}`} data-stage={stage}>
       <figcaption className="wk-cap">
@@ -80,11 +78,6 @@ export function WeekCanvas({ stage, label, extra = [], crumbs, className }: Prop
                 </span>
               ))}
 
-              {crumbs &&
-                CRUMBS.filter((c) => c.day === day).map((c) => (
-                  <span key={`c${c.s}`} className="wk-crumb" style={box(c.s, c.e)} />
-                ))}
-
               {TILES.filter((t) => t.day === day).map((t) => {
                 const state = tileState(t, stage);
                 const e = tileEnd(t, stage);
@@ -94,7 +87,7 @@ export function WeekCanvas({ stage, label, extra = [], crumbs, className }: Prop
                     className={`wk-tile k-${t.kind}`}
                     data-state={state}
                     data-short={e - t.s <= 45 || undefined}
-                    style={box(t.s, e)}>
+                    style={{ ...box(t.s, e), '--d': n++ } as CSSProperties}>
                     <strong>{t.title}</strong>
                     <span>
                       {clock(t.s)}–{clock(e)}
@@ -108,7 +101,7 @@ export function WeekCanvas({ stage, label, extra = [], crumbs, className }: Prop
                 .map((t) => (
                   <div
                     key={t.id}
-                    className="wk-tile k-thesis"
+                    className="wk-tile k-user"
                     data-state={t.state}
                     data-short={t.e - t.s <= 45 || undefined}
                     style={box(t.s, t.e)}>
