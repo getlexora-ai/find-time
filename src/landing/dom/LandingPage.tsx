@@ -10,8 +10,10 @@
  * hills, the footer is the ground (./sky renders the app's scene shader). In
  * between, on the app's pale ground, the product shows itself:
  *
- * - hero: a working week. The visitor types what their week needs and the
- *   product's own parser and slot ranking place it (./demo);
+ * - hero: a working week with a life in it. The visitor types what their week
+ *   needs and the product's own parser and slot ranking place it (./demo);
+ * - human: how a person plans, row by row;
+ * - both: one planned day, work and personal together, filterable;
  * - story: the same example week, planned one chapter at a time (./WeekCanvas).
  *
  * Everything is in the server-rendered markup and readable with JS off. Motion
@@ -35,7 +37,7 @@ type Props = {
   onJoinWaitlist?: (email: string) => Promise<void>;
 };
 
-const { hero, demo, manifesto, story, keeps, trust, insights, faq, final, footer } = LANDING;
+const { hero, demo, manifesto, human, both, story, trust, insights, faq, final, footer } = LANDING;
 
 /** `*starred*` runs flagged as emphasis, word by word; `|` starts a new line. */
 function parse(text: string) {
@@ -423,6 +425,51 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
           </p>
         </section>
 
+        {/* ── planned the way a person would ─────────────────── */}
+        <section className="human frame" data-section="human" aria-labelledby="human-title">
+          <div className="sec-head sec-split">
+            <h2 id="human-title" className="h2" data-split>
+              <Words text={human.title} />
+            </h2>
+            <p className="lede sec-lede">{human.body}</p>
+          </div>
+          <ul className="rows">
+            {human.rows.map((r) => (
+              <li key={r.n} className="row" data-row>
+                <i className="row-rule" aria-hidden="true" />
+                <span className="row-n row-in">{r.n}</span>
+                <div className="row-main row-in">
+                  <h3 className="row-name">{r.name}</h3>
+                  <p className="row-body">{r.body}</p>
+                </div>
+                <span className="row-spec row-in">{r.spec}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        {/* ── work and life, one week ────────────────────────── */}
+        <section className="both frame" data-section="both" aria-labelledby="both-title">
+          <div className="both-copy">
+            <h2 id="both-title" className="h2" data-split>
+              <Words text={both.title} />
+            </h2>
+            <p className="lede sec-lede">{both.body}</p>
+            <div className="sources" data-rv-group>
+              <p className="sources-label">{both.sourcesLabel}</p>
+              <ul>
+                {both.sources.map((x) => (
+                  <li key={x.key} data-rv>
+                    <i className={`lg-${x.key}`} aria-hidden="true" />
+                    {x.label}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+          <BothDay />
+        </section>
+
         {/* ── story: the example week, planned as you scroll ───── */}
         <section className="story frame" data-section="story" aria-labelledby="story-title">
           <div className="sec-head">
@@ -468,25 +515,6 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
           </div>
         </section>
 
-        {/* ── what it keeps in mind ──────────────────────────── */}
-        <section className="keeps frame" aria-labelledby="keeps-title">
-          <div className="sec-head">
-            <h2 id="keeps-title" className="h2" data-split>
-              <Words text={keeps.title} />
-            </h2>
-          </div>
-          <ul className="rows">
-            {keeps.rows.map((r) => (
-              <li key={r.n} className="row" data-row>
-                <i className="row-rule" aria-hidden="true" />
-                <span className="row-n row-in">{r.n}</span>
-                <h3 className="row-name row-in">{r.name}</h3>
-                <span className="row-spec row-in">{r.spec}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-
         {/* ── trust (try them) ───────────────────────────────── */}
         <section className="trust frame" data-section="trust" aria-labelledby="trust-title">
           <div className="sec-head">
@@ -501,9 +529,12 @@ export default function LandingPage({ onJoinWaitlist }: Props) {
                   {t.ui === 'proposal' && <TryProposal />}
                   {t.ui === 'toggle' && <TryToggle />}
                   {t.ui === 'locked' && <TryLocked />}
-                  <span className="try" aria-hidden="true">
-                    {trust.hint}
-                  </span>
+                  {t.ui === 'private' && <ShowPrivate />}
+                  {t.ui !== 'private' && (
+                    <span className="try" aria-hidden="true">
+                      {trust.hint}
+                    </span>
+                  )}
                 </div>
                 <h3 className="h3">{t.title}</h3>
                 <p className="body">{t.body}</p>
@@ -721,5 +752,65 @@ function TryLocked() {
         {ui.lockedNote}
       </span>
     </div>
+  );
+}
+
+/** What Google holds next to what Find Time keeps: the time, not the words. */
+function ShowPrivate() {
+  return (
+    <div className="ui-private">
+      <div>
+        <span className="ui-cap">{ui.privateGoogle}</span>
+        <div className="ui-tile life">
+          <strong>{ui.privateTitle}</strong>
+          <span>{ui.privateTime}</span>
+        </div>
+      </div>
+      <svg viewBox="0 0 24 16" width="24" height="16" aria-hidden="true">
+        <path d="M2 8h18M15 3l5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      <div>
+        <span className="ui-cap">{ui.privateOurs}</span>
+        <div className="ui-tile busy">
+          <strong>{ui.privateBusy}</strong>
+          <span>{ui.privateTime}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── both: one planned day, work and personal together ───────── */
+type Side = (typeof both.filters)[number]['key'];
+
+function BothDay() {
+  const [show, setShow] = useState<Side>('both');
+  const work = both.day.filter((d) => d.side === 'work').length;
+  return (
+    <figure className="day" data-rv-group>
+      <figcaption className="day-head">
+        <span className="day-label">{both.dayLabel}</span>
+        <div className="seg" role="group" aria-label={both.filterLabel}>
+          {both.filters.map((f) => (
+            <button key={f.key} type="button" aria-pressed={show === f.key} onClick={() => setShow(f.key)}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </figcaption>
+      <ol className="day-list">
+        {both.day.map((d) => (
+          <li key={d.time} className="day-row" data-rv data-off={(show !== 'both' && show !== d.side) || undefined}>
+            <span className="day-time">{d.time}</span>
+            <div className={`day-tile dk-${d.kind}`}>
+              <strong>{d.title}</strong>
+              <span>{d.side === 'work' ? 'Work' : 'Personal'}</span>
+            </div>
+            {'note' in d && <p className="day-note">{d.note}</p>}
+          </li>
+        ))}
+      </ol>
+      <p className="day-foot">{both.count(work, both.day.length - work)}</p>
+    </figure>
   );
 }

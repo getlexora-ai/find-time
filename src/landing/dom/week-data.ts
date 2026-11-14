@@ -2,9 +2,11 @@
  * The example week the landing draws — once in the hero (as it arrives) and
  * again in the story, where it is planned one stage at a time.
  *
- * It is the worked example from docs/planning-agent-plan.md §0: a thesis draft
- * due Thursday (10 h), gym three times, Copenhagen from Thursday evening, and a
- * call that lands on Wednesday's writing after the week is accepted.
+ * It follows the worked example in docs/planning-agent-plan.md §0, told for a
+ * busy working week with a life in it: a launch brief due Thursday (10 h), gym
+ * three times, personal plans on the personal calendar, Copenhagen from
+ * Thursday evening, and a call that lands on Wednesday's writing after the week
+ * is accepted. (`thesis` is the kind name for the planned deep work.)
  *
  * Stages (story chapters):
  *   0  you say it        — the week as it is
@@ -24,7 +26,8 @@ export const DAYS = [
   { short: 'Fri', num: 18 },
 ] as const;
 
-export type TileKind = 'meet' | 'away' | 'thesis' | 'gym' | 'new';
+/** `meet` = work calendar, `life` = personal calendar */
+export type TileKind = 'meet' | 'life' | 'away' | 'thesis' | 'gym' | 'new';
 
 export type Tile = {
   id: string;
@@ -49,6 +52,7 @@ export const TILES: Tile[] = [
   { id: 'm3', day: 0, s: h(13), e: h(14), title: 'Design review', kind: 'meet' },
   { id: 'm4', day: 0, s: h(15, 30), e: h(16), title: '1:1 with Ana', kind: 'meet' },
   { id: 'm5', day: 0, s: h(16, 20), e: h(17), title: 'Budget check-in', kind: 'meet' },
+  { id: 'l1', day: 0, s: h(17, 10), e: h(17, 50), title: 'School pickup', kind: 'life' },
   // Tuesday — the packed day
   { id: 't1', day: 1, s: h(10), e: h(10, 30), title: 'Standup', kind: 'meet' },
   { id: 't2', day: 1, s: h(10, 50), e: h(12, 30), title: 'Client call', kind: 'meet' },
@@ -56,10 +60,12 @@ export const TILES: Tile[] = [
   { id: 't4', day: 1, s: h(14), e: h(15, 30), title: 'Interviews', kind: 'meet' },
   { id: 't5', day: 1, s: h(15, 30), e: h(16, 30), title: 'Vendor call', kind: 'meet' },
   { id: 't6', day: 1, s: h(16, 30), e: h(19), title: 'Partner calls', kind: 'meet' },
+  { id: 'l2', day: 1, s: h(19), e: h(20), title: 'Dinner with Maya', kind: 'life' },
   // Wednesday
   { id: 'w1', day: 2, s: h(10), e: h(10, 30), title: 'Standup', kind: 'meet' },
-  { id: 'w2', day: 2, s: h(12, 30), e: h(13, 30), title: 'Lunch with Sam', kind: 'meet' },
+  { id: 'w2', day: 2, s: h(12, 30), e: h(13, 30), title: 'Lunch with Sam', kind: 'life' },
   { id: 'w3', day: 2, s: h(15), e: h(16), title: 'Roadmap review', kind: 'meet' },
+  { id: 'l3', day: 2, s: h(16, 30), e: h(17, 30), title: 'Dentist', kind: 'life' },
   // Thursday
   { id: 'h1', day: 3, s: h(10), e: h(10, 30), title: 'Standup', kind: 'meet' },
   { id: 'h2', day: 3, s: h(14), e: h(15), title: 'Retro', kind: 'meet' },
@@ -69,19 +75,19 @@ export const TILES: Tile[] = [
   { id: 'a2', day: 4, s: DAY_START, e: DAY_END, title: 'Copenhagen', kind: 'away' },
 
   // Stage 2 — proposals: 4 × 2.5 h of writing, done before Thursday evening
-  { id: 'p1', day: 0, s: h(7, 30), e: h(10), title: 'Thesis', kind: 'thesis', from: 2 },
-  { id: 'p2', day: 1, s: h(7, 30), e: h(10), title: 'Thesis', kind: 'thesis', from: 2 },
+  { id: 'p1', day: 0, s: h(7, 30), e: h(10), title: 'Launch brief', kind: 'thesis', from: 2 },
+  { id: 'p2', day: 1, s: h(7, 30), e: h(10), title: 'Launch brief', kind: 'thesis', from: 2 },
   {
-    id: 'p3', day: 2, s: h(7, 30), e: h(10), title: 'Thesis', kind: 'thesis', from: 2,
+    id: 'p3', day: 2, s: h(7, 30), e: h(10), title: 'Launch brief', kind: 'thesis', from: 2,
     endFrom: { stage: 4, e: h(9) },
   },
-  { id: 'p4', day: 3, s: h(7, 30), e: h(10), title: 'Thesis', kind: 'thesis', from: 2 },
+  { id: 'p4', day: 3, s: h(7, 30), e: h(10), title: 'Launch brief', kind: 'thesis', from: 2 },
   { id: 'g1', day: 0, s: h(18), e: h(19), title: 'Gym', kind: 'gym', from: 2 },
   { id: 'g2', day: 2, s: h(18), e: h(19), title: 'Gym', kind: 'gym', from: 2 },
 
   // Stage 4 — a call lands on Wednesday's writing; the lost hour moves to Thursday
   { id: 'n1', day: 2, s: h(9), e: h(10), title: 'Call with Lena', kind: 'new', from: 4 },
-  { id: 'p5', day: 3, s: h(11), e: h(12), title: 'Thesis', kind: 'thesis', from: 4 },
+  { id: 'p5', day: 3, s: h(11), e: h(12), title: 'Launch brief', kind: 'thesis', from: 4 },
 ];
 
 /** Tiles the planner placed (proposed until accepted). */
@@ -104,7 +110,7 @@ export const FREE = (() => {
   const out: { day: number; s: number; e: number }[] = [];
   const end = h(19, 30);
   DAYS.forEach((_, day) => {
-    const busy = TILES.filter((t) => t.day === day && (t.kind === 'meet' || t.kind === 'away'))
+    const busy = TILES.filter((t) => t.day === day && (t.kind === 'meet' || t.kind === 'life' || t.kind === 'away'))
       .map((t) => [t.s, t.e] as const)
       .sort((a, b) => a[0] - b[0]);
     let cur = DAY_START;

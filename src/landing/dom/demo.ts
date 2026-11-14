@@ -39,7 +39,7 @@ const iso = (ms: number) => new Date(ms).toISOString();
 function busyOf(accepted: DemoBlock[]): Busy[] {
   const at = (day: number, min: number) => iso(WEEK0 + day * DAY + min * 60_000);
   return [
-    ...TILES.filter((t) => (t.kind === 'meet' || t.kind === 'away') && (t.from ?? 0) <= 1).map((t) => ({
+    ...TILES.filter((t) => (t.kind === 'meet' || t.kind === 'life' || t.kind === 'away') && (t.from ?? 0) <= 1).map((t) => ({
       start: at(t.day, t.s),
       end: at(t.day, t.e),
     })),
