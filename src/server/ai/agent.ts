@@ -14,8 +14,9 @@ import { habitWeeks, MAX_HORIZON_DAYS, planWeek } from './plan-week.ts';
 import { type AgentProfile, CATEGORIES, type LearnedKind, WEEKDAYS } from './preferences.ts';
 import { missing, readRequest, REQUEST_TOOLS } from './request-tools.ts';
 import { checkChanges } from './tools/changes.ts';
+import type { ToolFailure, ToolResult } from './tools/context.ts';
 import { findEvents, freeTime, MAX_LOOKUP_DAYS } from './tools/look.ts';
-import { TOOL_ANSWER, TOOL_ASK, TOOL_CHANGES, TOOL_PLACE_AT, TOOL_PREFER, TOOL_PROPOSE, TOOL_RULE } from './tools/names.ts';
+import { TOOL_ANSWER, TOOL_ASK, TOOL_CHANGES, TOOL_PLACE_AT, TOOL_PLAN_WEEK, TOOL_PREFER, TOOL_PROPOSE, TOOL_RULE } from './tools/names.ts';
 import { categoryOf, NOT_UNDERSTOOD, readFacets, type Understood, understand, type UnderstandContext } from './understand.ts';
 
 /**
@@ -34,6 +35,14 @@ import { categoryOf, NOT_UNDERSTOOD, readFacets, type Understood, understand, ty
  *
  * The model reads, reasons and asks. The planner never words a question, and
  * the model never computes a free slot, a date count or a clash.
+ *
+ * The two talk in both directions, and what they said is kept:
+ *   - a form the planner could not finish is saved with the question (Pending),
+ *     so the person's answer fills the gap and code keeps the rest as said;
+ *   - the planner runs inside the loop (c.run), so "no free slot" or "this does
+ *     not fit" goes back to the model, which asks the person with the whole
+ *     conversation in view;
+ *   - what was proposed, offered and added is shown in the history (shownToModel).
  *
  * Sent to OpenAI: the conversation's text, today's date, what the user has told
  * us (rules, preferences, settings, open tasks, habits), and what the lookups
@@ -208,7 +217,7 @@ export function decideSystem(nowISO: string, pending: string | null): string {
 }
 
 /** What this turn is for, added to the model's instructions. */
-function modeLine(route: Route, pending: string | null): string {
+function modeLine(route: Route, pending: string | null, form: Pending | null = null): string {
   const understood = `You understood: ${route.understood}`;
   if (route.kind === 'question') {
     return [
@@ -217,9 +226,16 @@ function modeLine(route: Route, pending: string | null): string {
     ].join('\n');
   }
   if (route.kind === 'reply') {
+    const filled = form ? Object.fromEntries(Object.entries(form.args).filter(([, v]) => v !== null && v !== '')) : null;
     return [
       `THIS MESSAGE ANSWERS WHAT YOU ASKED: "${pending}". ${understood}`,
-      'Combine it with what was said earlier in the conversation and carry out the request. Nothing from this conversation is on the calendar yet: a change to the day or time is still the same new request, so do not look for it. Ask again only if something is still missing, and never repeat a question already answered.',
+      'Combine it with what was said earlier in the conversation and carry out the request. Something proposed is on the calendar only where the conversation says it was added: until then a change to the day or time is still the same new request, so do not look for it. Ask again only if something is still missing, and never repeat a question already answered.',
+      ...(form
+        ? [
+            `The request so far, kept by the app: ${form.tool} ${JSON.stringify(filled)}. It still needs: ${form.needs.join(', ')}.`,
+            `Call ${form.tool} again with their answer filled in. Leave every other field null unless they changed it now: the app keeps what was already said.`,
+          ]
+        : []),
     ].join('\n');
   }
   return `THIS MESSAGE IS A REQUEST. ${understood}\nWork out what it needs, read the calendar if you must, then carry it out or ask for what is missing.`;
@@ -306,10 +322,44 @@ export function agentSystem(nowISO: string, profile: AgentProfile, tasks: ApiTas
   ].join('\n');
 }
 
+/** A request the planner could not finish: what was filled in, and what it still needs. Kept with the question, so the answer continues it. */
+export type Pending = { tool: string; args: Record<string, unknown>; needs: string[] };
+
+/** The turn's action. `ran`: the planner already ran inside the loop. `worded`: the model's words for what the planner found. */
+export type AgentResult = Understood & {
+  pending?: Pending;
+  ran?: ToolResult | ToolFailure;
+  worded?: { text: string; options: string[]; question: boolean };
+};
+
+const hm = (isoTime: string) => isoTime.slice(11, 16);
+const dayOf = (isoTime: string) => `${WD[new Date(`${isoTime.slice(0, 10)}T00:00:00Z`).getUTCDay()].slice(0, 3)} ${isoTime.slice(0, 10)}`;
+
+/**
+ * An earlier reply as the model reads it: its words, plus what the card under
+ * them showed. Without this a plan is just "Here it is." and "make it later"
+ * has nothing to point at. `status` says what the person did with each proposal.
+ */
+export function shownToModel(content: string, parsed: unknown, status: Record<string, string> = {}): string {
+  const p = (parsed ?? {}) as { proposals?: { id: string; title: string; startISO: string; endISO: string }[]; question?: { options?: string[] } };
+  const lines = [content];
+  if (p.proposals?.length) {
+    const did = (id: string) => (status[id] === 'accepted' || status[id] === 'edited' ? 'added to the calendar' : status[id] === 'rejected' ? 'turned down' : 'not added yet');
+    const shown = p.proposals.slice(0, 12).map((x) => `${x.title} ${dayOf(x.startISO)} ${hm(x.startISO)}–${hm(x.endISO)} (${did(x.id)})`);
+    lines.push(`[The app proposed: ${shown.join('; ')}${p.proposals.length > 12 ? `; and ${p.proposals.length - 12} more` : ''}]`);
+  }
+  if (p.question?.options?.length) lines.push(`[Options offered: ${p.question.options.join(' · ')}]`);
+  return lines.join('\n');
+}
+
 export type AgentCtx = {
   text: string;
   /** what the app just asked, if anything: this message may be the answer */
   pendingQuestion?: string | null;
+  /** the unfinished request that question was about */
+  pendingForm?: Pending | null;
+  /** runs the planner for a finished form, inside the loop, so what it finds comes back to the model */
+  run?: (choice: Understood) => Promise<ToolResult | ToolFailure>;
   /** the conversation so far, oldest first, the current message last */
   history: { role: 'user' | 'assistant'; content: string }[];
   nowISO: string;
@@ -393,6 +443,38 @@ async function checkFit(c: AgentCtx): Promise<Record<string, unknown>> {
   };
 }
 
+/**
+ * How long this person's own things of that name are: a habit's length, or the
+ * commonest length of the events called that. For the question's first option,
+ * never a default: they still choose.
+ */
+export function usualMinutes(title: unknown, c: Pick<AgentCtx, 'events' | 'habits'>): number | null {
+  const q = String(title ?? '').trim().toLowerCase();
+  if (q.length < 3) return null;
+  const habit = (c.habits ?? []).find((h) => h.title.toLowerCase() === q);
+  if (habit) return habit.durationMin;
+  const counts = new Map<number, number>();
+  for (const e of c.events) {
+    if (e.allDay || !e.title.toLowerCase().includes(q)) continue;
+    const min = Math.round((Date.parse(e.end) - Date.parse(e.start)) / 60_000);
+    if (min >= 5 && min <= 480) counts.set(min, (counts.get(min) ?? 0) + 1);
+  }
+  return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+}
+
+const usualHint = (title: unknown, c: AgentCtx) => {
+  const min = usualMinutes(title, c);
+  return min ? { your_usual_min: min, hint: 'Their other blocks of this are that long. Offer it as the first option; they still choose.' } : {};
+};
+
+/** Kept from the unfinished request: a field the model left empty this time. */
+function keepFilled(form: Pending | null | undefined, name: string, args: Record<string, unknown>): Record<string, unknown> {
+  if (!form || form.tool !== name) return args;
+  const out = { ...args };
+  for (const [k, v] of Object.entries(form.args)) if (out[k] === null || out[k] === undefined || out[k] === '') out[k] = v;
+  return out;
+}
+
 const hour = (v: unknown) => intOr(v, 0, 24);
 const PREFERENCE_KINDS = ['preferred-hours', 'avoid-hours', 'preferred-weekday', 'avoid-weekday'] as const;
 
@@ -467,11 +549,14 @@ export async function dispatch(name: string, args: Record<string, unknown>, c: A
       if (!saidClock(saidBy(c))) return asOutcome(missing(['what time']));
       // A day said in the sentence is read here, by the date reader: the model doesn't do date arithmetic.
       const day = args.repeat ? null : saidDay(c);
-      const u = fromForm({ kind: 'event', ...(args as object), ...(day ? { date: day } : {}) } as Parameters<typeof fromForm>[0], c.text, c.nowISO);
+      // Written into the form itself, so a form kept for the next turn holds the date reader's day.
+      if (day) args.date = day;
+      const u = fromForm({ kind: 'event', ...(args as object) } as Parameters<typeof fromForm>[0], c.text, c.nowISO);
       if (!u) return { kind: 'feedback', output: { error: 'place_at needs start as HH:MM (24-hour) and a repeat the app supports. If the user named no time, use find_slot.' } };
       // The form is incomplete: the planner says what it needs, the model asks.
       if (u.name === TOOL_ASK) {
-        return asOutcome(missing([u.summary.split(' · ').pop() ?? 'one detail'], { options: u.args.options ?? [] }));
+        const gap = u.summary.split(' · ').pop() ?? 'one detail';
+        return asOutcome(missing([gap], { options: u.args.options ?? [], ...(/long|length/i.test(gap) ? usualHint(args.title, c) : {}) }));
       }
       const category = (CATEGORIES as readonly unknown[]).includes(args.category) ? String(args.category) : String(u.args.category);
       const choice: Understood = { ...u, args: { ...u.args, category }, ...(u.draft ? { draft: { ...u.draft, category } } : {}) };
@@ -502,13 +587,14 @@ export async function dispatch(name: string, args: Record<string, unknown>, c: A
         return { kind: 'feedback', output: { error: 'The user named a time. Keep it: use place_at (or change_plan) with that time.' } };
       }
       const said = saidDay(c);
-      const from = said ?? (typeof args.from === 'string' && DATE.test(args.from) ? args.from : null);
-      const to = said ?? (typeof args.to === 'string' && DATE.test(args.to) ? args.to : null);
+      if (said) [args.from, args.to] = [said, said];
+      const from = typeof args.from === 'string' && DATE.test(args.from) ? args.from : null;
+      const to = typeof args.to === 'string' && DATE.test(args.to) ? args.to : null;
       const duration = intOr(args.duration_min, 5, 480);
       const title = String(args.title ?? '').trim().slice(0, 60) || 'Focus time';
       const count = intOr(args.count, 1, 5) ?? 1;
       const category = (CATEGORIES as readonly unknown[]).includes(args.category) ? String(args.category) : categoryOf(`${title} ${c.text}`.toLowerCase());
-      if (!duration || !saidLength(saidBy(c))) return asOutcome(missing(['how long']));
+      if (!duration || !saidLength(saidBy(c))) return asOutcome(missing(['how long'], usualHint(title, c)));
       const lo = intOr(args.earliest_hour, 0, 23);
       const hi = intOr(args.latest_hour, 1, 24);
       // "after Threshold": the window opens where that event ends. Its time comes from the calendar, not the model.
@@ -622,7 +708,7 @@ async function stepWithRetry(call: typeof agentStep, opts: Omit<Parameters<typeo
 
 /** The conversation as the model reads it, ending with this message. */
 function conversation(c: AgentCtx): AgentItem[] {
-  const input: AgentItem[] = c.history.slice(-12).map((m) => ({ role: m.role, content: m.content.slice(0, 1000) }));
+  const input: AgentItem[] = c.history.slice(-12).map((m) => ({ role: m.role, content: m.content.slice(0, 1500) }));
   const last = input[input.length - 1];
   if (!last || last.role !== 'user' || last.content !== c.text.slice(0, 1000)) input.push({ role: 'user', content: c.text.slice(0, 1000) });
   return input;
@@ -640,22 +726,39 @@ async function decide(c: AgentCtx): Promise<Route> {
 
 const ROUTE_LABEL = { question: 'A question: answering it', request: 'A request: working on it', reply: 'Your answer: carrying on' } as const;
 
+/** What the planner needs from the person, read off what it sent back. Null: an error, or a lookup. */
+function needsOf(output: unknown): string[] | null {
+  const o = (output ?? {}) as Record<string, unknown>;
+  if (Array.isArray(o.missing)) return o.missing.map(String);
+  if (o.overlaps || o.goes_against_rule) return ['whether to put it there anyway'];
+  return null;
+}
+
+/** Planner tools whose result can be "this does not fit": run inside the loop, so the model hears it. */
+const PLANNER = new Set<string>([TOOL_PROPOSE, TOOL_PLAN_WEEK]);
+
 /** The model's choice for this message, or null (the model failed): turn.ts says so and nothing changes. */
-export async function runAgent(c: AgentCtx): Promise<Understood | null> {
+export async function runAgent(c: AgentCtx): Promise<AgentResult | null> {
   const call = c.call ?? agentStep;
   const pending = c.pendingQuestion ?? null;
+  // Once the planner has run, its result is the turn's outcome whatever the model does next.
+  let verdict: AgentResult | null = null;
   try {
     const route = await (c.route ?? decide)(c);
     c.step({ tool: STEP.decide, label: ROUTE_LABEL[route.kind], detail: route.understood });
 
+    const form = route.kind === 'reply' ? (c.pendingForm ?? null) : null;
     const allowed = AGENT_TOOLS.filter((t) => (route.kind === 'question' ? READ_ONLY.has(t.name) : t.name !== 'revise_last' || c.readCtx.previous));
-    const system = `${agentSystem(c.nowISO, c.profile, c.tasks, c.habits, c.memory)}\n\n${modeLine(route, pending)}`;
+    const system = `${agentSystem(c.nowISO, c.profile, c.tasks, c.habits, c.memory)}\n\n${modeLine(route, pending, form)}`;
     const input = conversation(c);
+    // The request the planner is still waiting on: saved with the question, so the answer continues it.
+    let need: Pending | null = form;
     // With the planner's verdict in hand a question has one thing left to do.
     let force: string | undefined;
     for (let i = 0; i < MAX_STEPS; i++) {
       // The last steps can only end the turn: the loop never runs out without a reply.
-      const tools = i < MAX_STEPS - 2 ? allowed : allowed.filter((t) => LAST_WORD.has(t.name));
+      // So can the steps after the planner ran: what it found is for the person to decide.
+      const tools = i < MAX_STEPS - 2 && !verdict ? allowed : allowed.filter((t) => LAST_WORD.has(t.name));
       // Left free, the model now and then writes prose and runs out its limit. On a
       // question that already looked things up, the retry goes straight to the answer.
       // After a memory save the model now and then just talks; its retry has to say something.
@@ -664,48 +767,57 @@ export async function runAgent(c: AgentCtx): Promise<Understood | null> {
       await c.charge(s.promptTokens, s.outputTokens);
       input.push(...s.output);
       const refused = !tools.some((t) => t.name === s.name);
+      const args = s.args ? keepFilled(form, s.name, s.args) : null;
       // Two things asked, one done, the other dropped without a word: not allowed.
-      const covers = Math.max(Number(s.args?.count ?? 1), Number(s.args?.per_week ?? 1));
+      const covers = Math.max(Number(args?.count ?? 1), Number(args?.per_week ?? 1));
       const dropsSome = route.kind === 'request' && (route.things ?? 1) > covers && !ONE_CARD.has(s.name);
       const out: Outcome = refused
         ? { kind: 'feedback', output: { error: `${s.name} is not available now` } }
         : dropsSome
           ? { kind: 'feedback', output: { error: `They asked for ${route.things} things, and this does one. If all are events, use one change_plan. If not, ask: say all ${route.things} you understood and which should come first.` } }
-          : s.args
-          ? await dispatch(s.name, s.args, c)
+          : args
+          ? await dispatch(s.name, args, c)
           : { kind: 'feedback', output: { error: 'arguments were not valid JSON' } };
-      if (out.kind === 'done') return { ...out.choice, summary: `${route.kind} · ${out.choice.summary}` };
-      input.push({ type: 'function_call_output', call_id: s.callId, output: JSON.stringify(out.output) });
-      if (route.kind === 'question' && s.name === 'check_fit') force = 'answer';
+
+      if (out.kind === 'feedback') {
+        const needs = args && needsOf(out.output);
+        if (needs) need = { tool: s.name, args, needs };
+        input.push({ type: 'function_call_output', call_id: s.callId, output: JSON.stringify(out.output) });
+        if (route.kind === 'question' && s.name === 'check_fit') force = 'answer';
+        continue;
+      }
+
+      const asks = out.choice.name === TOOL_ASK;
+      // The planner already ran: these are the model's words for what it found.
+      if (verdict) {
+        const text = String(asks ? out.choice.args.question : out.choice.args.reply ?? '').trim();
+        const options = asks && Array.isArray(out.choice.args.options) ? (out.choice.args.options as string[]) : [];
+        return text ? { ...verdict, worded: { text, options, question: asks }, ...(asks && need ? { pending: need } : {}) } : verdict;
+      }
+      const choice: AgentResult = { ...out.choice, summary: `${route.kind} · ${out.choice.summary}`, ...(asks && need ? { pending: need } : {}) };
+      if (!c.run || !PLANNER.has(choice.name) || choice.draft) return choice;
+
+      const ran = await c.run(choice);
+      const facts = 'fail' in ran ? [] : (ran.facts ?? []);
+      if (!facts.length) return { ...choice, ran };
+      verdict = { ...choice, ran };
+      if (args && Object.keys(args).length) need = { tool: s.name, args, needs: ['what to do about what does not fit'] };
+      const proposed = 'fail' in ran ? 0 : (ran.proposals?.length ?? 0);
+      input.push({
+        type: 'function_call_output',
+        call_id: s.callId,
+        output: JSON.stringify({
+          proposed,
+          does_not_fit: facts.slice(0, 5),
+          next: `${proposed ? 'The rest is proposed and shown to the person. ' : 'Nothing was proposed. '}Say plainly what does not fit, then ask what they want to do. Use only these facts and offer only choices they support, as 2-4 short tappable options. Never change a day, time or length they said without asking.`,
+        }),
+      });
     }
     console.warn('[ai] agent: no action in', MAX_STEPS, 'steps');
-    return null;
+    return verdict;
   } catch (err) {
     console.warn('[ai] agent failed:', err instanceof Error ? err.message.slice(0, 160) : err);
-    return null;
-  }
-}
-
-/**
- * The planner found something it can't decide alone, such as what doesn't fit.
- * It states the facts; the model turns them into a choice for the person.
- * Null when the model fails: the planner's own words stay.
- */
-export async function askAboutFacts(c: Pick<AgentCtx, 'text' | 'nowISO' | 'charge' | 'call'>, facts: string[]): Promise<{ text: string; options: string[] } | null> {
-  const tool = AGENT_TOOLS.find((t) => t.name === 'ask')!;
-  const system = [
-    `You are Plan with AI, a calendar planner. Today is ${c.nowISO.slice(0, 10)}. The person asked: "${c.text.slice(0, 300)}".`,
-    'The planner found this. State it plainly, then ask what they want to do. Use only these facts and offer only choices they support, as 2-4 short tappable options. Never promise anything else.',
-    ...facts.slice(0, 5).map((f) => `- ${f}`),
-  ].join('\n');
-  try {
-    const s = await stepWithRetry(c.call ?? agentStep, { system, input: [{ role: 'user', content: 'What should I decide?' }], tools: [tool], force: tool.name, maxTokens: 800 });
-    await c.charge(s.promptTokens, s.outputTokens);
-    const text = String(s.args?.question ?? '').trim().slice(0, 500);
-    const options = Array.isArray(s.args?.options) ? s.args.options.filter((o): o is string => typeof o === 'string').slice(0, 4) : [];
-    return text ? { text, options } : null;
-  } catch (err) {
-    console.warn('[ai] askAboutFacts failed:', err instanceof Error ? err.message.slice(0, 160) : err);
-    return null;
+    // The planner's own words stay when the model fails after it ran.
+    return verdict;
   }
 }

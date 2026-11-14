@@ -10,11 +10,11 @@ import { type CalendarInfo, type CalEvent, holidaysIn, onCalendars } from './hol
 import { expandRepeat } from './place-at';
 import { preferenceCard } from './learn';
 import type { AgentProfile } from './preferences';
-import { addFact, appendMessage, createSession, deleteFact, listCalendars, listMessages, loadMemory, loadProfile, type Memory, sessionExists, updateFact, userTimeZone } from './repo';
-import { doneLabel, iso, plural, runningLabel, type TurnCtx } from './tools/context';
+import { addFact, appendMessage, createSession, deleteFact, listCalendars, listMessages, loadMemory, loadProfile, type Memory, proposalStatuses, sessionExists, updateFact, userTimeZone } from './repo';
+import { doneLabel, iso, plural, runningLabel, type ToolFailure, type ToolResult, type TurnCtx } from './tools/context';
 import { toolFor } from './tools';
 import { asString, TOOL_ANSWER } from './tools/names';
-import { askAboutFacts, runAgent } from './agent';
+import { type AgentResult, type Pending, runAgent, shownToModel } from './agent';
 import { chargeTokens, hasCredit } from './credits';
 import { aiConfigured } from './llm';
 import { scrubTitles } from './scrub';
@@ -26,8 +26,10 @@ import { type Draft, guardTitle, type Understood, understand } from './understan
  *
  *   load the calendar, tasks and habits → the model decides whether this is a
  *   question, a request or a reply, and reads it (agent.ts) → that tool's handler
- *   (tools/index.ts) carries it out → if the planner found something it can't
- *   decide alone, the model asks → the reply is stored.
+ *   (tools/index.ts) carries it out → the reply is stored. The planner's own
+ *   handlers run inside the model's loop, so when something doesn't fit the model
+ *   hears it and asks. A request the planner couldn't finish is stored with the
+ *   question (`parsed.pending`), and the next message continues it.
  *
  * The rules (understand.ts) read a message only when there is no model to read
  * it: no key, or no credit left. A model that fails says so, and nothing changes:
@@ -186,7 +188,7 @@ export async function runTurn(
   // The previous assistant turn carries what was understood so far, and the
   // blocks it proposed (for "why that slot?").
   const lastReply = [...history].reverse().find((m) => m.role === 'assistant');
-  const lastParsed = (lastReply?.parsed ?? {}) as { draft?: Draft; proposals?: ChatProposal[] };
+  const lastParsed = (lastReply?.parsed ?? {}) as { draft?: Draft; proposals?: ChatProposal[]; pending?: Pending };
 
   begin(STEP.model);
   const readT0 = Date.now();
@@ -206,15 +208,49 @@ export async function runTurn(
   const tapped = Boolean(lastParsed.draft) && lastOptions.includes(text);
   // What the app just asked, if that was its last word: this message may be the answer.
   const lastQuestion = lastReply?.kind === 'question' ? lastReply.content : ((lastReply?.parsed as { question?: { text?: string } } | null)?.question?.text ?? null);
-  let choice: Understood | null = null;
+  let choice: AgentResult | null = null;
   const seen: typeof events = [];
+  const read = text;
+  // Echo the person's own words: the step is about this sentence, not a tool. Shown once, before the tool's own steps.
+  const quoted = text.length > 42 ? `${text.slice(0, 40).trimEnd()}…` : text;
+  let readShown = false;
+  const carryOut = async (c: Understood): Promise<ToolResult | ToolFailure> => {
+    if (!readShown) step({ tool: c.name, label: `Read “${quoted}”`, detail: c.summary, ms: Date.now() - readT0 });
+    readShown = true;
+    const ctx: TurnCtx = {
+      userId,
+      sessionId,
+      text: read,
+      summary: c.summary,
+      now,
+      nowISO,
+      horizonISO,
+      profile,
+      events,
+      busy,
+      shown,
+      holidays: holidaysIn(events),
+      calendars,
+      openTasks,
+      habits,
+      begin,
+      step,
+    };
+    const handler = toolFor(c.name);
+    return handler ? handler(c.args, ctx) : {};
+  };
   const modelReads = !tapped && aiConfigured() && (await hasCredit(userId));
   const charge = (p: number, o: number) => chargeTokens(userId, p, o);
   if (modelReads) {
+    // What the person did with each proposal, so the model knows what is on the calendar.
+    const proposed = history.flatMap((m) => ((m.parsed as { proposals?: ChatProposal[] } | null)?.proposals ?? []).map((p) => p.id));
+    const status = await proposalStatuses(userId, proposed).catch(() => ({}));
     choice = await runAgent({
       text,
       pendingQuestion: lastQuestion,
-      history: history.map((m) => ({ role: m.role, content: m.content })),
+      pendingForm: lastQuestion ? (lastParsed.pending ?? null) : null,
+      run: (c) => carryOut({ ...c, summary: `${c.summary} · AI` }),
+      history: history.map((m) => ({ role: m.role, content: m.role === 'assistant' ? shownToModel(m.content, m.parsed, status) : m.content })),
       nowISO,
       horizonISO,
       profile,
@@ -242,39 +278,16 @@ export async function runTurn(
       : { name: TOOL_ANSWER, args: { reply: "I couldn't read that just now, so nothing has changed. Please send it again." }, draft: null, summary: 'the model failed · nothing changed' };
   }
   choice ??= tapped ? understand(text, readCtx) : guardTitle(understand(text, readCtx));
-  const read = text;
-  // Echo the person's own words: the step is about this sentence, not a tool.
-  const quoted = text.length > 42 ? `${text.slice(0, 40).trimEnd()}…` : text;
-  step({ tool: choice.name, label: `Read “${quoted}”`, detail: choice.summary, ms: Date.now() - readT0 });
-
-  const ctx: TurnCtx = {
-    userId,
-    sessionId,
-    text: read,
-    summary: choice.summary,
-    now,
-    nowISO,
-    horizonISO,
-    profile,
-    events,
-    busy,
-    shown,
-    holidays: holidaysIn(events),
-    calendars,
-    openTasks,
-    habits,
-    begin,
-    step,
-  };
-  const handler = toolFor(choice.name);
-  const result = handler ? await handler(choice.args, ctx) : {};
+  // The planner's handlers already ran inside the model's loop (agent.ts); everything else runs here.
+  const result = choice.ran ?? (await carryOut(choice));
   if ('fail' in result) return Response.json({ sessionId, error: result.fail }, { status: 500 });
 
-  // The planner's facts become a question the person can answer, in the model's words.
-  const asked = modelReads && !choice.draft && result.facts?.length ? await askAboutFacts({ text, nowISO, charge }, result.facts) : null;
+  // What the planner found, as the model put it to the person.
+  const worded = choice.worded ?? null;
+  const asked = worded?.question ? { text: worded.text, options: worded.options } : null;
   if (asked) step({ tool: STEP.ask, label: doneLabel(STEP.ask, 'Ask you'), detail: 'the planner needs a decision' });
 
-  const reply = asked?.text ?? result.reply ?? asString(choice.args.reply);
+  const reply = worded?.text ?? result.reply ?? asString(choice.args.reply);
   const kind = result.kind ?? (asked ? 'question' : 'text');
   const extras: Partial<ChatMessage> = {};
   if (result.proposals) extras.proposals = result.proposals;
@@ -298,7 +311,9 @@ export async function runTurn(
   // The model reads Google titles and may quote them; the person sees the reply, the database doesn't.
   const googleTitles = [...events, ...seen].filter((e) => isImported(e.origin)).map((e) => e.title).concat(result.titlesRead ?? []);
   const typed = [...history.filter((m) => m.role === 'user').map((m) => m.content), text].join(' ');
-  const stored = scrubTitles({ content: reply, parsed: { ...extras, ...(draft ? { draft } : {}) } }, googleTitles, typed);
+  // An unfinished request rides with its question, like the draft: the next message continues it.
+  const pending = kind === 'question' && choice.pending ? { pending: choice.pending } : {};
+  const stored = scrubTitles({ content: reply, parsed: { ...extras, ...(draft ? { draft } : {}), ...pending } }, googleTitles, typed);
   const messageId = await appendMessage(sessionId, { role: 'assistant', content: stored.content, kind, parsed: stored.parsed });
 
   const message: ChatMessage = {

@@ -642,6 +642,13 @@ export async function getSuggestion(userId: string, sugId: string): Promise<Sugg
   );
 }
 
+/** What the user did with each of these proposals: 'accepted', 'edited', 'rejected', or still open. */
+export async function proposalStatuses(userId: string, ids: string[]): Promise<Record<string, string>> {
+  if (!ids.length) return {};
+  const rows = await query<{ id: string; status: string }>(`select id, status from ai_suggestions where user_id = $1 and id = any($2::text[])`, [userId, ids]);
+  return Object.fromEntries(rows.map((r) => [r.id, r.status]));
+}
+
 /** Record what the user actually did. Idempotent per suggestion. */
 export async function recordOutcome(
   userId: string,
