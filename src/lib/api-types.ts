@@ -420,4 +420,15 @@ export type CalendarSettings = {
   pushFocus: boolean;
   /** a connected account granted the write scope */
   canWriteGoogle: boolean;
+  /** How the planner lays work out (the same values Plan with AI reads and can change). */
+  /** minutes kept free between two things */
+  bufferMin: number;
+  /** shortest gap worth using for focus */
+  minFocusMin: number;
+  /** demanding work per day, at most */
+  dailyFocusMin: number;
+  /** minutes kept free either side of an in-person event; 0 = off */
+  travelMin: number;
+  /** hard tasks across the week, or together on few days */
+  hardWork: 'spread' | 'cluster';
 };

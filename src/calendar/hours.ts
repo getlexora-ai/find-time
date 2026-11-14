@@ -101,7 +101,8 @@ void (async () => {
   }
 })();
 
-async function loadWorkHours() {
+/** Re-read working hours from the profile, e.g. after Settings saved them. */
+export async function loadWorkHours() {
   try {
     const res = await apiFetch('/api/ai/preferences');
     if (!res.ok) return;

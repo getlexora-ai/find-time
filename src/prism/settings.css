@@ -1,0 +1,82 @@
+/*
+ * Prism — Settings page (Settings.web.tsx). Same vocabulary as the other pages
+ * (prism.css): white cards on the ground, serif titles, mono eyebrows, pills.
+ * Everything is scoped under `.px .set`.
+ */
+
+.px .set { padding: 22px 18px 60px; scroll-behavior: smooth; }
+.px .set-in { display: grid; grid-template-columns: 168px minmax(0, 720px); gap: 28px; align-items: start; max-width: 940px; margin: 0 auto; }
+
+.px .set-nav { position: sticky; top: 0; display: flex; flex-direction: column; gap: 2px; padding-top: 6px; }
+.px .set-nav .eyebrow { padding: 0 10px 8px; }
+.px .set-nav button { border: 0; background: transparent; text-align: left; padding: 7px 10px; border-radius: 8px; font-size: 13.5px; color: var(--ink2); cursor: pointer; }
+.px .set-nav button:hover { background: var(--sunken); color: var(--ink); }
+
+.px .set-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.px .set-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 22px; display: flex; flex-direction: column; gap: 18px; scroll-margin-top: 8px; }
+.px .set-card h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 32px; line-height: 1; }
+.px .set-lead { margin: -8px 0 0; color: var(--ink2); line-height: 1.55; max-width: 60ch; }
+
+.px .set-block { display: flex; flex-direction: column; gap: 10px; padding-top: 18px; border-top: 1px solid var(--line-soft); min-width: 0; }
+.px .set-sub { display: flex; flex-direction: column; gap: 2px; font-weight: 600; font-size: 14px; color: var(--ink); min-width: 0; flex: 1; }
+.px .set-sub small, .px .set-what small { font-weight: 400; font-size: 12.5px; color: var(--muted); line-height: 1.5; max-width: 62ch; }
+
+.px .set-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-top: 18px; border-top: 1px solid var(--line-soft); }
+.px .set-what { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.px .set-what b { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+.px .set-ctl { flex: none; display: flex; align-items: center; gap: 8px; }
+.px .set-span { display: inline-flex; align-items: center; gap: 8px; }
+
+.px .set-field { width: 100%; border: 1px solid var(--line); background: var(--sunken); border-radius: 10px; padding: 9px 11px; font: 400 13.5px/1.5 var(--body); color: var(--ink); min-width: 0; }
+.px .set-field::placeholder { color: var(--muted); }
+.px .set-field:focus { outline: none; border-color: var(--blue); background: var(--surface); box-shadow: 0 0 0 3px rgba(29, 107, 255, .12); }
+.px textarea.set-field { resize: vertical; min-height: 120px; }
+
+.px .set-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.px .set-line > .set-count, .px .set-line > .muted:first-child { margin-right: auto; }
+.px .set-count { font: 400 11px var(--mono); color: var(--muted); }
+.px .set-inline { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.px .set-ok { font-size: 12.5px; color: #17794a; }
+.px .set-err { margin: 0; font-size: 12.5px; color: #b42318; }
+
+.px .set-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.px .set-list li { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-top: 1px solid var(--line-soft); min-width: 0; }
+.px .set-list li:first-child { border-top: 0; }
+.px .set-text { flex: 1; min-width: 0; font-size: 13.5px; color: var(--ink); overflow-wrap: anywhere; }
+.px .set-tag { flex: none; font: 500 10.5px var(--mono); letter-spacing: .04em; text-transform: uppercase; color: var(--muted); background: var(--sunken); border-radius: 999px; padding: 3px 8px; }
+
+.px .set-days { display: flex; flex-direction: column; }
+.px .set-day { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 42px; border-top: 1px solid var(--line-soft); }
+.px .set-day:first-child { border-top: 0; }
+
+/* a switch, as in the drawer, on white */
+.px .set-sw { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13.5px; min-width: 0; }
+.px .set-sw span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.px .set-sw i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.px .set-sw input { appearance: none; -webkit-appearance: none; width: 34px; height: 20px; border-radius: 999px; background: var(--line-strong); margin: 0; flex: none; position: relative; cursor: pointer; transition: background .15s; }
+.px .set-sw input::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(11, 16, 32, .25); transition: transform .15s; }
+.px .set-sw input:checked { background: var(--focus); }
+.px .set-sw input:checked::after { transform: translateX(14px); }
+.px .set-sw input:disabled { opacity: .5; cursor: default; }
+.px .set-sw input:focus-visible, .px .set-seg button:focus-visible, .px .set-nav button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+.px .set-seg { display: inline-flex; background: var(--sunken); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
+.px .set-seg button { border: 0; background: transparent; border-radius: 999px; padding: 5px 13px; font-size: 12.5px; cursor: pointer; color: var(--ink2); }
+.px .set-seg button[aria-pressed='true'] { background: var(--ink); color: #fff; }
+
+.px .set .chip:disabled { opacity: .5; cursor: default; }
+
+@media (max-width: 900px) {
+  .px .set-in { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .px .set-nav { position: static; flex-direction: row; flex-wrap: wrap; align-items: center; padding-top: 0; }
+  .px .set-nav .eyebrow { display: none; }
+}
+@media (max-width: 560px) {
+  .px .set-card { padding: 16px; }
+  .px .set-row { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .px .set-list li { flex-wrap: wrap; }
+  .px .set-text { flex-basis: 100%; }
+  .px .set-day { gap: 6px; }
+  .px .set-day .set-span { gap: 4px; }
+  .px .set-day .set-span .muted { display: none; }
+}

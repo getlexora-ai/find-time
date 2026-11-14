@@ -15,10 +15,11 @@ import './prism.css';
 // after prism.css: the chat's narrow-screen layout overrides the work row's
 import { AiPanel, dayOf } from './Ai.web';
 import { paintScene } from './scene';
+import { Settings } from './Settings.web';
 import { calLooks, lookOf } from './cal-look';
 import { cls, endTaskDrag, LBL, startTaskDrag, Week, type ChatDraft, type TaskPick, type Toast } from './Week.web';
 
-type Page = 'planner' | 'tasks' | 'insights' | 'habits';
+type Page = 'planner' | 'tasks' | 'insights' | 'habits' | 'settings';
 const DRAWER_KEY = 'ft.px.drawer';
 const AI_KEY = 'ft.px.ai';
 
@@ -90,6 +91,13 @@ const I = {
       <path d="M19 12a7 7 0 1 1-2.05-4.95M19 4.5V8h-3.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
+  settings: (
+    <svg viewBox="0 0 24 24" fill="none">
+      <path d="M4 7h9M17 7h3M4 17h3M11 17h9" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <circle cx="15" cy="7" r="2.2" stroke="currentColor" strokeWidth="1.7" />
+      <circle cx="9" cy="17" r="2.2" stroke="currentColor" strokeWidth="1.7" />
+    </svg>
+  ),
   left: (
     <svg viewBox="0 0 16 16" fill="none">
       <path d="M10 3 5 8l5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
@@ -113,7 +121,7 @@ export function PrismApp() {
 
   const [page, setPage] = useState<Page>(() => {
     const p = new URLSearchParams(window.location.search).get('page');
-    return p === 'tasks' || p === 'insights' || p === 'habits' ? p : 'planner';
+    return p === 'tasks' || p === 'insights' || p === 'habits' || p === 'settings' ? p : 'planner';
   });
   const [drawer, setDrawer] = useState<boolean>(() => {
     try {
@@ -413,6 +421,7 @@ export function PrismApp() {
             ))}
           </div>
           <div className="d-foot">
+            {nav('settings', 'Settings', I.settings)}
             <div className="d-me">
               <AccountButton showName={drawer && !narrow} />
             </div>
@@ -533,6 +542,8 @@ export function PrismApp() {
             />
           ) : page === 'insights' ? (
             <Insights events={shown} hours={hours} off={holidayDays} tasks={open} />
+          ) : page === 'settings' ? (
+            <Settings toast={toast} copyOn={copyOn} copyBusy={copyBusy} onCopy={(on) => void setCopy(on)} onAskAI={openAI} />
           ) : (
             <Habits habits={habits} toast={toast} />
           )}

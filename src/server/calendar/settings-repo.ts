@@ -21,11 +21,25 @@ type Row = {
   week_target_h: string | null;
   focus_goal_h: string | null;
   push_focus: boolean | null;
+  default_buffer_min: number | null;
+  min_focus_block_min: number | null;
+  max_daily_focus_min: number | null;
+  travel_min: number | null;
+  hard_work: string | null;
 };
+
+/** Allowed range for each planning length, in minutes: [min, max]. */
+export const PLAN_RANGE = {
+  bufferMin: [0, 60],
+  minFocusMin: [15, 180],
+  dailyFocusMin: [60, 720],
+  travelMin: [0, 180],
+} as const;
 
 export async function getSettings(userId: string): Promise<CalendarSettings> {
   const row = await queryOne<Row>(
-    `select timezone, work_hours, day_window, week_start, clock24, week_target_h, focus_goal_h, push_focus
+    `select timezone, work_hours, day_window, week_start, clock24, week_target_h, focus_goal_h, push_focus,
+            default_buffer_min, min_focus_block_min, max_daily_focus_min, travel_min, hard_work
        from scheduler_profiles where user_id = $1`,
     [userId],
   );
@@ -46,6 +60,12 @@ export async function getSettings(userId: string): Promise<CalendarSettings> {
     focusGoalH: row?.focus_goal_h != null ? Number(row.focus_goal_h) : null,
     pushFocus: row?.push_focus ?? false,
     canWriteGoogle: scopes.some((s) => (s.scope ?? '').split(' ').includes(WRITE_SCOPE)),
+    // Same defaults as the planner's own (ai/preferences.ts defaultProfile).
+    bufferMin: row?.default_buffer_min ?? 10,
+    minFocusMin: row?.min_focus_block_min ?? 45,
+    dailyFocusMin: row?.max_daily_focus_min ?? 240,
+    travelMin: row?.travel_min ?? 0,
+    hardWork: row?.hard_work === 'cluster' ? 'cluster' : 'spread',
   };
 }
 
@@ -75,6 +95,12 @@ export function checkPatch(p: Partial<CalendarSettings>): string | null {
     const v = p[k];
     if (v !== undefined && v !== null && (typeof v !== 'number' || v < 0 || v > 168)) return `${k} must be 0–168 hours.`;
   }
+  for (const k of Object.keys(PLAN_RANGE) as (keyof typeof PLAN_RANGE)[]) {
+    const v = p[k];
+    const [lo, hi] = PLAN_RANGE[k];
+    if (v !== undefined && (typeof v !== 'number' || !Number.isInteger(v) || v < lo || v > hi)) return `${k} must be ${lo}–${hi} minutes.`;
+  }
+  if (p.hardWork !== undefined && p.hardWork !== 'spread' && p.hardWork !== 'cluster') return 'hardWork is spread or cluster.';
   return null;
 }
 
@@ -93,6 +119,11 @@ export async function patchSettings(userId: string, p: Partial<CalendarSettings>
   if (p.weekTargetH !== undefined) add('week_target_h', p.weekTargetH);
   if (p.focusGoalH !== undefined) add('focus_goal_h', p.focusGoalH);
   if (p.pushFocus !== undefined) add('push_focus', p.pushFocus);
+  if (p.bufferMin !== undefined) add('default_buffer_min', p.bufferMin);
+  if (p.minFocusMin !== undefined) add('min_focus_block_min', p.minFocusMin);
+  if (p.dailyFocusMin !== undefined) add('max_daily_focus_min', p.dailyFocusMin);
+  if (p.travelMin !== undefined) add('travel_min', p.travelMin);
+  if (p.hardWork !== undefined) add('hard_work', p.hardWork);
   if (!cols.length) return;
 
   await queryOne(`insert into scheduler_profiles (user_id) values ($1) on conflict (user_id) do nothing returning user_id`, [
